@@ -205,13 +205,13 @@ export async function POST(request: NextRequest) {
           ? [
               'Check your email to verify your account',
               'Wait for admin approval',
-              'Pay KSH 1000 activation fee to activate your account',
+              'Pay KES 100 activation fee to activate your account',
               'Start earning from referrals once approved'
             ]
           : [
               'Please contact support to verify your email',
               'Wait for admin approval',
-              'Pay KSH 1000 activation fee to activate your account',
+              'Pay KES 100 activation fee to activate your account',
               'Start earning from referrals once approved'
             ]
       },

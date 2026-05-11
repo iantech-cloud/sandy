@@ -1,8 +1,8 @@
 'use client'; 
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
 // Google Sign In Button Component
@@ -42,6 +42,7 @@ const GoogleSignInButton: React.FC = () => {
 };
 
 export default function SignUpContent() {
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -57,6 +58,15 @@ export default function SignUpContent() {
   const [emailSent, setEmailSent] = useState(false);
   const [registrationData, setRegistrationData] = useState<any>(null);
   const router = useRouter();
+
+  // Auto-populate referral code from URL parameter
+  useEffect(() => {
+    const refParam = searchParams.get('ref');
+    if (refParam) {
+      const formattedRef = refParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      setFormData(prev => ({ ...prev, referralId: formattedRef }));
+    }
+  }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -483,22 +493,23 @@ export default function SignUpContent() {
           
           <div>
             <label htmlFor="referralId" className="block text-sm font-medium text-gray-700">
-              Referral ID (Optional)
+              Referral Code * (Required)
             </label>
             <input
               id="referralId"
               name="referralId"
               type="text"
+              required
               value={formData.referralId}
               onChange={handleReferralIdChange}
-              placeholder="Enter referral code"
+              placeholder="Enter your referral code"
               pattern="[A-Z0-9]{1,10}"
               title="1-10 uppercase letters and numbers only"
               maxLength={10}
               className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Uppercase letters and numbers only (max 10 characters)
+              Required. Uppercase letters and numbers only (max 10 characters). You must have a referral code to join.
             </p>
           </div>
 
