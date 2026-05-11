@@ -44,7 +44,7 @@ export default function ConfirmContent() {
           
           console.log('Email verification successful for:', data.user?.email);
           
-          // Send initial payment invoice and redirect to activation page
+          // Redirect to login page - user must log in before activation
           await handleSendInitialInvoice(data.user);
           
         } else {
@@ -61,64 +61,25 @@ export default function ConfirmContent() {
 
     async function handleSendInitialInvoice(user: any) {
       try {
-        console.log('Sending initial payment invoice for user:', user?.email);
+        console.log('Email verified successfully for user:', user?.email);
+        console.log('Redirecting to login page for authentication...');
         
-        // Generate invoice data - Updated amount to Ksh 1000
-        const invoiceData = {
-          invoiceNumber: `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          amount: 1000, // Updated to Ksh 1000 activation fee
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString(), // 7 days from now
-          paymentLink: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/auth/activate`,
-          user: {
-            name: user?.name || user?.username || 'User',
-            email: user?.email || ''
-          },
-          business: {
-            name: 'HustleHub Africa',
-            address: 'Nairobi, Kenya',
-            phone: '+254 748 264 231',
-            email: 'support@hustlehub.africa'
-          }
-        };
-
-        // Send initial payment invoice
-        const result = await sendInitialPaymentInvoice(
-          user?.email,
-          user?.name || user?.username || 'User',
-          {
-            invoiceNumber: invoiceData.invoiceNumber,
-            amount: invoiceData.amount,
-            dueDate: invoiceData.dueDate,
-            paymentLink: invoiceData.paymentLink
-          }
-        );
-
-        if (result.success) {
-          console.log('✅ Initial payment invoice sent successfully');
-          setStatus('success');
-          setMessage('Email verified! Payment invoice has been sent to your email. Redirecting to activation...');
-          
-          // Redirect to activation page after a brief delay
-          setTimeout(() => {
-            router.push('/auth/activate');
-          }, 2000);
-        } else {
-          console.error('❌ Failed to send initial payment invoice:', result.error);
-          // Still redirect to activation page even if email fails
-          setStatus('success');
-          setMessage('Email verified! Redirecting to activation page...');
-          setTimeout(() => {
-            router.push('/auth/activate');
-          }, 2000);
-        }
+        setStatus('success');
+        setMessage('Email verified! Redirecting to login...');
+        
+        // Redirect to login page after a brief delay
+        // User must log in before accessing activation
+        setTimeout(() => {
+          router.push('/auth/login');
+        }, 2000);
 
       } catch (error) {
-        console.error('❌ Error sending initial payment invoice:', error);
-        // Still redirect to activation page even if email fails
+        console.error('❌ Error during redirect:', error);
+        // Still redirect to login page even if there's an error
         setStatus('success');
-        setMessage('Email verified! Redirecting to activation page...');
+        setMessage('Email verified! Redirecting to login...');
         setTimeout(() => {
-          router.push('/auth/activate');
+          router.push('/auth/login');
         }, 2000);
       }
     }
@@ -184,7 +145,7 @@ export default function ConfirmContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Ready for Activation!</h2>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Email Verified!</h2>
               <p className="text-gray-600 mb-4">{message}</p>
               
               {userEmail && (
@@ -195,30 +156,30 @@ export default function ConfirmContent() {
               
               <div className="rounded-lg bg-green-50 border border-green-200 p-3 mb-4">
                 <p className="text-sm text-green-700 mb-2">
-                  ✅ Your email has been verified and payment invoice sent!
+                  ✅ Your email has been verified successfully!
                 </p>
                 <p className="text-sm text-green-600">
-                  Check your email for the invoice with payment instructions to activate your account.
+                  You can now log in to your account to proceed with account activation.
                 </p>
               </div>
 
               <div className="space-y-3">
                 <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
-                  <p className="text-sm text-blue-700 font-medium mb-1">What's Next?</p>
+                  <p className="text-sm text-blue-700 font-medium mb-1">Next Steps:</p>
                   <ul className="text-sm text-blue-600 text-left space-y-1">
-                    <li>• Check your email for the payment invoice</li>
-                    <li>• Complete the payment of <strong>Ksh 1,000</strong> to activate your account</li>
+                    <li>• Log in with your email and password</li>
+                    <li>• Complete the activation payment of <strong>Ksh 1,000</strong></li>
                     <li>• Start earning immediately after activation</li>
                   </ul>
                 </div>
 
-                <p className="text-sm text-gray-500">Redirecting to activation page...</p>
+                <p className="text-sm text-gray-500">Redirecting to login page...</p>
                 
                 <Link
-                  href="/auth/activate"
+                  href="/auth/login"
                   className="inline-block w-full py-2 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
                 >
-                  Go to Activation Now
+                  Go to Login Now
                 </Link>
               </div>
             </>
