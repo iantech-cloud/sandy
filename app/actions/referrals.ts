@@ -67,15 +67,14 @@ interface ReferralsResponse {
 }
 
 interface CommissionStats {
-  directReferrals: { 
+  level1: { 
     totalEarnings: number; 
     count: number;
-    first2Count: number;
-    first2Earnings: number;
-    subsequentCount: number;
-    subsequentEarnings: number;
   };
-  level1: { totalEarnings: number; count: number };
+  level2: { 
+    totalEarnings: number; 
+    count: number;
+  };
   total: number;
 }
 
@@ -216,21 +215,7 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
       return { success: false, message: 'User not found' };
     }
 
-    // Get all direct referrals (level 0) sorted by date
-    const directReferralTransactions = await (Transaction as any).find({
-      user_id: currentUser._id,
-      type: 'REFERRAL',
-      'metadata.level': 0
-    }).sort({ created_at: 1 }).lean();
-
-    // Separate first 2 and subsequent
-    const first2 = directReferralTransactions.slice(0, 2);
-    const subsequent = directReferralTransactions.slice(2);
-
-    const first2Earnings = first2.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
-    const subsequentEarnings = subsequent.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
-
-    // Get level 1 commissions
+    // Get Level 1 commissions (direct referrals - KES 70 each)
     const level1Transactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
@@ -239,21 +224,26 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
 
     const level1Earnings = level1Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
 
+    // Get Level 2 commissions (indirect referrals - KES 10 each)
+    const level2Transactions = await (Transaction as any).find({
+      user_id: currentUser._id,
+      type: 'REFERRAL',
+      'metadata.level': 2
+    }).lean();
+
+    const level2Earnings = level2Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
+
     // Calculate total
-    const totalEarnings = first2Earnings + subsequentEarnings + level1Earnings;
+    const totalEarnings = level1Earnings + level2Earnings;
 
     const stats: CommissionStats = {
-      directReferrals: {
-        totalEarnings: first2Earnings + subsequentEarnings,
-        count: directReferralTransactions.length,
-        first2Count: first2.length,
-        first2Earnings: first2Earnings,
-        subsequentCount: subsequent.length,
-        subsequentEarnings: subsequentEarnings
-      },
       level1: {
         totalEarnings: level1Earnings,
         count: level1Transactions.length
+      },
+      level2: {
+        totalEarnings: level2Earnings,
+        count: level2Transactions.length
       },
       total: totalEarnings
     };

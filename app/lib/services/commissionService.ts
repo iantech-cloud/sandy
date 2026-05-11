@@ -1,11 +1,10 @@
 import { connectToDatabase, Profile, Referral, DownlineUser, Transaction, ActivationPayment } from '@/app/lib/models';
 
-// Updated commission configuration
+// Updated commission configuration per referral system spec
 export const COMMISSION_CONFIG = {
-  directReferralFirst2: 60000,  // KES 600 for first 2 referrals
-  directReferralSubsequent: 70000, // KES 700 for subsequent referrals
-  level1: 10000, // KES 100 for level 1 downline
-  activationFee: 100000 // KES 1,000 activation fee
+  level1: 7000,  // KES 70 for direct referrals (Level 1)
+  level2: 1000,  // KES 10 for indirect referrals (Level 2)
+  activationFee: 10000 // KES 100 activation fee
 };
 
 export class CommissionService {
@@ -69,29 +68,15 @@ export class CommissionService {
   }
 
   /**
-   * Process direct referral commission (Level 0)
-   * First 2 referrals: KES 600
-   * Subsequent referrals: KES 700
+   * Process direct referral commission (Level 1)
+   * KES 70 per direct referral
    */
   private static async processDirectReferralCommission(
     referrer: any, 
     referredUser: any,
     referralRecord: any
   ) {
-    // Count how many direct referrals this referrer has already had activated
-    const activatedDirectReferrals = await Referral.countDocuments({
-      referrer_id: referrer._id,
-      referral_bonus_paid: true,
-      'metadata.level': 0
-    });
-
-    // Determine commission amount based on position
-    const isFirst2 = activatedDirectReferrals < 2;
-    const commissionAmount = isFirst2 
-      ? COMMISSION_CONFIG.directReferralFirst2 
-      : COMMISSION_CONFIG.directReferralSubsequent;
-
-    const bonusTier = isFirst2 ? 'first_2' : 'subsequent';
+    const commissionAmount = COMMISSION_CONFIG.level1;
 
     // Update referral record
     await Referral.findByIdAndUpdate(referralRecord._id, {
@@ -103,9 +88,8 @@ export class CommissionService {
       referred_user_activated: true,
       referred_user_activated_at: new Date(),
       metadata: {
-        level: 0,
-        bonus_tier: bonusTier,
-        referrer_activated_count: activatedDirectReferrals
+        level: 1,
+        commission_amount: commissionAmount
       }
     });
 
@@ -116,7 +100,7 @@ export class CommissionService {
       user_id: referrer._id,
       amount_cents: commissionAmount,
       type: 'REFERRAL',
-      description: `Direct referral bonus for ${referredUser.username}'s activation (${isFirst2 ? 'First 2' : 'Subsequent'})`,
+      description: `Direct referral commission for ${referredUser.username}'s activation (KES 70)`,
       status: 'completed',
       source: 'activation',
       balance_before_cents: referrer.balance_cents,
@@ -124,10 +108,7 @@ export class CommissionService {
       metadata: {
         referredUser: referredUser._id.toString(),
         referred_username: referredUser.username,
-        level: 0,
-        type: 'direct',
-        bonus_tier: bonusTier,
-        referrer_activated_count: activatedDirectReferrals
+        level: 1
       }
     });
 
@@ -144,84 +125,82 @@ export class CommissionService {
       activation_status: 'activated'
     });
 
-    console.log(`✅ Direct referral commission processed: ${referrer.username} earned KES ${commissionAmount/100} (${bonusTier})`);
+    console.log(`[v0] Direct referral commission processed: ${referrer.username} earned KES 70`);
 
     return {
       referrer_id: referrer._id,
       referrer_username: referrer.username,
       amount_cents: commissionAmount,
       transaction_id: transaction._id,
-      bonus_tier: bonusTier,
-      level: 0
+      level: 1
     };
   }
 
   /**
-   * Process Level 1 downline commission (KES 100)
+   * Process Level 2 downline commission (KES 10 for indirect referrals)
    * Only processes if the direct referrer also has a referrer
    */
   private static async processLevel1Commission(
     directReferrer: any,
     newUser: any
   ) {
-    // Check if the direct referrer has a referrer (level 1 upline)
+    // Check if the direct referrer has a referrer (level 2 upline)
     if (!directReferrer.referred_by) {
-      console.log('No level 1 upline found, skipping level 1 commission');
+      console.log('[v0] No level 2 upline found, skipping level 2 commission');
       return null;
     }
 
     try {
-      const level1Referrer = await Profile.findById(directReferrer.referred_by);
+      const level2Referrer = await Profile.findById(directReferrer.referred_by);
       
-      if (!level1Referrer) {
-        console.log('Level 1 referrer not found');
+      if (!level2Referrer) {
+        console.log('[v0] Level 2 referrer not found');
         return null;
       }
 
-      const commissionAmount = COMMISSION_CONFIG.level1;
+      const commissionAmount = COMMISSION_CONFIG.level2;
 
-      // Create transaction for level 1 referrer
+      // Create transaction for level 2 referrer
       const transaction = await Transaction.create({
         target_type: 'user',
-        target_id: level1Referrer._id.toString(),
-        user_id: level1Referrer._id,
+        target_id: level2Referrer._id.toString(),
+        user_id: level2Referrer._id,
         amount_cents: commissionAmount,
         type: 'REFERRAL',
-        description: `Level 1 downline bonus for ${newUser.username}'s activation (via ${directReferrer.username})`,
+        description: `Level 2 indirect referral commission for ${newUser.username}'s activation (via ${directReferrer.username})`,
         status: 'completed',
         source: 'activation',
-        balance_before_cents: level1Referrer.balance_cents,
-        balance_after_cents: level1Referrer.balance_cents + commissionAmount,
+        balance_before_cents: level2Referrer.balance_cents,
+        balance_after_cents: level2Referrer.balance_cents + commissionAmount,
         metadata: {
           referredUser: newUser._id.toString(),
           referred_username: newUser.username,
           direct_referrer_id: directReferrer._id.toString(),
           direct_referrer_username: directReferrer.username,
-          level: 1,
-          type: 'downline'
+          level: 2
         }
       });
 
-      // Update level 1 referrer's balance and total earnings
-      await Profile.findByIdAndUpdate(level1Referrer._id, {
+      // Update level 2 referrer's balance and total earnings
+      await Profile.findByIdAndUpdate(level2Referrer._id, {
         $inc: {
           balance_cents: commissionAmount,
           total_earnings_cents: commissionAmount
         }
       });
 
-      console.log(`✅ Level 1 downline commission processed: ${level1Referrer.username} earned KES ${commissionAmount/100}`);
+      console.log(`[v0] Level 2 indirect referral commission processed: ${level2Referrer.username} earned KES 10`);
 
       return {
-        referrer_id: level1Referrer._id,
-        referrer_username: level1Referrer.username,
+        referrer_id: level2Referrer._id,
+        referrer_username: level2Referrer.username,
         amount_cents: commissionAmount,
         transaction_id: transaction._id,
-        level: 1
+        level: 2
       };
 
     } catch (error) {
-      console.error('⚠️ Error processing level 1 commission:', error);
+      console.error('[v0] Error processing level 2 commission:', error);
       return null;
     }
   }
