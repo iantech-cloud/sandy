@@ -53,6 +53,14 @@ export async function POST(request: NextRequest) {
 
     const referralId = rawReferralId ? rawReferralId.toUpperCase() : null;
 
+    // REQUIREMENT: Referral ID is MANDATORY - no registration without a referrer
+    if (!referralId) {
+      return NextResponse.json(
+        { message: 'Referral code is required. You must register using a valid referral link.' }, 
+        { status: 400 }
+      );
+    }
+
     // 2. Check for existing users (Uniqueness check)
     const existingUser = await Profile.findOne({ $or: [{ username }, { email }] });
 
@@ -65,21 +73,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Handle Referral ID lookup
-    let referrerProfile = null;
-    if (referralId) {
-      referrerProfile = await Profile.findOne({ referral_id: referralId });
+    // 3. Validate Referral ID and lookup referrer
+    const referrerProfile = await Profile.findOne({ referral_id: referralId });
 
-      if (!referrerProfile) {
-        return NextResponse.json({ message: 'Invalid referral ID.' }, { status: 400 });
-      }
+    if (!referrerProfile) {
+      return NextResponse.json({ message: 'Invalid referral code. Please check and try again.' }, { status: 400 });
+    }
 
-      // Check if referrer is approved and active
-      if (referrerProfile.approval_status !== 'approved' || referrerProfile.status !== 'active') {
-        return NextResponse.json({ 
-          message: 'Referrer account is not active or approved. Please use a different referral code.' 
-        }, { status: 400 });
-      }
+    // Check if referrer is approved and active
+    if (referrerProfile.approval_status !== 'approved' || referrerProfile.status !== 'active') {
+      return NextResponse.json({ 
+        message: 'This referral code is no longer active. Please request a new one from the referrer.' 
+      }, { status: 400 });
+    }
+    
+    // Prevent self-referral
+    if (referrerProfile.email === email) {
+      return NextResponse.json({ 
+        message: 'Self-referral is not allowed. Please use a different referral code.' 
+      }, { status: 400 });
     }
 
     // 4. Create New User Profile
@@ -159,7 +171,7 @@ export async function POST(request: NextRequest) {
         const referralRecord = await Referral.create({
           referrer_id: referrerProfile._id,
           referred_id: newUser._id,
-          earning_cents: 0, // Will be updated when user pays activation and gets approved
+          earning_cents: 0 // Will be updated when user pays activation and gets approved
         });
 
         console.log('Referral record created:', referralRecord._id);

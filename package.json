@@ -13,6 +13,7 @@
     "update:company": "node scripts/update-company-id.js"
   },
   "dependencies": {
+    "@auth/core": "^0.34.3",
     "@auth/mongodb-adapter": "^3.11.1",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",

@@ -73,6 +73,11 @@ export default function SignUpContent() {
       setError('Please fill in all required fields.');
       return false;
     }
+    // Referral code is REQUIRED
+    if (!formData.referralId) {
+      setError('Referral code is required. You must sign up using a valid referral link.');
+      return false;
+    }
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters long.');
       return false;
@@ -95,9 +100,9 @@ export default function SignUpContent() {
       setError('Please enter a valid Kenyan phone number (9 digits without +254).');
       return false;
     }
-    // Referral ID validation (if provided)
-    if (formData.referralId && !/^[A-Z0-9]{1,10}$/.test(formData.referralId)) {
-      setError('Referral ID must be 1-10 characters long and contain only uppercase letters and numbers.');
+    // Referral code validation
+    if (!/^[A-Z0-9]{1,10}$/.test(formData.referralId)) {
+      setError('Referral code must be 1-10 characters long and contain only uppercase letters and numbers.');
       return false;
     }
     return true;
