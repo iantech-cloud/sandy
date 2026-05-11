@@ -1,0 +1,82 @@
+{
+  "private": true,
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "dev": "next dev -p 5000 -H 0.0.0.0",
+    "build": "next build --no-lint",
+    "start": "next start -p 5000 -H 0.0.0.0",
+    "seed": "ts-node scripts/seed-spin-prizes.ts",
+    "clean": "rm -rf .next node_modules out dist build && pnpm store prune && pnpm install",
+    "migrate:transactions": "node scripts/migrate-transactions.js",
+    "update:company": "node scripts/update-company-id.js"
+  },
+  "dependencies": {
+    "@auth/mongodb-adapter": "^3.11.1",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@google/genai": "^1.25.0",
+    "@heroicons/react": "^2.2.0",
+    "@mui/icons-material": "^7.3.4",
+    "@mui/material": "^7.3.4",
+    "@tailwindcss/forms": "^0.5.10",
+    "@vercel/analytics": "^1.5.0",
+    "@vercel/blob": "^2.0.0",
+    "autoprefixer": "10.4.20",
+    "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.2",
+    "bootstrap": "^5.3.8",
+    "chart.js": "^4.5.1",
+    "clsx": "^2.1.1",
+    "critters": "^0.0.25",
+    "date-fns": "^2.30.0",
+    "dotenv": "^17.2.3",
+    "install": "^0.13.0",
+    "jquery": "^3.7.1",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.545.0",
+    "mongodb": "^6.20.0",
+    "mongoose": "^8.19.1",
+    "next": "15.3.8",
+    "next-auth": "5.0.0-beta.30",
+    "nodemailer": "^7.0.10",
+    "postcss": "8.5.1",
+    "qrcode": "^1.5.4",
+    "react": "19.1.0",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "19.1.0",
+    "resend": "^6.2.0",
+    "sharp": "^0.34.4",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "sonner": "^2.0.7",
+    "speakeasy": "^2.0.0",
+    "summernote": "^0.9.1",
+    "sweetalert2": "^11.26.2",
+    "tailwindcss": "3.4.17",
+    "use-debounce": "^10.0.6",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/jquery": "^3.5.29",
+    "@types/node": "22.10.7",
+    "@types/nodemailer": "^7.0.2",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "@types/socket.io": "^3.0.2",
+    "@types/speakeasy": "^2.0.10",
+    "@types/summernote": "^0.8.10",
+    "ts-node": "^10.9.2",
+    "typescript": "5.7.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "bcrypt"
+    ],
+    "ignoredBuiltDependencies": [
+      "sharp"
+    ]
+  }
+}
