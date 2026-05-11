@@ -240,18 +240,16 @@ export async function initiateStkPush({
 }
 
 /**
- * Query STK Push status with retry logic and proper error handling for pending transactions
+ * Query STK Push status - NO retry logic here, client handles polling
+ * This function just queries M-Pesa and returns the status as-is
  */
-export async function queryStkPushStatus(checkoutRequestId: string, retryCount = 0): Promise<any> {
-  const maxRetries = 5;
-  const baseDelay = 3000; // 3 seconds base delay
-
+export async function queryStkPushStatus(checkoutRequestId: string): Promise<any> {
   try {
     if (!checkoutRequestId) {
       throw new Error('CheckoutRequestID is required');
     }
 
-    console.log('🔍 Querying STK Push status:', { checkoutRequestId, retryCount });
+    console.log('[v0] Querying STK Push status:', checkoutRequestId);
 
     const accessToken = await getAccessToken();
     const { password, timestamp } = generatePassword();
@@ -273,17 +271,9 @@ export async function queryStkPushStatus(checkoutRequestId: string, retryCount =
       body: JSON.stringify(payload),
     });
 
-    console.log(`🔍 Query Response Status: ${response.status} ${response.statusText}`);
+    console.log(`[v0] Query Response Status: ${response.status}`);
 
     if (!response.ok) {
-      // Handle rate limiting and server errors with exponential backoff
-      if ((response.status === 429 || response.status >= 500) && retryCount < maxRetries) {
-        const delay = baseDelay * Math.pow(1.5, retryCount);
-        console.log(`⏳ Server busy (${response.status}), retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return queryStkPushStatus(checkoutRequestId, retryCount + 1);
-      }
-
       let errorDetails = '';
       try {
         const errorText = await response.text();
@@ -291,12 +281,11 @@ export async function queryStkPushStatus(checkoutRequestId: string, retryCount =
       } catch (textError) {
         errorDetails = 'Could not read error response';
       }
-
-      throw new Error(`Query request failed: ${response.status} ${response.statusText} - ${errorDetails}`);
+      throw new Error(`Query failed: ${response.status} - ${errorDetails}`);
     }
 
     const data = await response.json();
-    console.log('📋 STK Push Query Response:', data);
+    console.log('[v0] STK Query Response:', data);
 
     if (data.ResponseCode === '0') {
       const resultCode = data.ResultCode?.toString();
@@ -314,7 +303,7 @@ export async function queryStkPushStatus(checkoutRequestId: string, retryCount =
       } else if (['1', '2001'].includes(resultCode)) {
         status = 'failed';
       } else {
-        // Any other code means transaction is still being processed
+        // Any other code = still processing
         status = 'pending';
       }
 
@@ -328,9 +317,9 @@ export async function queryStkPushStatus(checkoutRequestId: string, retryCount =
         responseDescription: data.ResponseDescription
       };
     } else {
-      // Handle "Transaction within processing limit" and similar errors as pending state
+      // "Transaction within processing limit" means PENDING - not an error
       if (data.ResponseDescription?.includes('processing') || data.ResponseDescription?.includes('limit')) {
-        console.log('⏳ Transaction is still being processed - returning pending status');
+        console.log('[v0] Transaction processing - returning pending status');
         return {
           success: true,
           status: 'pending',
@@ -345,20 +334,7 @@ export async function queryStkPushStatus(checkoutRequestId: string, retryCount =
     }
 
   } catch (error) {
-    console.error('❌ STK Push query error:', error);
-    
-    // Retry on network errors and "processing limit" (but not auth errors)
-    if (retryCount < maxRetries && 
-        error instanceof Error && 
-        !error.message.includes('403') && 
-        !error.message.includes('401') &&
-        !error.message.includes('CheckoutRequestID is required')) {
-      const delay = baseDelay * Math.pow(1.5, retryCount);
-      console.log(`🔄 Retrying query after error, attempt ${retryCount + 1}/${maxRetries} in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return queryStkPushStatus(checkoutRequestId, retryCount + 1);
-    }
-    
+    console.error('[v0] Query error:', error);
     throw error;
   }
 }
