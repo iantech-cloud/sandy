@@ -164,7 +164,7 @@ const ProfileSchema = new Schema({
   is_verified: { type: Boolean, default: false },
   email_verified_at: { type: Date },
   activation_paid_at: { type: Date },
-  activation_amount_cents: { type: Number, default: 100000 }, // KES 1000
+  activation_amount_cents: { type: Number, default: 10000 }, // KES 100
   activation_method: { type: String, enum: ['mpesa', 'manual'], default: 'mpesa' },
   activation_transaction_id: { type: Schema.Types.ObjectId, ref: 'Transaction' },
 

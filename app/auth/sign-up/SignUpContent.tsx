@@ -291,7 +291,7 @@ export default function SignUpContent() {
                 </li>
                 <li className="flex items-start">
                   <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">3</span>
-                  <span><strong>Pay activation fee</strong> - KSH 1,000 to activate your account</span>
+                  <span><strong>Pay activation fee</strong> - KES 100 to activate your account</span>
                 </li>
                 <li className="flex items-start">
                   <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">4</span>
@@ -556,7 +556,7 @@ export default function SignUpContent() {
             </li>
             <li className="flex items-start">
               <span className="bg-blue-100 text-blue-800 rounded-full w-4 h-4 flex items-center justify-center text-xs mr-2 mt-0.5 flex-shrink-0">2</span>
-              Pay KSH 1,000 activation fee
+              Pay KES 100 activation fee
             </li>
             <li className="flex items-start">
               <span className="bg-blue-100 text-blue-800 rounded-full w-4 h-4 flex items-center justify-center text-xs mr-2 mt-0.5 flex-shrink-0">3</span>
