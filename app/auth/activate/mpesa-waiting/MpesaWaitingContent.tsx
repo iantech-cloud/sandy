@@ -30,12 +30,30 @@ export default function MpesaWaitingContent() {
   const [timeLeft, setTimeLeft] = useState(120); // 2 minutes in seconds
   const [pollingCount, setPollingCount] = useState(0);
   const [isActivatingAccount, setIsActivatingAccount] = useState(false);
+  const [lastPolledAt, setLastPolledAt] = useState<number>(0);
+  const [retryCount, setRetryCount] = useState(0);
 
-  // Poll for payment status using server action
+  // Poll for payment status using server action with controlled intervals and retry logic
   const pollPaymentStatus = useCallback(async () => {
     if (!checkoutRequestId) return;
 
+    // Implement exponential backoff: don't poll too frequently
+    const now = Date.now();
+    const minimumIntervalMs = 3000; // Minimum 3 seconds between polls
+    
+    // Calculate dynamic interval based on retry count (exponential backoff)
+    const baseInterval = 3000; // 3 seconds base
+    const maxInterval = 15000; // Max 15 seconds between polls
+    const dynamicInterval = Math.min(baseInterval * Math.pow(1.5, retryCount), maxInterval);
+    
+    if (lastPolledAt && now - lastPolledAt < dynamicInterval) {
+      // Skip this poll - too soon
+      return;
+    }
+
     try {
+      setLastPolledAt(now);
+      
       // Assuming checkMpesaPaymentStatus returns:
       // { success: true, data: { status: 'completed' | 'cancelled' | 'timeout' | 'failed' | 'pending', ... } }
       const result = await checkMpesaPaymentStatus(checkoutRequestId);
@@ -46,7 +64,15 @@ export default function MpesaWaitingContent() {
         const { status, resultCode, resultDesc, mpesaReceiptNumber, amount, source } = result.data;
 
         // Log for debugging
-        console.log(`🔄 Polling result (source: ${source}):`, { status, resultCode, resultDesc });
+        console.log(`🔄 Polling result (attempt ${pollingCount + 1}, source: ${source}):`, { status, resultCode, resultDesc });
+
+        // Handle pending/processing state - don't count as an error
+        if (status === 'pending') {
+          // Reset retry count on pending - we're still waiting for M-Pesa
+          setRetryCount(0);
+          console.log('⏳ Transaction still pending - M-Pesa is processing');
+          return;
+        }
 
         // Update payment status based on the response
         setPaymentStatus(prev => {
@@ -58,6 +84,7 @@ export default function MpesaWaitingContent() {
           
           // Map status from API/database to our UI status
           if (status === 'completed') {
+            setRetryCount(0); // Reset on success
             return {
               status: 'success',
               resultCode: resultCode,
@@ -66,18 +93,22 @@ export default function MpesaWaitingContent() {
               amount: amount
             };
           } else if (status === 'cancelled') {
+            setRetryCount(0);
             return {
               status: 'cancelled',
               resultCode: resultCode,
               resultDesc: resultDesc || 'Payment cancelled by user'
             };
           } else if (status === 'timeout') {
+            setRetryCount(0);
             return {
               status: 'timeout',
               resultCode: resultCode,
               resultDesc: resultDesc || 'Payment timeout'
             };
           } else if (status === 'failed') {
+            // For failed status, increment retry count but cap at max retries
+            setRetryCount(prev => Math.min(prev + 1, 5));
             return {
               status: 'failed',
               resultCode: resultCode,
@@ -97,11 +128,15 @@ export default function MpesaWaitingContent() {
         }
       } else {
         console.error('Failed to check payment status:', result.message);
+        // Increment retry count on error
+        setRetryCount(prev => Math.min(prev + 1, 5));
       }
     } catch (error) {
       console.error('Error polling payment status:', error);
+      // Increment retry count on error
+      setRetryCount(prev => Math.min(prev + 1, 5));
     }
-  }, [checkoutRequestId, activationPaymentId]); // Dependencies remain the same
+  }, [checkoutRequestId, activationPaymentId, lastPolledAt, retryCount, pollingCount]);
 
   // Activate user account after successful payment using server action
   const activateAccount = async () => {
@@ -147,14 +182,30 @@ export default function MpesaWaitingContent() {
     return () => clearTimeout(timer);
   }, [timeLeft, paymentStatus.status]);
 
-  // Polling interval
+  // Polling interval with exponential backoff and max retry limit
   useEffect(() => {
     if (paymentStatus.status !== 'processing') return;
 
-    // NOTE: Polling frequency could be made dynamic or exponential backoff
-    const interval = setInterval(pollPaymentStatus, 3000); // Poll every 3 seconds
-    return () => clearInterval(interval);
-  }, [paymentStatus.status, pollPaymentStatus]);
+    // Maximum retries to prevent infinite loops
+    const MAX_RETRIES = 40; // ~2 minutes with exponential backoff
+    if (pollingCount >= MAX_RETRIES) {
+      console.log('⚠️ Max polling attempts reached');
+      setPaymentStatus({
+        status: 'timeout',
+        resultCode: '1037',
+        resultDesc: 'Payment request timed out. Please try again.'
+      });
+      return;
+    }
+
+    // Calculate dynamic polling interval based on retry count
+    const baseInterval = 3000; // Start with 3 seconds
+    const maxInterval = 15000; // Cap at 15 seconds
+    const pollInterval = Math.min(baseInterval * Math.pow(1.5, retryCount), maxInterval);
+
+    const timeout = setTimeout(pollPaymentStatus, pollInterval);
+    return () => clearTimeout(timeout);
+  }, [paymentStatus.status, pollPaymentStatus, pollingCount, retryCount]);
 
   // Initial poll
   useEffect(() => {

@@ -352,9 +352,12 @@ async function initiateMpesaSTKPush(
 }
 
 /**
- * Query M-Pesa transaction status directly from API
+ * Query M-Pesa transaction status directly from API with retry logic
  */
-async function queryMpesaTransactionStatus(checkoutRequestId: string): Promise<ApiResponse<MpesaStatusData>> {
+async function queryMpesaTransactionStatus(checkoutRequestId: string, retryCount = 0): Promise<ApiResponse<MpesaStatusData>> {
+  const maxRetries = 5;
+  const baseDelay = 3000; // 3 seconds
+  
   try {
     console.log('📡 Querying M-Pesa API for transaction status:', checkoutRequestId);
 
@@ -394,11 +397,36 @@ async function queryMpesaTransactionStatus(checkoutRequestId: string): Promise<A
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ M-Pesa Query API Error:', errorText);
+      
+      // Retry on server errors with exponential backoff
+      if ((response.status === 429 || response.status >= 500) && retryCount < maxRetries) {
+        const delay = baseDelay * Math.pow(1.5, retryCount);
+        console.log(`⏳ Server busy (${response.status}), retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return queryMpesaTransactionStatus(checkoutRequestId, retryCount + 1);
+      }
+      
       return { success: false, error: `API error: ${response.status}` };
     }
 
     const data = await response.json();
     console.log('📨 M-Pesa Query API Response:', JSON.stringify(data, null, 2));
+
+    // Check for "Transaction within processing limit" error and treat as pending
+    if (data.ResponseDescription?.includes('processing') || data.ResponseDescription?.includes('limit')) {
+      console.log('⏳ Transaction is still being processed - returning pending status');
+      return {
+        success: true,
+        data: {
+          status: 'pending',
+          resultCode: '4999',
+          resultDesc: 'Transaction in progress',
+          mpesaReceiptNumber: null,
+          amount: 0,
+          isActivationPayment: true
+        }
+      };
+    }
 
     const mappedStatus = mapMpesaStatusToDatabase(data.ResultCode, data.ResultDesc);
     const mappedResultCode = mapMpesaResultCodeToDatabase(data.ResultCode);
@@ -417,6 +445,18 @@ async function queryMpesaTransactionStatus(checkoutRequestId: string): Promise<A
 
   } catch (error) {
     console.error('💥 M-Pesa query API error:', error);
+    
+    // Retry on network errors (but not auth errors)
+    if (retryCount < maxRetries && 
+        error instanceof Error && 
+        !error.message.includes('403') && 
+        !error.message.includes('401')) {
+      const delay = baseDelay * Math.pow(1.5, retryCount);
+      console.log(`🔄 Retrying query after error, attempt ${retryCount + 1}/${maxRetries} in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return queryMpesaTransactionStatus(checkoutRequestId, retryCount + 1);
+    }
+    
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to query transaction status' 
