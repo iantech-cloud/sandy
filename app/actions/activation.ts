@@ -658,7 +658,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       return { success: false, message: 'Invalid phone number format. Use 07XXXXXXXX or 2547XXXXXXXX' };
     }
 
-    const activationAmount = userProfile.activation_amount_cents || 100000;
+    const activationAmount = userProfile.activation_amount_cents || 10000;
 
     console.log('🎯 Starting activation payment process:');
     console.log('👤 User:', userProfile.username);

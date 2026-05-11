@@ -379,7 +379,7 @@ export async function getReferralInfo(): Promise<{
 
     // Generate referral code from user ID or use existing one
     const referralCode = currentUser.referral_code || currentUser._id.toString().slice(-8).toUpperCase();
-    const referralLink = `${process.env.NEXTAUTH_URL}/auth/signup?ref=${referralCode}`;
+    const referralLink = `${process.env.NEXTAUTH_URL}/auth/sign-up?ref=${referralCode}`;
 
     // Update user with referral code if not exists
     if (!currentUser.referral_code) {

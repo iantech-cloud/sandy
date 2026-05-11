@@ -161,7 +161,7 @@ export default function ActivateComponent() {
             <svg className="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v6a1 1 0 102 0V5zm-1 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
             </svg>
-            <p className="text-yellow-800 font-medium">Activation Fee: KSH 1,000</p>
+            <p className="text-yellow-800 font-medium">Activation Fee: KES 100</p>
           </div>
           <p className="text-yellow-700 text-sm mt-2">
             This one-time fee activates your account and gives you full access to the platform.
@@ -204,7 +204,7 @@ export default function ActivateComponent() {
                 Initiating Payment...
               </>
             ) : (
-              'Pay KSH 1,000 with M-Pesa'
+              'Pay KES 100 with M-Pesa'
             )}
           </button>
         </form>
@@ -213,7 +213,7 @@ export default function ActivateComponent() {
           <h4 className="font-semibold text-blue-800 mb-2">How to activate:</h4>
           <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
             <li>Enter your M-Pesa registered phone number</li>
-            <li>Click "Pay KSH 1,000 with M-Pesa"</li>
+            <li>Click "Pay KES 100 with M-Pesa"</li>
             <li>You'll be redirected to a waiting page</li>
             <li>Check your phone for STK Push prompt</li>
             <li>Enter your M-Pesa PIN to complete</li>
