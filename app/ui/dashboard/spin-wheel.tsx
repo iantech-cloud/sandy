@@ -30,6 +30,8 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
   const [spinWallet, setSpinWallet] = useState<any>(null);
   const [error, setError] = useState('');
   const [showDepositModal, setShowDepositModal] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [depositLoading, setDepositLoading] = useState(false);
 
   // Fetch initial data
   useEffect(() => {
@@ -115,7 +117,7 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
         if (onSpinComplete) {
           onSpinComplete(data);
         }
-      }, 4000);
+      }, 2000);
 
     } catch (err) {
       console.error('[v0] Spin error:', err);
@@ -223,9 +225,6 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
                 <span className="text-yellow-400 font-bold flex-shrink-0">3.</span>
                 <span className="text-blue-200">Win amazing rewards every time!</span>
               </div>
-              <p className="text-xs text-gray-300 mt-2">
-                ⭕ The wheel always lands on "Try Again" but you still get your deposit value back!
-              </p>
             </div>
           </div>
 
@@ -265,7 +264,7 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
               className="relative w-full aspect-square rounded-full shadow-2xl border-8 border-yellow-400"
               style={{
                 transform: `rotate(${rotation}deg)`,
-                transition: spinning ? 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)' : 'none'
+                transition: spinning ? 'transform 2s cubic-bezier(0.17, 0.67, 0.12, 0.99)' : 'none'
               }}
             >
               <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
@@ -420,54 +419,91 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
             </h2>
             
             <div className="bg-white/10 rounded-lg p-4 mb-6">
-              <p className="text-white text-center mb-2">Cost per spin:</p>
+              <p className="text-white text-center mb-2">Amount to deposit:</p>
               <p className="text-4xl font-bold text-yellow-400 text-center">KES 30</p>
+              <p className="text-sm text-blue-300 text-center mt-2">Cost per spin</p>
             </div>
 
-            <p className="text-blue-200 text-center mb-6">
-              Deposit KES 30 via M-Pesa to your spin wallet and start winning amazing rewards!
-            </p>
-
-            <div className="space-y-3 mb-6">
+            <div className="space-y-4 mb-6">
               <div className="bg-white/10 rounded-lg p-3">
                 <p className="text-sm text-blue-200 mb-1">Current Balance:</p>
                 <p className="text-2xl font-bold text-white">KES {spinWallet?.balance_kes || '0.00'}</p>
+              </div>
+
+              <div>
+                <label className="block text-white text-sm font-semibold mb-2">
+                  M-Pesa Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                  placeholder="254712345678"
+                  maxLength="12"
+                  className="w-full bg-white/20 border-2 border-white/40 rounded-lg px-4 py-2 text-white placeholder-blue-300/50 focus:outline-none focus:border-yellow-400"
+                />
+                <p className="text-xs text-blue-300 mt-1">
+                  Enter your M-Pesa registered number (format: 254XXXXXXXXX)
+                </p>
               </div>
             </div>
 
             <button
               onClick={async () => {
+                if (!phoneNumber || phoneNumber.length < 10) {
+                  setError('Please enter a valid phone number');
+                  return;
+                }
+
+                setDepositLoading(true);
                 try {
                   const response = await fetch('/api/spin-wallet/deposit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ amount_cents: 3000 })
+                    body: JSON.stringify({ 
+                      phoneNumber: phoneNumber.startsWith('254') ? phoneNumber : '254' + phoneNumber.slice(-10),
+                      amount_cents: 3000 
+                    })
                   });
                   
                   const data = await response.json();
                   if (data.success) {
                     console.log('[v0] Deposit initiated:', data);
-                    // M-Pesa modal will appear
+                    setError('');
+                    setPhoneNumber('');
                     setShowDepositModal(false);
+                    // Reload wallet data after deposit
+                    await loadSpinData();
                   } else {
                     setError(data.message || 'Failed to initiate deposit');
                   }
                 } catch (err) {
                   console.error('[v0] Deposit error:', err);
-                  setError('Failed to initiate deposit');
+                  setError('Failed to initiate deposit. Please try again.');
+                } finally {
+                  setDepositLoading(false);
                 }
               }}
-              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-4 rounded-lg transition-all mb-3"
+              disabled={depositLoading || !phoneNumber}
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 disabled:from-gray-500 disabled:to-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-all mb-3"
             >
-              Deposit via M-Pesa
+              {depositLoading ? 'Processing...' : 'Request M-Pesa STK'}
             </button>
 
             <button
-              onClick={() => setShowDepositModal(false)}
-              className="w-full bg-white/20 hover:bg-white/30 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+              onClick={() => {
+                setShowDepositModal(false);
+                setPhoneNumber('');
+              }}
+              disabled={depositLoading}
+              className="w-full bg-white/20 hover:bg-white/30 disabled:bg-white/10 text-white font-bold py-2 px-4 rounded-lg transition-colors"
             >
               Cancel
             </button>
+
+            <p className="text-xs text-blue-300 text-center mt-3">
+              You will receive an M-Pesa prompt on your phone to enter your PIN
+            </p>
           </div>
         </div>
       )}

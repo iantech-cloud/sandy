@@ -10,21 +10,23 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { phoneNumber, amount } = body
+    const { phoneNumber, amount_cents } = body
 
-    if (!phoneNumber) {
+    if (!phoneNumber || !phoneNumber.trim()) {
       return NextResponse.json(
         { success: false, message: 'Phone number is required' },
         { status: 400 }
       )
     }
 
-    const result = await initiatSpinDeposit(phoneNumber, amount || 30)
+    // Convert cents to KES amount
+    const amountKes = amount_cents ? amount_cents / 100 : 30
+    const result = await initiatSpinDeposit(phoneNumber.trim(), amountKes)
     return NextResponse.json(result)
   } catch (error) {
     console.error('[v0] Error initiating spin deposit:', error)
     return NextResponse.json(
-      { success: false, message: 'An error occurred' },
+      { success: false, message: 'An error occurred while initiating deposit' },
       { status: 500 }
     )
   }
