@@ -1,20 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Award, Gift, Loader2, TrendingUp, CheckCircle2, XCircle, Clock, Zap } from 'lucide-react';
 
-// Prize configuration matching your schema
+// Prize configuration - 10 rewards total
 const PRIZE_CONFIG = [
-  { type: 'EXTRA_SPIN_VOUCHER', color: '#FF6B6B', icon: '🎟️', segment: 1 },
-  { type: 'BONUS_CREDIT', color: '#4ECDC4', icon: '💰', segment: 2 },
-  { type: 'REFERRAL_BOOST', color: '#96CEB4', icon: '🧭', segment: 3 },
-  { type: 'TRAINING_COURSE', color: '#FFEAA7', icon: '🧠', segment: 4 },
-  { type: 'AIRTIME', color: '#45B7D1', icon: '📱', segment: 5 },
-  { type: 'LEADERSHIP_TOKEN', color: '#DDA0DD', icon: '💼', segment: 6 },
-  { type: 'SURVEY_PRIORITY', color: '#98D8C8', icon: '🧾', segment: 7 },
-  { type: 'MYSTERY_BOX', color: '#F7DC6F', icon: '🎲', segment: 8 },
-  { type: 'COMMISSION_BOOST', color: '#BB8FCE', icon: '💎', segment: 9 },
-  { type: 'TOP_AFFILIATE_BADGE', color: '#E8DAEF', icon: '👑', segment: 10 },
-  { type: 'TRY_AGAIN', color: '#CCCCCC', icon: '❌', segment: 11 },
-  { type: 'AD_SLOT', color: '#FFD93D', icon: '📺', segment: 12 }
+  { type: 'BONUS_CREDIT', color: '#4ECDC4', icon: '💰', segment: 1, label: 'Bonus Credit' },
+  { type: 'EXTRA_SPIN', color: '#FF6B6B', icon: '🎟️', segment: 2, label: 'Free Spin' },
+  { type: 'AIRTIME', color: '#45B7D1', icon: '📱', segment: 3, label: 'Airtime' },
+  { type: 'SURVEY_BOOST', color: '#98D8C8', icon: '🧾', segment: 4, label: 'Survey Boost' },
+  { type: 'REFERRAL_BONUS', color: '#96CEB4', icon: '🧭', segment: 5, label: 'Referral Bonus' },
+  { type: 'MYSTERY_REWARD', color: '#F7DC6F', icon: '🎲', segment: 6, label: 'Mystery Reward' },
+  { type: 'COURSE_ACCESS', color: '#FFEAA7', icon: '🧠', segment: 7, label: 'Free Course' },
+  { type: 'COMMISSION_BOOST', color: '#BB8FCE', icon: '💎', segment: 8, label: 'Commission Boost' },
+  { type: 'BADGE_UNLOCK', color: '#E8DAEF', icon: '👑', segment: 9, label: 'Badge' },
+  { type: 'ZERO', color: '#CCCCCC', icon: '⭕', segment: 10, label: 'Try Again' }
 ];
 
 interface SpinWheelProps {
@@ -29,8 +27,7 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
   const [prizes, setPrizes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [spinStatus, setSpinStatus] = useState<any>(null);
-  const [taskStatus, setTaskStatus] = useState<any>(null);
-  const [userStats, setUserStats] = useState<any>(null);
+  const [spinWallet, setSpinWallet] = useState<any>(null);
   const [error, setError] = useState('');
 
   // Fetch initial data
@@ -54,18 +51,15 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
       const statusData = await statusRes.json();
       setSpinStatus(statusData);
 
-      // Get task completion status
-      const taskRes = await fetch('/api/spin/tasks');
-      const taskData = await taskRes.json();
-      setTaskStatus(taskData.data);
-
-      // Get user spin stats
-      const statsRes = await fetch('/api/spin/stats');
-      const statsData = await statsRes.json();
-      setUserStats(statsData.data);
+      // Fetch spin wallet balance
+      const walletRes = await fetch('/api/spin-wallet/balance');
+      const walletData = await walletRes.json();
+      if (walletData.success) {
+        setSpinWallet(walletData);
+      }
 
     } catch (err) {
-      console.error('Error loading spin data:', err);
+      console.error('[v0] Error loading spin data:', err);
       setError('Failed to load spin data');
     } finally {
       setLoading(false);
@@ -133,9 +127,10 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
     );
   }
 
+  const SPIN_COST_KES = 30;
   const canSpin = spinStatus?.active && 
-                  taskStatus?.allCompleted && 
-                  userStats?.availableSpins >= 5;
+                  spinWallet && 
+                  spinWallet.balance_cents >= (SPIN_COST_KES * 100);
 
   // Helper function to create proper wheel segments
   const createWheelSegment = (index: number, total: number) => {
@@ -174,56 +169,55 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 mb-8">
-          {/* Spin Status Card */}
+          {/* Spin Wallet Card */}
           <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
             <div className="flex items-center gap-3 mb-4">
-              <Clock className="w-6 h-6 text-blue-300" />
-              <h3 className="text-lg font-semibold text-white">Spin Status</h3>
+              <Zap className="w-6 h-6 text-yellow-300" />
+              <h3 className="text-lg font-semibold text-white">Spin Wallet</h3>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-blue-200">Available Spins:</span>
-                <span className="text-2xl font-bold text-white">{userStats?.availableSpins || 0}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Spins Used Today:</span>
-                <span className="text-white font-semibold">{userStats?.totalSpins || 0}</span>
+                <span className="text-blue-200">Balance:</span>
+                <span className="text-2xl font-bold text-yellow-400">KES {spinWallet?.balance_kes || '0.00'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-blue-200">Cost per Spin:</span>
-                <span className="text-yellow-400 font-semibold">5 spins</span>
+                <span className="text-white font-semibold">KES 30</span>
               </div>
+              <div className="flex justify-between items-center">
+                <span className="text-blue-200">Total Spins:</span>
+                <span className="text-white font-semibold">{spinWallet?.total_spins || 0}</span>
+              </div>
+              {spinWallet && spinWallet.balance_cents < (SPIN_COST_KES * 100) && (
+                <p className="text-sm text-orange-300 mt-3 font-semibold">
+                  Insufficient balance. Deposit via M-Pesa to spin.
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Task Status Card */}
+          {/* How to Spin Card */}
           <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
             <div className="flex items-center gap-3 mb-4">
               <TrendingUp className="w-6 h-6 text-green-300" />
-              <h3 className="text-lg font-semibold text-white">Weekly Tasks</h3>
+              <h3 className="text-lg font-semibold text-white">How to Spin</h3>
             </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-blue-200">Referral Task</span>
-                {taskStatus?.referral ? (
-                  <CheckCircle2 className="w-5 h-5 text-green-400" />
-                ) : (
-                  <XCircle className="w-5 h-5 text-red-400" />
-                )}
+            <div className="space-y-3 text-sm">
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-400 font-bold flex-shrink-0">1.</span>
+                <span className="text-blue-200">Deposit KES 30 via M-Pesa to your spin wallet</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-blue-200">Writing Task</span>
-                {taskStatus?.writing ? (
-                  <CheckCircle2 className="w-5 h-5 text-green-400" />
-                ) : (
-                  <XCircle className="w-5 h-5 text-red-400" />
-                )}
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-400 font-bold flex-shrink-0">2.</span>
+                <span className="text-blue-200">Click the spin button on the wheel</span>
               </div>
-              {!taskStatus?.allCompleted && (
-                <p className="text-sm text-yellow-300 mt-2">
-                  Complete both tasks to unlock spinning
-                </p>
-              )}
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-400 font-bold flex-shrink-0">3.</span>
+                <span className="text-blue-200">Win amazing rewards every time!</span>
+              </div>
+              <p className="text-xs text-gray-300 mt-2">
+                ⭕ The wheel always lands on "Try Again" but you still get your deposit value back!
+              </p>
             </div>
           </div>
 
