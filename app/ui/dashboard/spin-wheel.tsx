@@ -29,6 +29,7 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
   const [spinStatus, setSpinStatus] = useState<any>(null);
   const [spinWallet, setSpinWallet] = useState<any>(null);
   const [error, setError] = useState('');
+  const [showDepositModal, setShowDepositModal] = useState(false);
 
   // Fetch initial data
   useEffect(() => {
@@ -66,7 +67,17 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
     }
   };
 
-  const handleSpin = async () => {
+  const handleSpinClick = () => {
+    // Check if user has sufficient balance
+    if (!spinWallet || spinWallet.balance_cents < (SPIN_COST_KES * 100)) {
+      setShowDepositModal(true);
+      return;
+    }
+    
+    performSpin();
+  };
+
+  const performSpin = async () => {
     if (spinning) return;
 
     setSpinning(true);
@@ -91,26 +102,23 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
       // Calculate rotation based on prize
       const prizeIndex = PRIZE_CONFIG.findIndex(p => p.type === data.prizeType);
       const segmentAngle = 360 / PRIZE_CONFIG.length;
-      const targetRotation = 360 * 5 + (prizeIndex * segmentAngle); // 5 full rotations + target
+      const targetRotation = 360 * 5 + (prizeIndex * segmentAngle);
       
       setRotation(targetRotation);
 
-      // Wait for animation and data refresh before calling callback
+      // Wait for animation and data refresh
       setTimeout(async () => {
         setResult(data);
         setSpinning(false);
-        
-        // Reload spin wheel data first
         await loadSpinData();
         
-        // Call the completion callback AFTER data is refreshed
         if (onSpinComplete) {
           onSpinComplete(data);
         }
       }, 4000);
 
     } catch (err) {
-      console.error('Spin error:', err);
+      console.error('[v0] Spin error:', err);
       setError('An error occurred while spinning');
       setSpinning(false);
     }
@@ -221,25 +229,25 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
             </div>
           </div>
 
-          {/* Win Stats Card */}
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
+          {/* Deposit Card */}
+          <div className="bg-gradient-to-br from-orange-500/20 to-red-500/20 backdrop-blur-md rounded-xl p-6 border border-orange-400/30">
             <div className="flex items-center gap-3 mb-4">
-              <Gift className="w-6 h-6 text-purple-300" />
-              <h3 className="text-lg font-semibold text-white">Your Stats</h3>
+              <Gift className="w-6 h-6 text-orange-300" />
+              <h3 className="text-lg font-semibold text-white">Quick Deposit</h3>
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Total Wins:</span>
-                <span className="text-green-400 font-semibold">{userStats?.totalWins || 0}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Win Rate:</span>
-                <span className="text-white font-semibold">{userStats?.winRate?.toFixed(1) || 0}%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Current Streak:</span>
-                <span className="text-yellow-400 font-semibold">{userStats?.currentStreak || 0}</span>
-              </div>
+            <div className="space-y-3">
+              <p className="text-sm text-blue-200 mb-3">
+                Deposit KES 30 to spin and win amazing rewards!
+              </p>
+              <button
+                onClick={() => setShowDepositModal(true)}
+                className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold py-2 px-4 rounded-lg transition-all transform hover:scale-105"
+              >
+                Deposit Now
+              </button>
+              <p className="text-xs text-gray-300">
+                Balance: KES {spinWallet?.balance_kes || '0.00'}
+              </p>
             </div>
           </div>
         </div>
@@ -326,10 +334,10 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
 
             {/* Spin Button */}
             <button
-              onClick={handleSpin}
-              disabled={!canSpin || spinning}
+              onClick={handleSpinClick}
+              disabled={spinning}
               className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-8 py-4 rounded-full font-bold text-lg shadow-2xl transition-all transform ${
-                canSpin && !spinning
+                !spinning
                   ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-purple-900 hover:scale-110 hover:shadow-yellow-400/50'
                   : 'bg-gray-500 text-gray-300 cursor-not-allowed'
               }`}
@@ -402,6 +410,67 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
           </div>
         </div>
       </div>
+
+      {/* Deposit Modal */}
+      {showDepositModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl p-8 max-w-md w-full shadow-2xl border-4 border-yellow-400">
+            <h2 className="text-3xl font-bold text-white mb-4 text-center">
+              Deposit to Spin
+            </h2>
+            
+            <div className="bg-white/10 rounded-lg p-4 mb-6">
+              <p className="text-white text-center mb-2">Cost per spin:</p>
+              <p className="text-4xl font-bold text-yellow-400 text-center">KES 30</p>
+            </div>
+
+            <p className="text-blue-200 text-center mb-6">
+              Deposit KES 30 via M-Pesa to your spin wallet and start winning amazing rewards!
+            </p>
+
+            <div className="space-y-3 mb-6">
+              <div className="bg-white/10 rounded-lg p-3">
+                <p className="text-sm text-blue-200 mb-1">Current Balance:</p>
+                <p className="text-2xl font-bold text-white">KES {spinWallet?.balance_kes || '0.00'}</p>
+              </div>
+            </div>
+
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch('/api/spin-wallet/deposit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount_cents: 3000 })
+                  });
+                  
+                  const data = await response.json();
+                  if (data.success) {
+                    console.log('[v0] Deposit initiated:', data);
+                    // M-Pesa modal will appear
+                    setShowDepositModal(false);
+                  } else {
+                    setError(data.message || 'Failed to initiate deposit');
+                  }
+                } catch (err) {
+                  console.error('[v0] Deposit error:', err);
+                  setError('Failed to initiate deposit');
+                }
+              }}
+              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-4 rounded-lg transition-all mb-3"
+            >
+              Deposit via M-Pesa
+            </button>
+
+            <button
+              onClick={() => setShowDepositModal(false)}
+              className="w-full bg-white/20 hover:bg-white/30 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
