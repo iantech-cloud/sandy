@@ -461,7 +461,7 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                      phoneNumber: phoneNumber.startsWith('254') ? phoneNumber : '254' + phoneNumber.slice(-10),
+                      phoneNumber: phoneNumber,
                       amount_cents: 3000 
                     })
                   });
