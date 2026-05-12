@@ -8,7 +8,7 @@ import {
   Transaction,
   AdminAuditLog,
 } from '@/app/lib/models'
-import { queryStkPushStatus } from '@/app/lib/mpesa'
+import { queryStkPushStatus, initiateStkPush } from '@/app/lib/mpesa'
 
 export async function initiatSpinDeposit(phoneNumber: string, amount: number = 30) {
   try {
@@ -44,7 +44,14 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
     const cleanPhone = phoneNumber.replace(/\D/g, '')
     const formattedPhone = cleanPhone.startsWith('254') ? cleanPhone : `254${cleanPhone.slice(-9)}`
 
-    const stkResponse = await initiateSTKPush(formattedPhone, amount * 100)
+    console.log(`[v0] Initiating STK push for spin deposit: ${formattedPhone}, amount: ${amount} KES`)
+    
+    const stkResponse = await initiateStkPush({
+      amount: amount,
+      phoneNumber: formattedPhone,
+      accountReference: `SPIN_${session.user.id.slice(-8)}`,
+      transactionDesc: `Spin Wallet Deposit - KES ${amount}`
+    })
 
     if (!stkResponse.success) {
       return {
@@ -56,8 +63,8 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
     // Add deposit record
     spinWallet.deposits.push({
       amount_cents: amount * 100,
-      mpesa_checkout_request_id: stkResponse.CheckoutRequestID,
-      mpesa_merchant_request_id: stkResponse.MerchantRequestID,
+      mpesa_checkout_request_id: stkResponse.checkoutRequestId || stkResponse.CheckoutRequestID,
+      mpesa_merchant_request_id: stkResponse.merchantRequestId || stkResponse.MerchantRequestID,
       mpesa_status: 'initiated',
       status: 'pending',
       phone_number: formattedPhone,
@@ -70,7 +77,7 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
 
     return {
       success: true,
-      checkoutRequestId: stkResponse.CheckoutRequestID,
+      checkoutRequestId: stkResponse.checkoutRequestId || stkResponse.CheckoutRequestID,
       message: 'M-Pesa prompt sent. Please complete the payment on your phone.',
     }
   } catch (error) {
