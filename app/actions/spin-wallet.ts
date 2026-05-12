@@ -41,10 +41,28 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
     }
 
     // Initiate M-Pesa STK push
-    const cleanPhone = phoneNumber.replace(/\D/g, '')
-    const formattedPhone = cleanPhone.startsWith('254') ? cleanPhone : `254${cleanPhone.slice(-9)}`
+    // Format: Must be exactly 12 digits starting with 254
+    let cleanPhone = phoneNumber.replace(/\D/g, '')
+    
+    // Remove leading 0 if present (0791406285 -> 791406285)
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = cleanPhone.slice(1)
+    }
+    
+    // Remove leading 254 if present to normalize
+    if (cleanPhone.startsWith('254')) {
+      cleanPhone = cleanPhone.slice(3)
+    }
+    
+    // Ensure we have 9 digits after removing country code
+    if (cleanPhone.length < 9) {
+      return { success: false, message: 'Invalid phone number format' }
+    }
+    
+    // Take last 9 digits and prepend 254
+    const formattedPhone = `254${cleanPhone.slice(-9)}`
 
-    console.log(`[v0] Initiating STK push for spin deposit: ${formattedPhone}, amount: ${amount} KES`)
+    console.log(`[v0] Initiating STK push for spin deposit: ${formattedPhone} (${formattedPhone.length} digits), amount: ${amount} KES`)
     
     const stkResponse = await initiateStkPush({
       amount: amount,
