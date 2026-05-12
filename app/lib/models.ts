@@ -76,20 +76,18 @@ const AuditActions = [
   'CSV_IMPORT', 'PRODUCT_CREATE', 'PRODUCT_UPDATE', 'PRODUCT_DELETE'
 ] as const;
 
-// Spin to Win Enums
+// Spin to Win Enums - 10 rewards total
 const SpinPrizeTypes = [
-  'EXTRA_SPIN_VOUCHER',
-  'BONUS_CREDIT',
-  'REFERRAL_BOOST',
-  'TRAINING_COURSE',
-  'AIRTIME',
-  'LEADERSHIP_TOKEN',
-  'SURVEY_PRIORITY',
-  'MYSTERY_BOX',
-  'COMMISSION_BOOST',
-  'TOP_AFFILIATE_BADGE',
-  'TRY_AGAIN',
-  'AD_SLOT'
+  'BONUS_CREDIT',      // KES 50-200
+  'EXTRA_SPIN',        // 1 free spin
+  'AIRTIME',          // KES 50 airtime
+  'SURVEY_BOOST',     // 5 priority surveys
+  'REFERRAL_BONUS',   // KES 100 bonus
+  'MYSTERY_REWARD',   // Random reward
+  'COURSE_ACCESS',    // Free training
+  'COMMISSION_BOOST', // 10% boost for week
+  'BADGE_UNLOCK',     // Achievement badge
+  'ZERO'              // Try again (0 value)
 ] as const;
 
 const SpinStatuses = ['pending', 'won', 'lost', 'credited'] as const;
@@ -1845,44 +1843,29 @@ export const SpinLog = getModel('SpinLog', SpinLogSchema);
 const SpinSettingsSchema = new Schema({
   is_active: { 
     type: Boolean, 
-    default: false,
+    default: true,
+    immutable: true,
     index: true 
   },
   activation_mode: { 
     type: String, 
     enum: SpinActivationModes,
-    default: 'scheduled',
+    default: 'manual',
+    immutable: true,
     index: true 
-  },
-  
-  scheduled_days: [{ 
-    type: String, 
-    enum: WeekDays 
-  }],
-  start_time: { 
-    type: String,
-    match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format']
-  },
-  end_time: { 
-    type: String,
-    match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format']
-  },
-  timezone: { 
-    type: String, 
-    default: 'Africa/Nairobi' 
   },
   
   spins_per_session: { 
     type: Number, 
-    default: 3,
-    min: 1,
-    max: 10 
+    default: 1,
+    immutable: true,
+    min: 1 
   },
-  spins_cost_per_spin: { 
+  spin_cost_cents: { 
     type: Number, 
-    default: 5,
-    min: 1,
-    max: 20 
+    default: 3000,
+    immutable: true,
+    min: 3000 
   },
   cooldown_minutes: { 
     type: Number, 
@@ -2228,6 +2211,93 @@ const CompanySchema = new Schema({
 });
 
 export const Company = getModel('Company', CompanySchema);
+
+/**
+ * 31. SpinWallet Model - Separate wallet for spin deposits via M-Pesa
+ * Deposits are NON-WITHDRAWABLE and can only be used for spins
+ */
+const SpinWalletSchema = new Schema({
+  user_id: { 
+    type: String, 
+    ref: 'Profile', 
+    required: true, 
+    unique: true,
+    index: true 
+  },
+  
+  balance_cents: { 
+    type: Number, 
+    default: 0,
+    min: 0,
+    required: true 
+  },
+  
+  total_deposited_cents: { 
+    type: Number, 
+    default: 0,
+    required: true 
+  },
+  
+  total_used_cents: { 
+    type: Number, 
+    default: 0,
+    required: true 
+  },
+  
+  total_spins: { 
+    type: Number, 
+    default: 0,
+    min: 0 
+  },
+  
+  deposits: [{
+    amount_cents: { type: Number, required: true },
+    mpesa_checkout_request_id: { type: String, index: true },
+    mpesa_merchant_request_id: { type: String },
+    mpesa_receipt_number: { type: String },
+    mpesa_status: { 
+      type: String, 
+      enum: MpesaTransactionStatuses,
+      default: 'initiated'
+    },
+    status: { 
+      type: String, 
+      enum: ['pending', 'completed', 'failed', 'cancelled'],
+      default: 'pending'
+    },
+    phone_number: { type: String },
+    deposited_at: { type: Date },
+    created_at: { type: Date, default: Date.now, index: true }
+  }],
+  
+  is_active: { type: Boolean, default: true },
+  
+  metadata: { 
+    type: Schema.Types.Mixed, 
+    default: {} 
+  },
+  
+}, {
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+  indexes: [
+    { fields: { user_id: 1 } },
+    { fields: { balance_cents: 1 } },
+    { fields: { is_active: 1 } },
+    { fields: { 'deposits.status': 1 } },
+    { fields: { total_spins: 1 } },
+  ]
+});
+
+// Prevent deletion of spin wallet documents - they should never be removed
+SpinWalletSchema.pre('deleteOne', async function(next) {
+  throw new Error('Spin wallet records cannot be deleted');
+});
+
+SpinWalletSchema.pre('findByIdAndDelete', async function(next) {
+  throw new Error('Spin wallet records cannot be deleted');
+});
+
+export const SpinWallet = getModel('SpinWallet', SpinWalletSchema);
 
 export { mongoose, connectToDatabase };
 

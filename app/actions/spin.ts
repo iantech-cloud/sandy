@@ -14,6 +14,7 @@ import {
   AdminAuditLog,
   SpinAnalytics,
   UserContent,
+  SpinWallet,
 } from "../lib/models"
 
 // --- TYPE DEFINITIONS ---
@@ -333,248 +334,197 @@ async function ensureSpinPrizes(): Promise<void> {
     const existingPrizes = await (SpinPrize as any).countDocuments({})
     
     if (existingPrizes === 0) {
-      console.log('🎁 Creating all 12 spin prizes...')
+      console.log('[v0] Creating 10 spin prizes...')
       
       const defaultPrizes = [
         {
-          type: 'EXTRA_SPIN_VOUCHER',
-          name: 'Extra Spin Voucher',
-          display_name: '5 Extra Spins',
-          description: 'Get 5 additional spins to use',
-          icon: '🎟️',
-          base_probability: 20,
-          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
-          min_referrals: 0,
-          requires_activation: true,
-          value_cents: 500,
-          value_description: '5 extra spins',
-          credit_type: 'spins',
-          duration_days: 0,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 1,
-          color: '#FF6B6B',
-          created_by: 'system'
-        },
-        {
           type: 'BONUS_CREDIT',
           name: 'Bonus Credit',
-          display_name: 'KES 100 Bonus',
-          description: 'Get KES 100 credited to your account',
-          icon: '💰',
+          display_name: 'KES 50-200 Bonus',
+          description: 'Get bonus credit to your wallet',
           base_probability: 15,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
           value_cents: 10000,
-          value_description: 'KES 100',
+          value_description: 'KES 100 bonus',
           credit_type: 'balance',
           duration_days: 0,
           is_active: true,
           is_featured: true,
-          wheel_order: 2,
+          wheel_order: 1,
           color: '#4ECDC4',
           created_by: 'system'
         },
         {
-          type: 'REFERRAL_BOOST',
-          name: '20% Referral Boost',
-          display_name: '20% Referral Boost',
-          description: 'Get 20% more on next 5 referral rewards',
-          icon: '🧭',
-          base_probability: 10,
-          accessible_tiers: ['bronze', 'silver', 'gold', 'diamond'],
-          min_referrals: 3,
-          requires_activation: true,
-          value_cents: 0,
-          value_description: '20% boost for 5 referrals',
-          credit_type: 'boost',
-          duration_days: 7,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 3,
-          color: '#96CEB4',
-          created_by: 'system'
-        },
-        {
-          type: 'TRAINING_COURSE',
-          name: 'Free Training Course',
-          display_name: 'Free Training',
-          description: 'Access to premium training course',
-          icon: '🧠',
-          base_probability: 10,
+          type: 'EXTRA_SPIN',
+          name: 'Extra Spin',
+          display_name: '1 Free Spin',
+          description: 'Get one free spin to try again',
+          base_probability: 12,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
-          value_cents: 50000,
-          value_description: 'Premium training access',
-          credit_type: 'voucher',
-          duration_days: 30,
+          value_cents: 3000,
+          value_description: '1 free spin (KES 30 value)',
+          credit_type: 'spin',
+          duration_days: 0,
           is_active: true,
-          is_featured: false,
-          wheel_order: 4,
-          color: '#FFEAA7',
+          is_featured: true,
+          wheel_order: 2,
+          color: '#FF6B6B',
           created_by: 'system'
         },
         {
           type: 'AIRTIME',
-          name: 'Free Airtime',
+          name: 'Airtime',
           display_name: 'KES 50 Airtime',
           description: 'Get KES 50 airtime credit',
-          icon: '📱',
           base_probability: 10,
-          accessible_tiers: ['silver', 'gold', 'diamond'],
-          min_referrals: 5,
+          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
+          min_referrals: 0,
           requires_activation: true,
           value_cents: 5000,
           value_description: 'KES 50 airtime',
           credit_type: 'airtime',
           duration_days: 0,
           is_active: true,
-          is_featured: true,
-          wheel_order: 5,
+          is_featured: false,
+          wheel_order: 3,
           color: '#45B7D1',
           created_by: 'system'
         },
         {
-          type: 'LEADERSHIP_TOKEN',
-          name: 'Leadership Token',
-          display_name: 'Leadership Token',
-          description: 'Exclusive leadership program access',
-          icon: '💼',
-          base_probability: 5,
-          accessible_tiers: ['gold', 'diamond'],
-          min_referrals: 50,
-          requires_activation: true,
-          value_cents: 100000,
-          value_description: 'Leadership access',
-          credit_type: 'badge',
-          duration_days: 0,
-          is_active: true,
-          is_featured: true,
-          wheel_order: 6,
-          color: '#DDA0DD',
-          created_by: 'system'
-        },
-        {
-          type: 'SURVEY_PRIORITY',
+          type: 'SURVEY_BOOST',
           name: 'Survey Priority',
-          display_name: 'Survey Priority',
-          description: 'Get priority access to high-paying surveys',
-          icon: '🧾',
-          base_probability: 5,
-          accessible_tiers: ['silver', 'gold', 'diamond'],
-          min_referrals: 15,
-          requires_activation: true,
-          value_cents: 0,
-          value_description: 'Priority survey access',
-          credit_type: 'feature',
-          duration_days: 30,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 7,
-          color: '#98D8C8',
-          created_by: 'system'
-        },
-        {
-          type: 'MYSTERY_BOX',
-          name: 'Mystery Box',
-          display_name: 'Mystery Box',
-          description: 'Random surprise gift worth up to KES 50',
-          icon: '🎲',
+          display_name: '5 Priority Surveys',
+          description: 'Get priority access to 5 high-paying surveys',
           base_probability: 10,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
-          value_cents: 2500,
-          value_description: 'Random gift',
+          value_cents: 0,
+          value_description: '5 priority survey slots',
+          credit_type: 'feature',
+          duration_days: 30,
+          is_active: true,
+          is_featured: false,
+          wheel_order: 4,
+          color: '#98D8C8',
+          created_by: 'system'
+        },
+        {
+          type: 'REFERRAL_BONUS',
+          name: 'Referral Bonus',
+          display_name: 'KES 100 Referral Bonus',
+          description: 'Get extra bonus from next referral',
+          base_probability: 10,
+          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
+          min_referrals: 0,
+          requires_activation: true,
+          value_cents: 10000,
+          value_description: 'KES 100 referral bonus',
           credit_type: 'balance',
           duration_days: 0,
           is_active: true,
           is_featured: false,
-          wheel_order: 8,
+          wheel_order: 5,
+          color: '#96CEB4',
+          created_by: 'system'
+        },
+        {
+          type: 'MYSTERY_REWARD',
+          name: 'Mystery Reward',
+          display_name: 'Mystery Reward',
+          description: 'Win a random surprise reward',
+          base_probability: 8,
+          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
+          min_referrals: 0,
+          requires_activation: true,
+          value_cents: 5000,
+          value_description: 'Random surprise (KES 25-100)',
+          credit_type: 'balance',
+          duration_days: 0,
+          is_active: true,
+          is_featured: false,
+          wheel_order: 6,
           color: '#F7DC6F',
+          created_by: 'system'
+        },
+        {
+          type: 'COURSE_ACCESS',
+          name: 'Free Course',
+          display_name: 'Free Training Course',
+          description: 'Access to premium training',
+          base_probability: 8,
+          accessible_tiers: ['bronze', 'silver', 'gold', 'diamond'],
+          min_referrals: 1,
+          requires_activation: true,
+          value_cents: 0,
+          value_description: 'Premium training access (30 days)',
+          credit_type: 'voucher',
+          duration_days: 30,
+          is_active: true,
+          is_featured: false,
+          wheel_order: 7,
+          color: '#FFEAA7',
           created_by: 'system'
         },
         {
           type: 'COMMISSION_BOOST',
           name: 'Commission Boost',
-          display_name: '15% Commission Boost',
-          description: 'Get 15% commission boost for 7 days',
-          icon: '💎',
-          base_probability: 3,
-          accessible_tiers: ['gold', 'diamond'],
-          min_referrals: 50,
+          display_name: '10% Commission Boost',
+          description: 'Get 10% boost on your next 5 referrals',
+          base_probability: 7,
+          accessible_tiers: ['silver', 'gold', 'diamond'],
+          min_referrals: 3,
           requires_activation: true,
           value_cents: 0,
-          value_description: '15% boost for 7 days',
+          value_description: '10% boost for 7 days',
           credit_type: 'boost',
           duration_days: 7,
           is_active: true,
-          is_featured: true,
-          wheel_order: 9,
+          is_featured: false,
+          wheel_order: 8,
           color: '#BB8FCE',
           created_by: 'system'
         },
         {
-          type: 'TOP_AFFILIATE_BADGE',
-          name: 'Top Affiliate Badge',
-          display_name: 'Top Affiliate Badge',
-          description: 'Exclusive recognition for top performers',
-          icon: '👑',
-          base_probability: 2,
-          accessible_tiers: ['diamond'],
-          min_referrals: 100,
+          type: 'BADGE_UNLOCK',
+          name: 'Achievement Badge',
+          display_name: 'Unlock Achievement Badge',
+          description: 'Unlock exclusive badge on your profile',
+          base_probability: 5,
+          accessible_tiers: ['gold', 'diamond'],
+          min_referrals: 5,
           requires_activation: true,
           value_cents: 0,
-          value_description: 'Elite status',
+          value_description: 'Exclusive achievement badge',
           credit_type: 'badge',
           duration_days: 0,
           is_active: true,
-          is_featured: true,
-          wheel_order: 10,
+          is_featured: false,
+          wheel_order: 9,
           color: '#E8DAEF',
           created_by: 'system'
         },
         {
-          type: 'TRY_AGAIN',
+          type: 'ZERO',
           name: 'Try Again',
           display_name: 'Try Again',
-          description: 'Better luck next time!',
-          icon: '❌',
-          base_probability: 10,
+          description: 'Better luck next time! Spin wheel always lands here.',
+          base_probability: 15,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
           value_cents: 0,
           value_description: 'No prize',
-          credit_type: 'balance',
+          credit_type: 'none',
           duration_days: 0,
           is_active: true,
           is_featured: false,
-          wheel_order: 11,
+          wheel_order: 10,
           color: '#CCCCCC',
-          created_by: 'system'
-        },
-        {
-          type: 'AD_SLOT',
-          name: 'Ad Slot',
-          display_name: 'Watch Ad & Earn',
-          description: 'Watch a short ad and earn KES 10',
-          icon: '📺',
-          base_probability: 5,
-          accessible_tiers: ['silver', 'gold', 'diamond'],
-          min_referrals: 50,
-          requires_activation: true,
-          value_cents: 1000,
-          value_description: 'KES 10 for watching ad',
-          credit_type: 'balance',
-          duration_days: 0,
-          is_active: true,
-          is_featured: false,
-          is_ad_slot: true,
-          wheel_order: 12,
-          color: '#FFD93D',
           created_by: 'system'
         }
       ]
@@ -683,7 +633,7 @@ export async function checkSpinActivation(): Promise<{ active: boolean; message:
  */
 export async function performSpin(): Promise<SpinResponse> {
   try {
-    console.log("🎯 Starting performSpin...")
+    console.log("[v0] Starting performSpin...")
 
     const session = await auth()
     if (!isValidSession(session)) {
@@ -691,7 +641,7 @@ export async function performSpin(): Promise<SpinResponse> {
     }
 
     await connectToDatabase()
-    await ensureSpinPrizes() // ADDED: Ensure prizes exist
+    await ensureSpinPrizes()
     
     const user = (await (Profile as any).findById(session.user.id).lean()) as UserProfileLean | null
     if (!user) {
@@ -699,69 +649,68 @@ export async function performSpin(): Promise<SpinResponse> {
     }
 
     const userId = user._id.toString()
-    // FIXED: Use spin_tier if available, otherwise fall back to rank
     const userTier = normalizeRank(user.spin_tier || user.rank)
 
-    console.log("👤 User found:", {
+    console.log("[v0] User found:", {
       userId,
       email: user.email,
-      originalRank: user.rank,
-      spin_tier: user.spin_tier,
-      normalizedTier: userTier,
-      level: user.level,
-      availableSpins: user.available_spins,
-      totalSpinsUsed: user.total_spins_used,
-      totalPrizesWon: user.total_prizes_won,
+      tier: userTier,
     })
 
-    const eligibilityCheck = await checkSpinEligibility(userId)
-    if (!eligibilityCheck.eligible) {
-      return { success: false, message: eligibilityCheck.message }
+    // NEW: Check spin wallet balance (KES 30 = 3000 cents)
+    let spinWallet = await (SpinWallet as any).findOne({ user_id: userId })
+    if (!spinWallet) {
+      spinWallet = await (SpinWallet as any).create({
+        user_id: userId,
+        balance_cents: 0,
+        total_deposited_cents: 0,
+        total_used_cents: 0,
+        total_spins: 0,
+      })
     }
 
-    const spinActive = await checkSpinActivation()
-    if (!spinActive.active) {
-      return { success: false, message: spinActive.message }
-    }
-
-    const tasksCompleted = await checkRealTimeTaskCompletion(userId)
-    if (!tasksCompleted.allCompleted) {
-      return { success: false, message: "Complete your weekly tasks to spin" }
+    const SPIN_COST_CENTS = 3000; // KES 30
+    if (spinWallet.balance_cents < SPIN_COST_CENTS) {
+      return {
+        success: false,
+        message: `Insufficient spin wallet balance. You need KES 30 but have KES ${(spinWallet.balance_cents / 100).toFixed(2)}. Please deposit via M-Pesa.`,
+      }
     }
 
     const availablePrizes = await getAvailablePrizesForUser(userId)
     if (availablePrizes.length === 0) {
-      return { success: false, message: "No prizes available for your tier" }
+      return { success: false, message: "No prizes available" }
     }
 
     const selectedPrize = await selectPrizeWithProbability(availablePrizes, userTier)
-    const spinDeduction = await deductSpinCost(userId)
 
-    if (!spinDeduction.success) {
-      return { success: false, message: spinDeduction.message }
-    }
+    // Deduct from spin wallet
+    spinWallet.balance_cents -= SPIN_COST_CENTS
+    spinWallet.total_used_cents += SPIN_COST_CENTS
+    spinWallet.total_spins += 1
+    await spinWallet.save()
 
-    const won = selectedPrize.type !== "TRY_AGAIN"
+    const won = selectedPrize.type !== "ZERO"
 
-    await processPrize(userId, selectedPrize, userTier, won)
-
+    // Log spin
     await logSpin({
       userId,
       prize: selectedPrize,
       userRank: userTier,
       userLevel: user.level || 1,
-      referralCount: eligibilityCheck.referralCount,
-      spinCost: spinDeduction.cost,
+      referralCount: 0,
+      spinCost: SPIN_COST_CENTS,
       won: won,
     })
 
-    await updateUserSpinEligibility(userId, won)
-
-    await updateSpinAnalytics(selectedPrize, spinDeduction.cost)
+    // Process prize if won
+    if (won && selectedPrize.value_cents > 0) {
+      await processPrize(userId, selectedPrize, userTier, won)
+    }
 
     revalidatePath("/dashboard")
 
-    console.log("✅ Spin completed successfully")
+    console.log("[v0] Spin completed successfully")
     return {
       success: true,
       prizeType: selectedPrize.type,
@@ -769,12 +718,12 @@ export async function performSpin(): Promise<SpinResponse> {
       prizeValue: selectedPrize.value_cents || 0,
       prizeDescription: selectedPrize.value_description,
       message:
-        selectedPrize.type === "TRY_AGAIN"
-          ? "Better luck next time! Try again."
+        selectedPrize.type === "ZERO"
+          ? "Try again! Better luck next time."
           : `Congratulations! You won: ${selectedPrize.display_name}`,
     }
   } catch (error) {
-    console.error("Spin error:", error)
+    console.error("[v0] Spin error:", error)
     return {
       success: false,
       message: "An error occurred while processing your spin. Please try again.",
