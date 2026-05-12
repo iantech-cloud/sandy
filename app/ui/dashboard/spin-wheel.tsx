@@ -1,512 +1,624 @@
-import { useState, useEffect } from 'react';
-import { Award, Gift, Loader2, TrendingUp, CheckCircle2, XCircle, Clock, Zap } from 'lucide-react';
+'use client'
 
-// Prize configuration - 10 rewards total
-const PRIZE_CONFIG = [
-  { type: 'BONUS_CREDIT', color: '#4ECDC4', icon: '💰', segment: 1, label: 'Bonus Credit' },
-  { type: 'EXTRA_SPIN', color: '#FF6B6B', icon: '🎟️', segment: 2, label: 'Free Spin' },
-  { type: 'AIRTIME', color: '#45B7D1', icon: '📱', segment: 3, label: 'Airtime' },
-  { type: 'SURVEY_BOOST', color: '#98D8C8', icon: '🧾', segment: 4, label: 'Survey Boost' },
-  { type: 'REFERRAL_BONUS', color: '#96CEB4', icon: '🧭', segment: 5, label: 'Referral Bonus' },
-  { type: 'MYSTERY_REWARD', color: '#F7DC6F', icon: '🎲', segment: 6, label: 'Mystery Reward' },
-  { type: 'COURSE_ACCESS', color: '#FFEAA7', icon: '🧠', segment: 7, label: 'Free Course' },
-  { type: 'COMMISSION_BOOST', color: '#BB8FCE', icon: '💎', segment: 8, label: 'Commission Boost' },
-  { type: 'BADGE_UNLOCK', color: '#E8DAEF', icon: '👑', segment: 9, label: 'Badge' },
-  { type: 'ZERO', color: '#CCCCCC', icon: '⭕', segment: 10, label: 'Try Again' }
-];
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Zap, Plus, RotateCcw, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 
-interface SpinWheelProps {
-  userId: string;
-  onSpinComplete?: (result: any) => void;
+// ─── Prize configuration ───────────────────────────────────────────────────
+const PRIZES = [
+  { type: 'BONUS_CREDIT',    icon: '💰', label: 'Bonus Credit',     prob: 15, color: '#2DD4BF' },
+  { type: 'EXTRA_SPIN',      icon: '🎟️', label: 'Free Spin',        prob: 12, color: '#F87171' },
+  { type: 'AIRTIME',         icon: '📱', label: 'Airtime',           prob: 18, color: '#38BDF8' },
+  { type: 'SURVEY_BOOST',    icon: '🧾', label: 'Survey Boost',     prob: 10, color: '#34D399' },
+  { type: 'REFERRAL_BONUS',  icon: '🧭', label: 'Referral Bonus',   prob:  8, color: '#A78BFA' },
+  { type: 'MYSTERY_REWARD',  icon: '🎲', label: 'Mystery Reward',   prob:  7, color: '#FBBF24' },
+  { type: 'COURSE_ACCESS',   icon: '🧠', label: 'Free Course',      prob: 10, color: '#60A5FA' },
+  { type: 'COMMISSION_BOOST',icon: '💎', label: 'Commission Boost', prob:  8, color: '#C084FC' },
+  { type: 'BADGE_UNLOCK',    icon: '👑', label: 'Badge Unlock',     prob:  7, color: '#FB923C' },
+  { type: 'ZERO',            icon: '⭕', label: 'Try Again',         prob:  5, color: '#6B7280' },
+] as const
+
+type PrizeType = typeof PRIZES[number]['type']
+
+const SPIN_COST_CENTS = 3000
+const SEGMENT_ANGLE   = 360 / PRIZES.length
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+function fmtKes(cents: number) {
+  return `KES ${(cents / 100).toFixed(2)}`
 }
 
-export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
-  const [spinning, setSpinning] = useState(false);
-  const [rotation, setRotation] = useState(0);
-  const [result, setResult] = useState<any>(null);
-  const [prizes, setPrizes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [spinStatus, setSpinStatus] = useState<any>(null);
-  const [spinWallet, setSpinWallet] = useState<any>(null);
-  const [error, setError] = useState('');
-  const [showDepositModal, setShowDepositModal] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [depositLoading, setDepositLoading] = useState(false);
+function prizeByType(type: string) {
+  return PRIZES.find(p => p.type === type) ?? PRIZES[PRIZES.length - 1]
+}
 
-  // Fetch initial data
-  useEffect(() => {
-    loadSpinData();
-  }, []);
+// Extract checkoutRequestId from deposit response — handles all casing variants.
+// Confirmed from server logs: your mpesa.ts returns `checkoutRequestID` (capital I, lowercase d)
+function extractCheckoutId(data: any): string | undefined {
+  return (
+    data?.checkoutRequestID ||  // confirmed: your mpesa.ts wrapper
+    data?.checkoutRequestId ||  // camelCase fallback
+    data?.CheckoutRequestID ||  // PascalCase fallback
+    undefined
+  )
+}
 
-  const loadSpinData = async () => {
-    setLoading(true);
-    try {
-      // Fetch available prizes
-      const prizesRes = await fetch('/api/spin/prizes');
-      const prizesData = await prizesRes.json();
-      
-      if (prizesData.success) {
-        setPrizes(prizesData.data);
-      }
+// ─── Types ─────────────────────────────────────────────────────────────────
+interface SpinWalletData {
+  balance_cents:   number
+  balance_kes:     string
+  total_deposited: number
+  total_used:      number
+  total_spins:     number
+}
 
-      // Check spin activation status
-      const statusRes = await fetch('/api/spin/status');
-      const statusData = await statusRes.json();
-      setSpinStatus(statusData);
+interface SpinResult {
+  success:          boolean
+  prizeType:        PrizeType
+  prizeName:        string
+  prizeDescription: string
+  prizeValue:       number
+  message?:         string
+}
 
-      // Fetch spin wallet balance
-      const walletRes = await fetch('/api/spin-wallet/balance');
-      const walletData = await walletRes.json();
-      if (walletData.success) {
-        setSpinWallet(walletData);
-      }
+interface DepositState {
+  phase:   'idle' | 'sending' | 'polling' | 'success' | 'failed'
+  message: string
+}
 
-    } catch (err) {
-      console.error('[v0] Error loading spin data:', err);
-      setError('Failed to load spin data');
-    } finally {
-      setLoading(false);
-    }
-  };
+interface SpinWheelProps {
+  userId:          string
+  onSpinComplete?: (result: SpinResult) => void
+}
 
-  const handleSpinClick = () => {
-    // Check if user has sufficient balance
-    if (!spinWallet || spinWallet.balance_cents < (SPIN_COST_KES * 100)) {
-      setShowDepositModal(true);
-      return;
-    }
-    
-    performSpin();
-  };
-
-  const performSpin = async () => {
-    if (spinning) return;
-
-    setSpinning(true);
-    setError('');
-    setResult(null);
-
-    try {
-      const response = await fetch('/api/spin/perform', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-
-      const data = await response.json();
-
-      if (!data.success) {
-        setError(data.message);
-        setSpinning(false);
-        return;
-      }
-
-      // Calculate rotation based on prize
-      const prizeIndex = PRIZE_CONFIG.findIndex(p => p.type === data.prizeType);
-      const segmentAngle = 360 / PRIZE_CONFIG.length;
-      const targetRotation = 360 * 5 + (prizeIndex * segmentAngle);
-      
-      setRotation(targetRotation);
-
-      // Wait for animation and data refresh
-      setTimeout(async () => {
-        setResult(data);
-        setSpinning(false);
-        await loadSpinData();
-        
-        if (onSpinComplete) {
-          onSpinComplete(data);
-        }
-      }, 2000);
-
-    } catch (err) {
-      console.error('[v0] Spin error:', err);
-      setError('An error occurred while spinning');
-      setSpinning(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 text-white animate-spin mx-auto mb-4" />
-          <p className="text-white text-lg">Loading Spin Wheel...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const SPIN_COST_KES = 30;
-  const canSpin = spinStatus?.active && 
-                  spinWallet && 
-                  spinWallet.balance_cents >= (SPIN_COST_KES * 100);
-
-  // Helper function to create proper wheel segments
-  const createWheelSegment = (index: number, total: number) => {
-    const anglePerSegment = 360 / total;
-    const startAngle = index * anglePerSegment;
-    const endAngle = (index + 1) * anglePerSegment;
-    
-    // Convert to radians for calculation
-    const startRad = (startAngle - 90) * Math.PI / 180;
-    const endRad = (endAngle - 90) * Math.PI / 180;
-    
-    // Calculate points for the segment (as percentage from center)
-    const x1 = 50 + 50 * Math.cos(startRad);
-    const y1 = 50 + 50 * Math.sin(startRad);
-    const x2 = 50 + 50 * Math.cos(endRad);
-    const y2 = 50 + 50 * Math.sin(endRad);
-    
-    return {
-      clipPath: `polygon(50% 50%, ${x1}% ${y1}%, ${x2}% ${y2}%)`,
-      rotation: startAngle + anglePerSegment / 2
-    };
-  };
+// ─── SVG Wheel ─────────────────────────────────────────────────────────────
+function WheelSVG({ rotation, spinning }: { rotation: number; spinning: boolean }) {
+  const N  = PRIZES.length
+  const R  = 148
+  const cx = 150
+  const cy = 150
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
+    <svg
+      viewBox="0 0 300 300"
+      className="w-full h-full rounded-full"
+      style={{
+        transform:  `rotate(${rotation}deg)`,
+        transition: spinning ? 'transform 3.2s cubic-bezier(0.17, 0.67, 0.12, 0.99)' : 'none',
+      }}
+    >
+      {PRIZES.map((prize, i) => {
+        const a0  = ((i     / N) * 2 * Math.PI) - Math.PI / 2
+        const a1  = (((i+1) / N) * 2 * Math.PI) - Math.PI / 2
+        const am  = (a0 + a1) / 2
+        const x0  = cx + R * Math.cos(a0)
+        const y0  = cy + R * Math.sin(a0)
+        const x1  = cx + R * Math.cos(a1)
+        const y1  = cy + R * Math.sin(a1)
+        const lf  = (1 / N) > 0.5 ? 1 : 0
+        const tr  = R * 0.60
+        const ti  = R * 0.82
+        const deg = ((i + 0.5) / N) * 360 + 90
+        const tx  = cx + tr * Math.cos(am)
+        const ty  = cy + tr * Math.sin(am)
+        const ix  = cx + ti * Math.cos(am)
+        const iy  = cy + ti * Math.sin(am)
+
+        return (
+          <g key={prize.type}>
+            <path
+              d={`M${cx},${cy} L${x0},${y0} A${R},${R} 0 ${lf} 1 ${x1},${y1} Z`}
+              fill={prize.color}
+              stroke="white"
+              strokeWidth="1.5"
+            />
+            <text
+              x={tx} y={ty}
+              textAnchor="middle" dominantBaseline="middle"
+              fontSize="8" fontWeight="600" fill="white"
+              transform={`rotate(${deg},${tx},${ty})`}
+              style={{ userSelect: 'none' }}
+            >
+              {prize.label.length > 13 ? prize.label.slice(0, 11) + '…' : prize.label}
+            </text>
+            <text
+              x={ix} y={iy}
+              textAnchor="middle" dominantBaseline="middle"
+              fontSize="14"
+              transform={`rotate(${deg},${ix},${iy})`}
+              style={{ userSelect: 'none' }}
+            >
+              {prize.icon}
+            </text>
+          </g>
+        )
+      })}
+
+      <circle cx={cx} cy={cy} r={R}  fill="none" stroke="white" strokeWidth="2" opacity="0.3" />
+      <circle cx={cx} cy={cy} r="26" fill="white" />
+      <circle cx={cx} cy={cy} r="22" fill="#111827" />
+      <text
+        x={cx} y={cy + 1}
+        textAnchor="middle" dominantBaseline="middle"
+        fontSize="8" fontWeight="700" fill="white" letterSpacing="1"
+        style={{ userSelect: 'none' }}
+      >
+        SPIN
+      </text>
+    </svg>
+  )
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
+export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
+  const [wallet,      setWallet]      = useState<SpinWalletData | null>(null)
+  const [wheelActive, setWheelActive] = useState(false)
+  const [loading,     setLoading]     = useState(true)
+  const [spinning,    setSpinning]    = useState(false)
+  const [rotation,    setRotation]    = useState(0)
+  const rotationRef                   = useRef(0)
+  const [result,      setResult]      = useState<SpinResult | null>(null)
+  const [spinError,   setSpinError]   = useState('')
+  const [showDeposit, setShowDeposit] = useState(false)
+  const [phone,       setPhone]       = useState('')
+  const [deposit,     setDeposit]     = useState<DepositState>({ phase: 'idle', message: '' })
+
+  // ── Load all data in parallel ────────────────────────────────────────────
+  const loadAll = useCallback(async () => {
+    try {
+      const [statusRes, walletRes] = await Promise.all([
+        fetch('/api/spin/status'),
+        fetch('/api/spin-wallet/balance'),
+      ])
+      const [statusData, walletData] = await Promise.all([
+        statusRes.json(),
+        walletRes.json(),
+      ])
+      setWheelActive(statusData?.active ?? false)
+      if (walletData.success) setWallet(walletData)
+    } catch (err) {
+      console.error('[SpinWheel] loadAll error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadAll() }, [loadAll])
+
+  // ── Spin ─────────────────────────────────────────────────────────────────
+  const handleSpin = async () => {
+    if (spinning || !wallet) return
+    if (wallet.balance_cents < SPIN_COST_CENTS) { setShowDeposit(true); return }
+
+    setSpinning(true)
+    setSpinError('')
+    setResult(null)
+
+    // Optimistic deduction — rolled back on error
+    setWallet(w => w ? { ...w, balance_cents: w.balance_cents - SPIN_COST_CENTS } : w)
+
+    try {
+      const res  = await fetch('/api/spin/perform', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ userId }),
+      })
+      const data: SpinResult = await res.json()
+
+      if (!data.success) {
+        setWallet(w => w ? { ...w, balance_cents: w.balance_cents + SPIN_COST_CENTS } : w)
+        setSpinError(data.message ?? 'Spin failed. Please try again.')
+        setSpinning(false)
+        return
+      }
+
+      // Rotate wheel to winning segment
+      const prizeIdx    = PRIZES.findIndex(p => p.type === data.prizeType)
+      const idx         = prizeIdx === -1 ? 0 : prizeIdx
+      const midAngle    = (idx + 0.5) * SEGMENT_ANGLE
+      const currentMod  = rotationRef.current % 360
+      const delta       = (360 - currentMod - midAngle + 720) % 360
+      const newRotation = rotationRef.current + 5 * 360 + delta
+
+      rotationRef.current = newRotation
+      setRotation(newRotation)
+
+      await sleep(3400)
+
+      setResult(data)
+      setSpinning(false)
+      onSpinComplete?.(data)
+
+      // Sync true balance from server
+      const walletRes  = await fetch('/api/spin-wallet/balance')
+      const walletData = await walletRes.json()
+      if (walletData.success) setWallet(walletData)
+
+    } catch (err) {
+      console.error('[SpinWheel] spin error:', err)
+      setWallet(w => w ? { ...w, balance_cents: w.balance_cents + SPIN_COST_CENTS } : w)
+      setSpinError('Network error. Please try again.')
+      setSpinning(false)
+    }
+  }
+
+  // ── Deposit + poll with exponential backoff ───────────────────────────────
+  const handleDeposit = async () => {
+    const clean = phone.replace(/\D/g, '')
+    if (clean.length < 9) {
+      setDeposit({ phase: 'failed', message: 'Enter a valid phone number (at least 9 digits).' })
+      return
+    }
+
+    setDeposit({ phase: 'sending', message: 'Sending M-Pesa prompt…' })
+
+    try {
+      const res  = await fetch('/api/spin-wallet/deposit', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ phoneNumber: phone, amount_cents: SPIN_COST_CENTS }),
+      })
+      const data = await res.json()
+
+      if (!data.success) {
+        setDeposit({ phase: 'failed', message: data.message ?? 'Failed to send M-Pesa prompt.' })
+        return
+      }
+
+      const checkoutId = extractCheckoutId(data)
+
+      if (!checkoutId) {
+        console.error('[SpinWheel] No checkoutId in deposit response:', data)
+        setDeposit({
+          phase:   'failed',
+          message: 'Payment sent but tracking ID missing. Check your M-Pesa — if charged, contact support.',
+        })
+        return
+      }
+
+      setDeposit({ phase: 'polling', message: 'Check your phone and enter your M-Pesa PIN…' })
+
+      // Poll /api/spin-wallet/check_status with exponential backoff
+      // Route is at check_status/ (not status/) — confirmed from your file structure
+      const backoff = [3000, 4000, 5000, 6000, 8000, 10000]
+      for (const delay of backoff) {
+        await sleep(delay)
+        try {
+          const statusRes  = await fetch(
+            `/api/spin-wallet/check_status?checkoutRequestId=${encodeURIComponent(checkoutId)}`
+          )
+          const statusData = await statusRes.json()
+
+          console.log('[SpinWheel] Poll result:', statusData)
+
+          if (statusData.status === 'completed') {
+            setDeposit({ phase: 'success', message: 'KES 30 added to your spin wallet!' })
+            await loadAll()
+            return
+          }
+
+          if (statusData.status === 'failed') {
+            setDeposit({ phase: 'failed', message: 'Payment was cancelled or failed. Please try again.' })
+            return
+          }
+
+          // status === 'pending' → keep polling
+
+        } catch (pollErr) {
+          console.error('[SpinWheel] Poll error (non-fatal, continuing):', pollErr)
+        }
+      }
+
+      // All retries exhausted without confirmation
+      setDeposit({
+        phase:   'failed',
+        message: 'Payment timed out. If you were charged, contact support.',
+      })
+
+    } catch (err) {
+      console.error('[SpinWheel] deposit error:', err)
+      setDeposit({ phase: 'failed', message: 'Network error. Please try again.' })
+    }
+  }
+
+  const closeDeposit = () => {
+    setShowDeposit(false)
+    setPhone('')
+    setDeposit({ phase: 'idle', message: '' })
+  }
+
+  // ── Derived state ────────────────────────────────────────────────────────
+  const balanceCents = wallet?.balance_cents ?? 0
+  const spinsLeft    = Math.floor(balanceCents / SPIN_COST_CENTS)
+  const canSpin      = wheelActive && balanceCents >= SPIN_COST_CENTS && !spinning
+  const depositBusy  = deposit.phase === 'sending' || deposit.phase === 'polling'
+
+  // ── Loading ──────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3 text-gray-400">
+          <Loader2 className="w-8 h-8 animate-spin" />
+          <span className="text-sm">Loading spin wheel…</span>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-gray-950 text-white px-4 py-8 font-sans">
+      <div className="max-w-2xl mx-auto space-y-6">
+
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-2 flex items-center justify-center gap-3">
-            <Award className="w-12 h-12 text-yellow-400" />
-            Spin to Win
-          </h1>
-          <p className="text-blue-200 text-lg">
-            {spinStatus?.active ? 'Wheel is Active!' : 'Wheel is Currently Inactive'}
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
-          {/* Spin Wallet Card */}
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-            <div className="flex items-center gap-3 mb-4">
-              <Zap className="w-6 h-6 text-yellow-300" />
-              <h3 className="text-lg font-semibold text-white">Spin Wallet</h3>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Balance:</span>
-                <span className="text-2xl font-bold text-yellow-400">KES {spinWallet?.balance_kes || '0.00'}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Cost per Spin:</span>
-                <span className="text-white font-semibold">KES 30</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-blue-200">Total Spins:</span>
-                <span className="text-white font-semibold">{spinWallet?.total_spins || 0}</span>
-              </div>
-              {spinWallet && spinWallet.balance_cents < (SPIN_COST_KES * 100) && (
-                <p className="text-sm text-orange-300 mt-3 font-semibold">
-                  Insufficient balance. Deposit via M-Pesa to spin.
-                </p>
-              )}
-            </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Spin to Win</h1>
+            <p className="text-sm text-gray-400 mt-0.5">
+              {wheelActive ? 'Wheel is active' : 'Wheel is currently inactive'}
+            </p>
           </div>
-
-          {/* How to Spin Card */}
-          <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-            <div className="flex items-center gap-3 mb-4">
-              <TrendingUp className="w-6 h-6 text-green-300" />
-              <h3 className="text-lg font-semibold text-white">How to Spin</h3>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-start gap-2">
-                <span className="text-yellow-400 font-bold flex-shrink-0">1.</span>
-                <span className="text-blue-200">Deposit KES 30 via M-Pesa to your spin wallet</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-yellow-400 font-bold flex-shrink-0">2.</span>
-                <span className="text-blue-200">Click the spin button on the wheel</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-yellow-400 font-bold flex-shrink-0">3.</span>
-                <span className="text-blue-200">Win amazing rewards every time!</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Deposit Card */}
-          <div className="bg-gradient-to-br from-orange-500/20 to-red-500/20 backdrop-blur-md rounded-xl p-6 border border-orange-400/30">
-            <div className="flex items-center gap-3 mb-4">
-              <Gift className="w-6 h-6 text-orange-300" />
-              <h3 className="text-lg font-semibold text-white">Quick Deposit</h3>
-            </div>
-            <div className="space-y-3">
-              <p className="text-sm text-blue-200 mb-3">
-                Deposit KES 30 to spin and win amazing rewards!
-              </p>
-              <button
-                onClick={() => setShowDepositModal(true)}
-                className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold py-2 px-4 rounded-lg transition-all transform hover:scale-105"
-              >
-                Deposit Now
-              </button>
-              <p className="text-xs text-gray-300">
-                Balance: KES {spinWallet?.balance_kes || '0.00'}
-              </p>
-            </div>
+          <div className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-xl px-4 py-2">
+            <Zap className="w-4 h-4 text-yellow-400" />
+            <span className="text-sm font-semibold text-yellow-400">{fmtKes(balanceCents)}</span>
           </div>
         </div>
 
-        {/* Spin Wheel Container */}
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 mb-8">
-          <div className="relative w-full max-w-lg mx-auto">
+        {/* Wallet summary */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Balance',     value: fmtKes(balanceCents) },
+            { label: 'Spins left',  value: spinsLeft.toString() },
+            { label: 'Total spins', value: (wallet?.total_spins ?? 0).toString() },
+          ].map(({ label, value }) => (
+            <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+              <div className="text-xs text-gray-500 mb-1">{label}</div>
+              <div className="text-lg font-bold">{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Wheel */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col items-center gap-5">
+          <div className="relative w-72 h-72 md:w-80 md:h-80">
             {/* Pointer */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
-              <div className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-t-[40px] border-t-red-500 drop-shadow-lg" />
-            </div>
-
-            {/* Wheel */}
-            <div 
-              className="relative w-full aspect-square rounded-full shadow-2xl border-8 border-yellow-400"
-              style={{
-                transform: `rotate(${rotation}deg)`,
-                transition: spinning ? 'transform 2s cubic-bezier(0.17, 0.67, 0.12, 0.99)' : 'none'
-              }}
+            <div
+              className="absolute left-1/2 -top-3 -translate-x-1/2 z-10"
+              style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))' }}
             >
-              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
-                {prizes.map((prize, index) => {
-                  const anglePerSegment = 360 / prizes.length;
-                  const startAngle = index * anglePerSegment - 90;
-                  const endAngle = (index + 1) * anglePerSegment - 90;
-                  
-                  const startRad = startAngle * Math.PI / 180;
-                  const endRad = endAngle * Math.PI / 180;
-                  
-                  const x1 = 50 + 48 * Math.cos(startRad);
-                  const y1 = 50 + 48 * Math.sin(startRad);
-                  const x2 = 50 + 48 * Math.cos(endRad);
-                  const y2 = 50 + 48 * Math.sin(endRad);
-                  
-                  const config = PRIZE_CONFIG.find(p => p.type === prize.type);
-                  const midAngle = (startAngle + endAngle) / 2;
-                  const textX = 50 + 30 * Math.cos(midAngle * Math.PI / 180);
-                  const textY = 50 + 30 * Math.sin(midAngle * Math.PI / 180);
-                  
-                  return (
-                    <g key={prize._id}>
-                      <path
-                        d={`M 50 50 L ${x1} ${y1} A 48 48 0 0 1 ${x2} ${y2} Z`}
-                        fill={config?.color || '#ccc'}
-                        stroke="white"
-                        strokeWidth="0.5"
-                      />
-                      <text
-                        x={textX}
-                        y={textY - 3}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        fontSize="8"
-                        fill="white"
-                        fontWeight="bold"
-                        transform={`rotate(${midAngle + 90}, ${textX}, ${textY})`}
-                      >
-                        {config?.icon}
-                      </text>
-                      <text
-                        x={textX}
-                        y={textY + 4}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        fontSize="2.5"
-                        fill="white"
-                        fontWeight="600"
-                        transform={`rotate(${midAngle + 90}, ${textX}, ${textY})`}
-                      >
-                        {prize.display_name.length > 15 
-                          ? prize.display_name.substring(0, 13) + '...'
-                          : prize.display_name}
-                      </text>
-                    </g>
-                  );
-                })}
+              <svg width="24" height="28" viewBox="0 0 24 28">
+                <polygon points="12,28 0,0 24,0" fill="white" />
               </svg>
-
-              {/* Center Circle */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-yellow-400 rounded-full flex items-center justify-center shadow-lg z-10 border-4 border-white">
-                <Zap className="w-10 h-10 text-purple-900" />
-              </div>
             </div>
+            <div className="absolute inset-0 rounded-full ring-4 ring-white/10" />
+            <WheelSVG rotation={rotation} spinning={spinning} />
+          </div>
 
-            {/* Spin Button */}
+          {/* Spin button */}
+          <button
+            onClick={handleSpin}
+            disabled={!canSpin}
+            className={`
+              flex items-center gap-2.5 px-8 py-3.5 rounded-full font-bold text-sm
+              transition-all duration-150
+              ${canSpin
+                ? 'bg-white text-gray-950 hover:bg-gray-100 active:scale-95 shadow-lg shadow-white/10'
+                : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+              }
+            `}
+          >
+            {spinning
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Spinning…</>
+              : <><RotateCcw className="w-4 h-4" /> Spin — KES 30</>
+            }
+          </button>
+
+          {/* Insufficient balance nudge */}
+          {!spinning && balanceCents < SPIN_COST_CENTS && (
+            <div className="text-center">
+              <p className="text-sm text-orange-400 mb-2">Insufficient balance to spin</p>
+              <button
+                onClick={() => setShowDeposit(true)}
+                className="flex items-center gap-1.5 text-sm text-white border border-gray-700 rounded-lg px-4 py-1.5 hover:bg-gray-800 transition-colors mx-auto"
+              >
+                <Plus className="w-3.5 h-3.5" /> Top up wallet
+              </button>
+            </div>
+          )}
+
+          {/* Spin error */}
+          {spinError && (
+            <div className="flex items-center gap-2 text-sm text-red-400 bg-red-950/50 border border-red-900 rounded-lg px-4 py-2 w-full max-w-sm justify-center">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {spinError}
+            </div>
+          )}
+        </div>
+
+        {/* Top-up shortcut */}
+        {balanceCents >= SPIN_COST_CENTS && (
+          <div className="flex justify-end">
             <button
-              onClick={handleSpinClick}
-              disabled={spinning}
-              className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-8 py-4 rounded-full font-bold text-lg shadow-2xl transition-all transform ${
-                !spinning
-                  ? 'bg-gradient-to-r from-yellow-400 to-orange-500 text-purple-900 hover:scale-110 hover:shadow-yellow-400/50'
-                  : 'bg-gray-500 text-gray-300 cursor-not-allowed'
-              }`}
+              onClick={() => setShowDeposit(true)}
+              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white border border-gray-800 hover:border-gray-600 rounded-lg px-4 py-2 transition-colors"
             >
-              {spinning ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Spinning...
-                </span>
-              ) : (
-                'SPIN NOW'
-              )}
+              <Plus className="w-3.5 h-3.5" /> Top up wallet
             </button>
           </div>
-        </div>
-
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-500/20 border border-red-500 rounded-lg p-4 mb-4 text-center">
-            <p className="text-red-200">{error}</p>
-          </div>
         )}
 
-        {/* Result Modal */}
-        {result && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl p-8 max-w-md w-full text-center shadow-2xl border-4 border-yellow-400 animate-pulse">
-              <div className="text-6xl mb-4">
-                {PRIZE_CONFIG.find(p => p.type === result.prizeType)?.icon || '🎁'}
-              </div>
-              <h2 className="text-3xl font-bold text-white mb-2">
-                {result.prizeType === 'TRY_AGAIN' ? 'Try Again!' : 'Congratulations!'}
-              </h2>
-              <p className="text-xl text-yellow-300 mb-4 font-semibold">
-                {result.prizeName}
-              </p>
-              {result.prizeValue > 0 && (
-                <p className="text-lg text-white/90 mb-6">
-                  Value: KES {(result.prizeValue / 100).toFixed(2)}
-                </p>
-              )}
-              <p className="text-white/80 mb-6">{result.prizeDescription}</p>
-              <button
-                onClick={() => setResult(null)}
-                className="bg-white text-purple-900 px-8 py-3 rounded-full font-bold hover:bg-yellow-400 transition-colors"
+        {/* Prize grid */}
+        <div>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+            Available prizes
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {PRIZES.filter(p => p.type !== 'ZERO').map(prize => (
+              <div
+                key={prize.type}
+                className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-3 flex items-center gap-3 hover:border-gray-700 transition-colors"
               >
-                Awesome!
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Prize Legend */}
-        <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-          <h3 className="text-xl font-bold text-white mb-4 text-center">Available Prizes</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {prizes.slice(0, 8).map((prize) => {
-              const config = PRIZE_CONFIG.find(p => p.type === prize.type);
-              return (
-                <div 
-                  key={prize._id}
-                  className="bg-white/5 rounded-lg p-3 text-center border border-white/10 hover:bg-white/10 transition-colors"
-                >
-                  <div className="text-3xl mb-1">{config?.icon}</div>
-                  <div className="text-xs text-white font-medium">{prize.display_name}</div>
-                  <div className="text-xs text-blue-300 mt-1">{prize.base_probability}%</div>
+                <span className="text-2xl leading-none">{prize.icon}</span>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{prize.label}</div>
+                  <div className="text-xs text-gray-500">{prize.prob}% chance</div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Deposit Modal */}
-      {showDepositModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl p-8 max-w-md w-full shadow-2xl border-4 border-yellow-400">
-            <h2 className="text-3xl font-bold text-white mb-4 text-center">
-              Deposit to Spin
-            </h2>
-            
-            <div className="bg-white/10 rounded-lg p-4 mb-6">
-              <p className="text-white text-center mb-2">Amount to deposit:</p>
-              <p className="text-4xl font-bold text-yellow-400 text-center">KES 30</p>
-              <p className="text-sm text-blue-300 text-center mt-2">Cost per spin</p>
+      {/* ── Result modal ───────────────────────────────────────────────────── */}
+      {result && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4"
+          onClick={() => setResult(null)}
+        >
+          <div
+            className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-sm w-full text-center space-y-3"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-5xl leading-none">{prizeByType(result.prizeType).icon}</div>
+            <div className="text-xl font-bold">
+              {result.prizeType === 'ZERO' ? 'Better luck next time!' : 'You won!'}
+            </div>
+            <div className="text-gray-300 font-medium">{result.prizeName}</div>
+            {result.prizeValue > 0 && (
+              <div className="text-sm text-gray-400">Value: {fmtKes(result.prizeValue)}</div>
+            )}
+            {result.prizeDescription && (
+              <div className="text-sm text-gray-500">{result.prizeDescription}</div>
+            )}
+            <button
+              onClick={() => setResult(null)}
+              className="mt-2 w-full py-2.5 rounded-xl bg-white text-gray-950 font-bold text-sm hover:bg-gray-100 transition-colors"
+            >
+              Awesome!
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Deposit modal ──────────────────────────────────────────────────── */}
+      {showDeposit && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4"
+          onClick={!depositBusy ? closeDeposit : undefined}
+        >
+          <div
+            className="bg-gray-900 border border-gray-700 rounded-2xl p-6 max-w-sm w-full space-y-4"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Top up spin wallet</h2>
+              {!depositBusy && (
+                <button onClick={closeDeposit} className="text-gray-500 hover:text-white" aria-label="Close">
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
 
-            <div className="space-y-4 mb-6">
-              <div className="bg-white/10 rounded-lg p-3">
-                <p className="text-sm text-blue-200 mb-1">Current Balance:</p>
-                <p className="text-2xl font-bold text-white">KES {spinWallet?.balance_kes || '0.00'}</p>
-              </div>
+            {/* Amount */}
+            <div className="bg-gray-800 rounded-xl p-4 flex items-center justify-between">
+              <span className="text-sm text-gray-400">Deposit amount</span>
+              <span className="text-xl font-bold text-yellow-400">KES 30</span>
+            </div>
 
-              <div>
-                <label className="block text-white text-sm font-semibold mb-2">
-                  M-Pesa Phone Number
+            {/* Current balance */}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">Current balance</span>
+              <span className="font-medium">{fmtKes(balanceCents)}</span>
+            </div>
+
+            {/* Phone input — only visible when not processing */}
+            {(deposit.phase === 'idle' || deposit.phase === 'failed') && (
+              <div className="space-y-1.5">
+                <label htmlFor="mpesa-phone" className="block text-sm font-medium text-gray-300">
+                  M-Pesa phone number
                 </label>
                 <input
+                  id="mpesa-phone"
                   type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
-                  placeholder="254712345678"
-                  maxLength="12"
-                  className="w-full bg-white/20 border-2 border-white/40 rounded-lg px-4 py-2 text-white placeholder-blue-300/50 focus:outline-none focus:border-yellow-400"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="0712 345 678"
+                  maxLength={15}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent"
                 />
-                <p className="text-xs text-blue-300 mt-1">
-                  Enter your M-Pesa registered number (format: 254XXXXXXXXX)
-                </p>
+                <p className="text-xs text-gray-600">Enter the number registered with M-Pesa</p>
               </div>
+            )}
+
+            {/* Status feedback */}
+            {deposit.phase !== 'idle' && (
+              <div className={`
+                flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm
+                ${deposit.phase === 'success' ? 'bg-green-950/60 border border-green-900 text-green-300' : ''}
+                ${deposit.phase === 'failed'  ? 'bg-red-950/60 border border-red-900 text-red-300' : ''}
+                ${depositBusy                 ? 'bg-gray-800 border border-gray-700 text-gray-300' : ''}
+              `}>
+                {depositBusy             && <Loader2      className="w-4 h-4 animate-spin flex-shrink-0 mt-0.5" />}
+                {deposit.phase === 'success' && <CheckCircle  className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+                {deposit.phase === 'failed'  && <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+                <span>{deposit.message}</span>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-1">
+              {deposit.phase === 'success' ? (
+                <button
+                  onClick={closeDeposit}
+                  className="flex-1 py-2.5 rounded-xl bg-white text-gray-950 font-bold text-sm hover:bg-gray-100 transition-colors"
+                >
+                  Done
+                </button>
+              ) : deposit.phase === 'failed' ? (
+                <>
+                  <button
+                    onClick={() => setDeposit({ phase: 'idle', message: '' })}
+                    className="flex-1 py-2.5 rounded-xl bg-white text-gray-950 font-bold text-sm hover:bg-gray-100 transition-colors"
+                  >
+                    Try again
+                  </button>
+                  <button
+                    onClick={closeDeposit}
+                    className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleDeposit}
+                    disabled={depositBusy || phone.replace(/\D/g, '').length < 9}
+                    className="flex-1 py-2.5 rounded-xl bg-white text-gray-950 font-bold text-sm hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {depositBusy ? 'Processing…' : 'Request M-Pesa STK'}
+                  </button>
+                  <button
+                    onClick={closeDeposit}
+                    disabled={depositBusy}
+                    className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 disabled:opacity-40 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
             </div>
 
-            <button
-              onClick={async () => {
-                if (!phoneNumber || phoneNumber.length < 10) {
-                  setError('Please enter a valid phone number');
-                  return;
-                }
-
-                setDepositLoading(true);
-                try {
-                  const response = await fetch('/api/spin-wallet/deposit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                      phoneNumber: phoneNumber,
-                      amount_cents: 3000 
-                    })
-                  });
-                  
-                  const data = await response.json();
-                  if (data.success) {
-                    console.log('[v0] Deposit initiated:', data);
-                    setError('');
-                    setPhoneNumber('');
-                    setShowDepositModal(false);
-                    // Reload wallet data after deposit
-                    await loadSpinData();
-                  } else {
-                    setError(data.message || 'Failed to initiate deposit');
-                  }
-                } catch (err) {
-                  console.error('[v0] Deposit error:', err);
-                  setError('Failed to initiate deposit. Please try again.');
-                } finally {
-                  setDepositLoading(false);
-                }
-              }}
-              disabled={depositLoading || !phoneNumber}
-              className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 disabled:from-gray-500 disabled:to-gray-600 text-white font-bold py-3 px-4 rounded-lg transition-all mb-3"
-            >
-              {depositLoading ? 'Processing...' : 'Request M-Pesa STK'}
-            </button>
-
-            <button
-              onClick={() => {
-                setShowDepositModal(false);
-                setPhoneNumber('');
-              }}
-              disabled={depositLoading}
-              className="w-full bg-white/20 hover:bg-white/30 disabled:bg-white/10 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-
-            <p className="text-xs text-blue-300 text-center mt-3">
-              You will receive an M-Pesa prompt on your phone to enter your PIN
-            </p>
+            {!depositBusy && deposit.phase !== 'success' && deposit.phase !== 'failed' && (
+              <p className="text-xs text-gray-600 text-center">
+                You'll receive an M-Pesa prompt to confirm with your PIN
+              </p>
+            )}
           </div>
         </div>
       )}
     </div>
-  );
+  )
 }

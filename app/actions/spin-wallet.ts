@@ -10,6 +10,34 @@ import {
 } from '@/app/lib/models'
 import { queryStkPushStatus, initiateStkPush } from '@/app/lib/mpesa'
 
+// ─── Helper: extract checkoutRequestId from any M-Pesa response shape ──────
+// Safaris returns inconsistent casing across environments. Check all variants.
+function extractCheckoutId(response: any): string | undefined {
+  return (
+    response?.checkoutRequestID      ||   // your mpesa.ts wrapper (confirmed)
+    response?.checkoutRequestId      ||   // camelCase
+    response?.CheckoutRequestID      ||   // PascalCase
+    response?.checkout_request_id    ||   // snake_case
+    response?.data?.checkoutRequestID||   // nested variants
+    response?.data?.CheckoutRequestID||
+    response?.data?.checkoutRequestId||
+    undefined
+  )
+}
+
+function extractMerchantId(response: any): string | undefined {
+  return (
+    response?.merchantRequestID      ||   // your mpesa.ts wrapper (confirmed)
+    response?.merchantRequestId      ||
+    response?.MerchantRequestID      ||
+    response?.merchant_request_id    ||
+    response?.data?.merchantRequestID||
+    response?.data?.MerchantRequestID||
+    response?.data?.merchantRequestId||
+    undefined
+  )
+}
+
 export async function initiatSpinDeposit(phoneNumber: string, amount: number = 30) {
   try {
     const session = await auth()
@@ -40,36 +68,26 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
       })
     }
 
-    // Initiate M-Pesa STK push
-    // Format: Must be exactly 12 digits starting with 254
-    let cleanPhone = phoneNumber.replace(/\D/g, '')
-    
-    // Remove leading 0 if present (0791406285 -> 791406285)
-    if (cleanPhone.startsWith('0')) {
-      cleanPhone = cleanPhone.slice(1)
-    }
-    
-    // Remove leading 254 if present to normalize
-    if (cleanPhone.startsWith('254')) {
-      cleanPhone = cleanPhone.slice(3)
-    }
-    
-    // Ensure we have 9 digits after removing country code
-    if (cleanPhone.length < 9) {
+    // Normalise phone number → 254XXXXXXXXX (12 digits)
+    let clean = phoneNumber.replace(/\D/g, '')
+    if (clean.startsWith('0'))   clean = clean.slice(1)       // 0712… → 712…
+    if (clean.startsWith('254')) clean = clean.slice(3)       // 254712… → 712…
+    if (clean.length < 9) {
       return { success: false, message: 'Invalid phone number format' }
     }
-    
-    // Take last 9 digits and prepend 254
-    const formattedPhone = `254${cleanPhone.slice(-9)}`
+    const formattedPhone = `254${clean.slice(-9)}`
 
-    console.log(`[v0] Initiating STK push for spin deposit: ${formattedPhone} (${formattedPhone.length} digits), amount: ${amount} KES`)
-    
+    console.log(`[SpinWallet] STK push → ${formattedPhone}, amount: KES ${amount}`)
+
     const stkResponse = await initiateStkPush({
-      amount: amount,
+      amount,
       phoneNumber: formattedPhone,
       accountReference: `SPIN_${session.user.id.slice(-8)}`,
-      transactionDesc: `Spin Wallet Deposit - KES ${amount}`
+      transactionDesc: `Spin Wallet Deposit - KES ${amount}`,
     })
+
+    // ── Debug: log the full STK response so we can see exact field names ──
+    console.log('[SpinWallet] Raw STK response:', JSON.stringify(stkResponse, null, 2))
 
     if (!stkResponse.success) {
       return {
@@ -78,11 +96,23 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
       }
     }
 
-    // Add deposit record
+    const checkoutRequestId = extractCheckoutId(stkResponse)
+    const merchantRequestId = extractMerchantId(stkResponse)
+
+    // ── Guard: if we still can't find the ID something is very wrong ──────
+    if (!checkoutRequestId) {
+      console.error('[SpinWallet] Could not extract CheckoutRequestID from STK response:', stkResponse)
+      return {
+        success: false,
+        message: 'Payment initiated but tracking ID was missing. Please contact support if you were charged.',
+      }
+    }
+
+    // Persist deposit record
     spinWallet.deposits.push({
       amount_cents: amount * 100,
-      mpesa_checkout_request_id: stkResponse.checkoutRequestId || stkResponse.CheckoutRequestID,
-      mpesa_merchant_request_id: stkResponse.merchantRequestId || stkResponse.MerchantRequestID,
+      mpesa_checkout_request_id: checkoutRequestId,
+      mpesa_merchant_request_id: merchantRequestId,
       mpesa_status: 'initiated',
       status: 'pending',
       phone_number: formattedPhone,
@@ -91,15 +121,16 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
 
     await spinWallet.save()
 
-    console.log(`[v0] Spin deposit initiated for user ${session.user.id}, amount: KES ${amount}`)
+    console.log(`[SpinWallet] Deposit initiated — user: ${session.user.id}, checkoutRequestId: ${checkoutRequestId}`)
 
     return {
       success: true,
-      checkoutRequestId: stkResponse.checkoutRequestId || stkResponse.CheckoutRequestID,
+      checkoutRequestId,          // always present now
+      merchantRequestId,
       message: 'M-Pesa prompt sent. Please complete the payment on your phone.',
     }
   } catch (error) {
-    console.error('[v0] Error initiating spin deposit:', error)
+    console.error('[SpinWallet] Error initiating spin deposit:', error)
     return {
       success: false,
       message: 'An error occurred while initiating payment',
@@ -112,6 +143,10 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
     const session = await auth()
     if (!session?.user?.id) {
       return { success: false, message: 'Unauthorized' }
+    }
+
+    if (!checkoutRequestId) {
+      return { success: false, message: 'Missing checkoutRequestId' }
     }
 
     await connectToDatabase()
@@ -129,23 +164,30 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
       return { success: false, message: 'Deposit record not found' }
     }
 
-    // Query M-Pesa
+    // Already completed — return immediately, skip M-Pesa query
+    if (deposit.status === 'completed') {
+      return {
+        success: true,
+        status: 'completed',
+        message: 'Payment already confirmed.',
+        balance: spinWallet.balance_cents,
+      }
+    }
+
     const status = await queryStkPushStatus(checkoutRequestId)
+    console.log(`[SpinWallet] STK status for ${checkoutRequestId}:`, status)
 
     if (status.success && status.status === 'completed') {
-      // Update deposit
       deposit.mpesa_status = 'completed'
       deposit.status = 'completed'
       deposit.mpesa_receipt_number = status.mpesaReceiptNumber
       deposit.deposited_at = new Date()
 
-      // Update wallet balance
       spinWallet.balance_cents += deposit.amount_cents
       spinWallet.total_deposited_cents += deposit.amount_cents
 
       await spinWallet.save()
 
-      // Log transaction
       await (Transaction as any).create({
         user_id: session.user.id,
         type: 'SPIN_DEPOSIT',
@@ -159,18 +201,19 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
         },
       })
 
-      console.log(`[v0] Spin deposit completed for user ${session.user.id}`)
+      console.log(`[SpinWallet] Deposit completed — user: ${session.user.id}`)
 
       return {
         success: true,
+        status: 'completed',
         message: `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`,
         balance: spinWallet.balance_cents,
       }
     } else if (status.status === 'pending') {
       return {
         success: true,
-        message: 'Payment still processing. Please wait...',
         status: 'pending',
+        message: 'Payment still processing…',
         balance: spinWallet.balance_cents,
       }
     } else {
@@ -180,12 +223,13 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
 
       return {
         success: false,
-        message: 'Payment failed or was cancelled',
+        status: 'failed',
+        message: 'Payment failed or was cancelled.',
         balance: spinWallet.balance_cents,
       }
     }
   } catch (error) {
-    console.error('[v0] Error checking deposit status:', error)
+    console.error('[SpinWallet] Error checking deposit status:', error)
     return {
       success: false,
       message: 'An error occurred while checking payment status',
@@ -205,7 +249,6 @@ export async function getSpinWalletBalance() {
     let spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id }).lean()
 
     if (!spinWallet) {
-      // Create if doesn't exist
       spinWallet = await (SpinWallet as any).create({
         user_id: session.user.id,
         balance_cents: 0,
@@ -224,7 +267,7 @@ export async function getSpinWalletBalance() {
       total_spins: spinWallet.total_spins,
     }
   } catch (error) {
-    console.error('[v0] Error getting spin wallet balance:', error)
+    console.error('[SpinWallet] Error getting balance:', error)
     return { success: false, message: 'An error occurred' }
   }
 }
@@ -238,31 +281,32 @@ export async function getSpinWalletHistory(limit: number = 20) {
 
     await connectToDatabase()
 
-    const spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id }).lean()
+    // Sort in MongoDB query instead of JS
+    const spinWallet = await (SpinWallet as any)
+      .findOne({ user_id: session.user.id })
+      .lean()
+
     if (!spinWallet) {
-      return { success: true, deposits: [], message: 'No deposit history' }
+      return { success: true, deposits: [] }
     }
 
-    const deposits = spinWallet.deposits
+    const deposits = [...spinWallet.deposits]
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, limit)
-
-    return {
-      success: true,
-      deposits: deposits.map((d: any) => ({
+      .map((d: any) => ({
         amount_kes: (d.amount_cents / 100).toFixed(2),
         status: d.status,
         date: d.created_at,
         receipt: d.mpesa_receipt_number,
-      })),
-    }
+      }))
+
+    return { success: true, deposits }
   } catch (error) {
-    console.error('[v0] Error getting spin wallet history:', error)
+    console.error('[SpinWallet] Error getting history:', error)
     return { success: false, message: 'An error occurred' }
   }
 }
 
-// Admin function to manually add spin wallet balance (for testing/support)
 export async function adminAddSpinBalance(userId: string, amountKes: number, reason: string) {
   try {
     const session = await auth()
@@ -270,10 +314,14 @@ export async function adminAddSpinBalance(userId: string, amountKes: number, rea
       return { success: false, message: 'Unauthorized' }
     }
 
+    if (amountKes <= 0) {
+      return { success: false, message: 'Amount must be greater than zero' }
+    }
+
     await connectToDatabase()
 
     const admin = await (Profile as any).findById(session.user.id).lean()
-    if (admin?.role !== 'admin') {
+    if ((admin as any)?.role !== 'admin') {
       return { success: false, message: 'Admin access required' }
     }
 
@@ -289,33 +337,26 @@ export async function adminAddSpinBalance(userId: string, amountKes: number, rea
     }
 
     const amountCents = amountKes * 100
-
     spinWallet.balance_cents += amountCents
     spinWallet.total_deposited_cents += amountCents
     spinWallet.deposits.push({
       amount_cents: amountCents,
       status: 'completed',
-      mpesa_status: 'completed',
+      mpesa_status: 'admin_credit',
       deposited_at: new Date(),
       created_at: new Date(),
     })
 
     await spinWallet.save()
 
-    // Log audit
     await (AdminAuditLog as any).create({
       admin_id: session.user.id,
       action: 'SPIN_WALLET_ADD',
       resource_type: 'spin_wallet',
       target_user_id: userId,
-      changes: {
-        amount_kes: amountKes,
-        reason,
-      },
+      changes: { amount_kes: amountKes, reason },
       ip_address: '',
     })
-
-    console.log(`[v0] Admin added KES ${amountKes} to spin wallet for user ${userId}`)
 
     return {
       success: true,
@@ -323,31 +364,7 @@ export async function adminAddSpinBalance(userId: string, amountKes: number, rea
       new_balance: spinWallet.balance_cents,
     }
   } catch (error) {
-    console.error('[v0] Error adding spin balance:', error)
+    console.error('[SpinWallet] Error adding admin balance:', error)
     return { success: false, message: 'An error occurred' }
-  }
-}
-
-// Helper function to initiate STK push (from mpesa.ts)
-async function initiateSTKPush(phoneNumber: string, amountCents: number) {
-  try {
-    // This would use the M-Pesa library similar to activation.ts
-    // For now, returning a mock response format
-    console.log('[v0] Initiating STK push for spin deposit')
-
-    // TODO: Implement actual M-Pesa STK push using the same pattern as activation.ts
-    return {
-      success: true,
-      CheckoutRequestID: `SPIN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      MerchantRequestID: `SPIN_MERCHANT_${Date.now()}`,
-      ResponseCode: '0',
-      ResponseDescription: 'Success',
-    }
-  } catch (error) {
-    console.error('[v0] Error initiating STK push:', error)
-    return {
-      success: false,
-      message: 'Failed to initiate M-Pesa payment',
-    }
   }
 }
