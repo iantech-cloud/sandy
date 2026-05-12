@@ -7,7 +7,7 @@ import {
   SpinWallet,
   Transaction,
   AdminAuditLog,
-} from '../lib/models'
+} from '@/app/lib/models'
 import { queryStkPushStatus } from '@/app/lib/mpesa'
 
 export async function initiatSpinDeposit(phoneNumber: string, amount: number = 30) {
