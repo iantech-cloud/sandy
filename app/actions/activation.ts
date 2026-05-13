@@ -876,7 +876,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       return { success: false, message: 'Invalid phone number format. Use 07XXXXXXXX or 2547XXXXXXXX' };
     }
 
-    const activationAmount = userProfile.activation_amount_cents || 10000;
+    const activationAmount = userProfile.activation_amount_cents || 9000; // KES 90
 
     console.log('🎯 Starting activation payment process:');
     console.log('👤 User:', userProfile.username);
@@ -1198,8 +1198,8 @@ export async function completeActivationAfterPayment(activationPaymentId: string
               'metadata.level': 0 // Direct referrals only
             });
 
-            // Determine bonus amount: First 2 get 60,000 cents (KES 600), subsequent get 70,000 cents (KES 700)
-            const REFERRAL_BONUS_CENTS = activatedDirectReferrals < 2 ? 60000 : 70000;
+            // Single tier referral bonus: KES 70 (70,000 cents) for all direct referrals
+            const REFERRAL_BONUS_CENTS = 70000;
             const referralLevel = 0; // Direct referral
 
             // Create transaction for direct referral bonus
@@ -1209,7 +1209,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
               user_id: referrer._id,
               amount_cents: REFERRAL_BONUS_CENTS,
               type: 'REFERRAL',
-              description: `Referral bonus for ${userProfile.username}'s activation (${activatedDirectReferrals < 2 ? 'First 2' : 'Subsequent'})`,
+              description: `Referral bonus for ${userProfile.username}'s activation`,
               status: 'completed',
               source: 'activation',
               balance_before_cents: referrer.balance_cents,
@@ -1219,9 +1219,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
                 referred_username: userProfile.username,
                 activation_payment_id: activationPayment._id,
                 referral_id: referralRecord._id,
-                level: referralLevel,
-                bonus_tier: activatedDirectReferrals < 2 ? 'first_2' : 'subsequent',
-                referrer_activated_count: activatedDirectReferrals
+                level: referralLevel
               }
             });
             await referralTransaction.save();
@@ -1239,8 +1237,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
             referralRecord.referred_user_activated = true;
             referralRecord.referred_user_activated_at = new Date();
             referralRecord.metadata = {
-              level: referralLevel,
-              bonus_tier: activatedDirectReferrals < 2 ? 'first_2' : 'subsequent'
+              level: referralLevel
             };
             await referralRecord.save();
 
@@ -1271,71 +1268,9 @@ export async function completeActivationAfterPayment(activationPaymentId: string
               bonus_tier: activatedDirectReferrals < 2 ? 'first_2' : 'subsequent'
             };
 
-            console.log(`✅ Direct referral bonus paid: KES ${REFERRAL_BONUS_CENTS / 100} (${activatedDirectReferrals < 2 ? 'First 2' : 'Subsequent'})`);
+            console.log(`✅ Direct referral bonus paid: KES ${REFERRAL_BONUS_CENTS / 100}`);
 
-            // =============================================================================
-            // STEP 2.1: Process Level 1 Bonus (If referrer has a referrer)
-            // =============================================================================
-            if (referrer.referred_by) {
-              try {
-                const level1Referrer = await (Profile as any).findById(referrer.referred_by);
-                
-                if (level1Referrer) {
-                  const LEVEL1_BONUS_CENTS = 10000; // KES 100 for level 1
-                  const level1ReferralLevel = 1;
 
-                  // Create transaction for level 1 bonus
-                  const level1Transaction = new (Transaction as any)({
-                    target_type: 'user',
-                    target_id: level1Referrer._id.toString(),
-                    user_id: level1Referrer._id,
-                    amount_cents: LEVEL1_BONUS_CENTS,
-                    type: 'REFERRAL',
-                    description: `Level 1 downline bonus for ${userProfile.username}'s activation (via ${referrer.username})`,
-                    status: 'completed',
-                    source: 'activation',
-                    balance_before_cents: level1Referrer.balance_cents,
-                    balance_after_cents: level1Referrer.balance_cents + LEVEL1_BONUS_CENTS,
-                    metadata: {
-                      referred_user_id: userProfile._id,
-                      referred_username: userProfile.username,
-                      direct_referrer_id: referrer._id,
-                      direct_referrer_username: referrer.username,
-                      activation_payment_id: activationPayment._id,
-                      level: level1ReferralLevel
-                    }
-                  });
-                  await level1Transaction.save();
-
-                  // Update level 1 referrer balance
-                  level1Referrer.balance_cents += LEVEL1_BONUS_CENTS;
-                  level1Referrer.total_earnings_cents += LEVEL1_BONUS_CENTS;
-                  await level1Referrer.save();
-
-                  // Create earning record for level 1
-                  const level1Earning = new (Earning as any)({
-                    user_id: level1Referrer._id,
-                    amount_cents: LEVEL1_BONUS_CENTS,
-                    type: 'REFERRAL',
-                    description: `Level 1 downline bonus for ${userProfile.username}`,
-                    source_id: referralRecord._id,
-                    source_type: 'referral_downline',
-                    transaction_id: level1Transaction._id,
-                    processed: true,
-                    processed_at: new Date(),
-                    metadata: {
-                      level: level1ReferralLevel,
-                      direct_referrer_id: referrer._id
-                    }
-                  });
-                  await level1Earning.save();
-
-                  console.log('✅ Level 1 downline bonus paid: KES 100');
-                }
-              } catch (level1Error) {
-                console.error('⚠️ Error processing level 1 bonus:', level1Error);
-              }
-            }
           }
         }
       } catch (referralError) {
@@ -1349,21 +1284,14 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     let companyRevenueCents;
 
     if (userProfile.referred_by) {
-      // User has referrer - check if they are among first 2 or subsequent
-      const activatedDirectReferrals = await (Referral as any).countDocuments({
-        referrer_id: userProfile.referred_by,
-        referral_bonus_paid: true,
-        'metadata.level': 0
-      });
+      // User has referrer - direct referral bonus is always 70,000 cents (KES 70)
+      const directBonus = 70000; // KES 70
       
-      const directBonus = activatedDirectReferrals < 2 ? 60000 : 70000;
-      const level1Bonus = 10000; // KES 100 for level 1
-      
-      // Total activation fee (100000) - direct bonus - level 1 bonus
-      companyRevenueCents = 100000 - directBonus - level1Bonus;
+      // Total activation fee (90000) - direct bonus
+      companyRevenueCents = activationPayment.amount_cents - directBonus;
     } else {
       // No referrer - company gets full amount
-      companyRevenueCents = 100000;
+      companyRevenueCents = activationPayment.amount_cents;
     }
 
     const companyRevenueResult = await createCompanyRevenueTransaction(
@@ -1375,7 +1303,6 @@ export async function completeActivationAfterPayment(activationPaymentId: string
       {
         total_activation_fee: activationPayment.amount_cents,
         referral_bonus_paid: referralBonus ? referralBonus.amount_cents : 0,
-        level1_bonus_paid: referralBonus && userProfile.referred_by ? 10000 : 0,
         net_company_revenue: companyRevenueCents,
         has_referrer: !!userProfile.referred_by,
         activation_payment_id: activationPayment._id,

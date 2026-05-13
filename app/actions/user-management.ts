@@ -553,10 +553,8 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
           'metadata.level': 0
         }).session(session);
 
-        // Determine bonus amount: First 2 get 60,000 cents (KES 600), subsequent get 70,000 cents (KES 700)
-        const isFirst2 = activatedDirectReferrals < 2;
-        const DIRECT_BONUS_CENTS = isFirst2 ? 60000 : 70000;
-        const bonusTier = isFirst2 ? 'first_2' : 'subsequent';
+        // Single tier referral bonus: KES 70 (70,000 cents) for all direct referrals
+        const DIRECT_BONUS_CENTS = 70000;
 
         // DEDUCT from company balance as expense
         const balanceBeforeDirectBonus = company.wallet_balance_cents;
@@ -571,7 +569,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
           user_id: company._id.toString(),
           amount_cents: -DIRECT_BONUS_CENTS,
           type: 'REFERRAL',
-          description: `Direct referral bonus paid to ${referrer.username} for ${user.username}'s activation (${bonusTier})`,
+          description: `Direct referral bonus paid to ${referrer.username} for ${user.username}'s activation`,
           status: 'completed',
           source: 'activation',
           balance_before_cents: balanceBeforeDirectBonus,
@@ -581,7 +579,6 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
             beneficiary_username: referrer.username,
             referred_user_id: userId,
             referred_username: user.username,
-            bonus_tier: bonusTier,
             level: 0,
             transaction_purpose: 'REFERRAL_BONUS_PAYMENT'
           },
@@ -603,9 +600,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
         referral.referred_user_activated = true;
         referral.referred_user_activated_at = new Date();
         referral.metadata = {
-          level: 0,
-          bonus_tier: bonusTier,
-          referrer_activated_count: activatedDirectReferrals
+          level: 0
         };
         await referral.save({ session });
 
@@ -616,7 +611,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
           target_id: referrer._id,
           amount_cents: DIRECT_BONUS_CENTS,
           type: 'REFERRAL',
-          description: `Direct referral bonus for ${user.username}'s activation (${isFirst2 ? 'First 2' : 'Subsequent'})`,
+          description: `Direct referral bonus for ${user.username}'s activation`,
           status: 'completed',
           source: 'activation',
           balance_before_cents: referrerBalanceBefore,
@@ -626,9 +621,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
             referred_username: user.username,
             activation_payment_id: activationTransaction._id,
             referral_id: referral._id,
-            level: 0,
-            bonus_tier: bonusTier,
-            referrer_activated_count: activatedDirectReferrals
+            level: 0
           },
         });
         await referralTransaction.save({ session });
@@ -637,91 +630,13 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
           referrer_id: referrer._id,
           referrer_username: referrer.username,
           amount_cents: DIRECT_BONUS_CENTS,
-          transaction_id: referralTransaction._id,
-          bonus_tier: bonusTier
+          transaction_id: referralTransaction._id
         };
 
-        console.log(`✅ Direct referral bonus paid: ${referrer.username} earned KES ${DIRECT_BONUS_CENTS / 100} (${bonusTier})`);
+        console.log(`✅ Direct referral bonus paid: ${referrer.username} earned KES ${DIRECT_BONUS_CENTS / 100}`);
         console.log(`   Company balance after bonus: KES ${company.wallet_balance_cents / 100}`);
 
-        // ===== LEVEL 1 DOWNLINE BONUS (KES 100) =====
-        if (referrer.referred_by) {
-          const level1Referrer = await Profile.findById(referrer.referred_by).session(session);
-          
-          if (level1Referrer && level1Referrer.is_active) {
-            const LEVEL1_BONUS_CENTS = 10000; // KES 100
 
-            // DEDUCT from company balance as expense
-            const balanceBeforeLevel1 = company.wallet_balance_cents;
-            company.wallet_balance_cents -= LEVEL1_BONUS_CENTS;
-            company.total_expenses_cents += LEVEL1_BONUS_CENTS;
-            await company.save({ session });
-
-            // Create company expense transaction for level 1
-            const companyLevel1ExpenseTransaction = new Transaction({
-              target_type: 'company',
-              target_id: company._id.toString(),
-              user_id: company._id.toString(),
-              amount_cents: -LEVEL1_BONUS_CENTS,
-              type: 'REFERRAL',
-              description: `Level 1 downline bonus paid to ${level1Referrer.username} for ${user.username}'s activation`,
-              status: 'completed',
-              source: 'activation',
-              balance_before_cents: balanceBeforeLevel1,
-              balance_after_cents: company.wallet_balance_cents,
-              metadata: {
-                beneficiary_user_id: level1Referrer._id,
-                beneficiary_username: level1Referrer.username,
-                referred_user_id: userId,
-                referred_username: user.username,
-                direct_referrer_id: referrer._id,
-                direct_referrer_username: referrer.username,
-                level: 1,
-                transaction_purpose: 'LEVEL1_BONUS_PAYMENT'
-              },
-            });
-            await companyLevel1ExpenseTransaction.save({ session });
-
-            // Update level 1 referrer's balance
-            const level1BalanceBefore = level1Referrer.balance_cents;
-            level1Referrer.balance_cents += LEVEL1_BONUS_CENTS;
-            level1Referrer.total_earnings_cents += LEVEL1_BONUS_CENTS;
-            await level1Referrer.save({ session });
-
-            // Create transaction for level 1 referrer
-            const level1Transaction = new Transaction({
-              user_id: level1Referrer._id,
-              target_type: 'user',
-              target_id: level1Referrer._id,
-              amount_cents: LEVEL1_BONUS_CENTS,
-              type: 'REFERRAL',
-              description: `Level 1 downline bonus for ${user.username}'s activation (via ${referrer.username})`,
-              status: 'completed',
-              source: 'activation',
-              balance_before_cents: level1BalanceBefore,
-              balance_after_cents: level1Referrer.balance_cents,
-              metadata: {
-                referred_user_id: userId,
-                referred_username: user.username,
-                direct_referrer_id: referrer._id,
-                direct_referrer_username: referrer.username,
-                activation_payment_id: activationTransaction._id,
-                level: 1
-              },
-            });
-            await level1Transaction.save({ session });
-
-            level1ReferralBonus = {
-              referrer_id: level1Referrer._id,
-              referrer_username: level1Referrer.username,
-              amount_cents: LEVEL1_BONUS_CENTS,
-              transaction_id: level1Transaction._id
-            };
-
-            console.log(`✅ Level 1 downline bonus paid: ${level1Referrer.username} earned KES 100`);
-            console.log(`   Company balance after level 1 bonus: KES ${company.wallet_balance_cents / 100}`);
-          }
-        }
       }
     }
 
@@ -731,15 +646,14 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
     // ============================================================================
     // STEP 7: Calculate final balances for logging
     // ============================================================================
-    const totalBonusesPaid = (directReferralBonus?.amount_cents || 0) + (level1ReferralBonus?.amount_cents || 0);
+    const totalBonusesPaid = directReferralBonus?.amount_cents || 0;
     const finalCompanyBalance = company.wallet_balance_cents;
     const netCompanyRevenue = ACTIVATION_FEE_CENTS - totalBonusesPaid;
     
     console.log(`\n💰 ACTIVATION SUMMARY for ${user.username}:`);
-    console.log(`   User Payment: ${feeDeducted ? 'KES 100 (deducted from wallet)' : 'KES 0 (admin activated)'}`);
-    console.log(`   Company Revenue: +KES 100`);
+    console.log(`   User Payment: ${feeDeducted ? `KES ${ACTIVATION_FEE_CENTS / 100} (deducted from wallet)` : 'KES 0 (admin activated)'}`);
+    console.log(`   Company Revenue: +KES ${ACTIVATION_FEE_CENTS / 100}`);
     console.log(`   Direct Bonus Paid: -KES ${(directReferralBonus?.amount_cents || 0) / 100}`);
-    console.log(`   Level 1 Bonus Paid: -KES ${(level1ReferralBonus?.amount_cents || 0) / 100}`);
     console.log(`   Company Net Profit: KES ${netCompanyRevenue / 100}`);
     console.log(`   Final Company Balance: KES ${finalCompanyBalance / 100}`);
     console.log(`   User Level: ${user.level} | Rank: ${user.rank}\n`);
