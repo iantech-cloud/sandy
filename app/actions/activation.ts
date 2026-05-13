@@ -515,6 +515,224 @@ async function sendActivationConfirmationInvoice(
   }
 }
 
+/**
+ * Sync activation transaction status with M-Pesa transaction status
+ * Following the exact pattern from deposit.ts
+ */
+async function syncActivationTransactionWithMpesaStatus(
+    mpesaTransactionId: any, 
+    status: string, 
+    resultCode: number, 
+    resultDesc: string,
+    mpesaReceiptNumber?: string
+): Promise<void> {
+  try {
+    const updateData: any = {
+      status: status,
+      metadata: {
+        result_code: resultCode,
+        result_desc: resultDesc,
+        status_updated_at: new Date().toISOString()
+      }
+    };
+
+    if (status === 'completed' && mpesaReceiptNumber) {
+      updateData.metadata.mpesa_receipt_number = mpesaReceiptNumber;
+      updateData.metadata.completed_at = new Date().toISOString();
+    }
+
+    if (['failed', 'cancelled', 'timeout'].includes(status)) {
+      updateData.metadata.failed_at = new Date().toISOString();
+    }
+
+    await (Transaction as any).findOneAndUpdate(
+      { mpesa_transaction_id: mpesaTransactionId },
+      updateData
+    );
+
+    console.log(`🔄 Successfully synced activation Transaction status to: ${status}`);
+  } catch (error) {
+    console.error('❌ Failed to sync activation Transaction status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Check activation payment status via M-Pesa
+ * Replicates the exact pattern from deposit.ts checkMpesaPaymentStatus()
+ */
+export async function checkActivationPaymentStatus(checkoutRequestId: string): Promise<ApiResponse<MpesaStatusData>> {
+  try {
+    console.log('🔍 Checking activation payment status:', checkoutRequestId);
+
+    const session = await auth();
+    
+    if (!session?.user?.email) {
+      return { success: false, message: 'User not authenticated' };
+    }
+
+    await connectToDatabase();
+
+    const mpesaTransaction = await (MpesaTransaction as any).findOne({
+      checkout_request_id: checkoutRequestId
+    });
+
+    if (!mpesaTransaction) {
+      return { success: false, message: 'Transaction not found' };
+    }
+
+    // If already final status, return immediately (no need to query M-Pesa again)
+    if (['completed', 'failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status)) {
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultCode: mpesaTransaction.result_code?.toString(),
+          resultDesc: mpesaTransaction.result_desc,
+          mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+          isActivationPayment: true,
+          completedAt: mpesaTransaction.completed_at,
+          failedAt: mpesaTransaction.failed_at,
+          source: 'database'
+        },
+        message: `Payment status: ${mpesaTransaction.status}`
+      };
+    }
+
+    // Query M-Pesa for latest status
+    console.log('📡 Querying M-Pesa API for activation payment status...');
+    const accessToken = await getMpesaAccessToken();
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    const password = Buffer.from(`${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`).toString('base64');
+
+    const queryPayload = {
+      BusinessShortCode: process.env.MPESA_SHORTCODE,
+      Password: password,
+      Timestamp: timestamp,
+      CheckoutRequestID: checkoutRequestId
+    };
+
+    const mpesaApiUrl = (process.env.MPESA_ENVIRONMENT === 'production') 
+      ? 'https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query'
+      : 'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query';
+
+    const queryResponse = await fetch(mpesaApiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(queryPayload),
+    });
+
+    if (!queryResponse.ok) {
+      const errorText = await queryResponse.text();
+      console.error('❌ M-Pesa query API error:', errorText);
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultCode: mpesaTransaction.result_code?.toString(),
+          resultDesc: mpesaTransaction.result_desc,
+          source: 'database_fallback',
+          isActivationPayment: true
+        },
+        message: 'Using last known status'
+      };
+    }
+
+    const queryData = await queryResponse.json();
+    console.log('📨 M-Pesa query response:', queryData);
+
+    const safeResultCode = mapMpesaResultCodeToDatabase(queryData.ResultCode);
+    const safeStatus = mapMpesaStatusToDatabase(queryData.ResultCode).status;
+
+    // Update MpesaTransaction
+    mpesaTransaction.status = safeStatus;
+    mpesaTransaction.result_code = safeResultCode;
+    mpesaTransaction.result_desc = queryData.ResultDesc || 'No description provided';
+
+    if (safeStatus === 'completed') {
+      mpesaTransaction.mpesa_receipt_number = queryData.MpesaReceiptNumber;
+      mpesaTransaction.completed_at = new Date();
+    } else if (['failed', 'cancelled', 'timeout'].includes(safeStatus)) {
+      mpesaTransaction.failed_at = new Date();
+    }
+
+    try {
+      await mpesaTransaction.save();
+      console.log('💾 Successfully updated M-Pesa transaction with status:', safeStatus);
+    } catch (saveError) {
+      console.error('❌ Failed to save M-Pesa transaction:', saveError);
+      return {
+        success: true,
+        data: {
+          status: safeStatus,
+          resultCode: safeResultCode.toString(),
+          resultDesc: queryData.ResultDesc,
+          mpesaReceiptNumber: queryData.MpesaReceiptNumber,
+          source: 'api_unsaved',
+          isActivationPayment: true
+        },
+        message: `Payment status: ${safeStatus} (database update failed)`
+      };
+    }
+
+    // Sync Transaction record and update profile if completed
+    if (['completed', 'failed', 'cancelled', 'timeout'].includes(safeStatus)) {
+      try {
+        await syncActivationTransactionWithMpesaStatus(
+          mpesaTransaction._id,
+          safeStatus,
+          safeResultCode,
+          queryData.ResultDesc,
+          queryData.MpesaReceiptNumber
+        );
+
+        // If completed, update user profile activation status
+        if (safeStatus === 'completed') {
+          const user = await (Profile as any).findById(mpesaTransaction.user_id);
+          if (user) {
+            user.activation_paid = true;
+            user.approval_status = 'approved';
+            user.rank = 'Bronze';
+            user.is_active = true;
+            user.status = 'active';
+            await user.save();
+            console.log('✅ User activation status updated');
+            revalidatePath('/dashboard');
+            revalidatePath('/auth/activate');
+          }
+        }
+      } catch (updateError) {
+        console.error('❌ Failed to sync transaction or update profile:', updateError);
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        status: mpesaTransaction.status,
+        resultCode: mpesaTransaction.result_code?.toString(),
+        resultDesc: mpesaTransaction.result_desc,
+        mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+        completedAt: mpesaTransaction.completed_at,
+        failedAt: mpesaTransaction.failed_at,
+        source: 'api',
+        isActivationPayment: true
+      },
+      message: `Payment status: ${mpesaTransaction.status}`
+    };
+
+  } catch (error) {
+    console.error('💥 Check activation payment status error:', error);
+    return { 
+      success: false, 
+      message: 'Failed to check activation payment status. Please try again.' 
+    };
+  }
+}
+
 // =============================================================================
 // EXPORTED ACTIONS
 // =============================================================================
@@ -734,15 +952,41 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       activationPayment.mpesa_transaction_id = mpesaTransaction._id;
       await activationPayment.save();
 
+      // 🔧 CREATE TRANSACTION RECORD for ledger (matching deposit.ts pattern)
+      const transaction = await (Transaction as any).create({
+        user_id: userProfile._id,
+        amount_cents: activationAmount,
+        type: 'ACTIVATION',
+        description: `Account activation fee via M-Pesa from ${formattedPhone}`,
+        status: 'pending',
+        mpesa_transaction_id: mpesaTransaction._id,
+        
+        // ✅ REQUIRED fields for transaction tracking
+        target_type: 'activation',
+        target_id: userProfile._id.toString(),
+        
+        metadata: {
+          phoneNumber: formattedPhone,
+          provider: 'mpesa',
+          checkoutRequestID: mpesaResult.checkoutRequestId,
+          merchantRequestID: mpesaResult.merchantRequestId,
+          accountReference: `ACTIVATION-${userProfile._id}`,
+          initiated_at: new Date().toISOString()
+        }
+      });
+
       activationLog.metadata = {
         ...activationLog.metadata,
         checkout_request_id: mpesaResult.checkoutRequestId,
         merchant_request_id: mpesaResult.merchantRequestId,
-        mpesa_transaction_id: mpesaTransaction._id
+        mpesa_transaction_id: mpesaTransaction._id,
+        transaction_id: transaction._id
       };
       await activationLog.save();
 
       console.log('✅ M-Pesa STK Push initiated successfully');
+      console.log('✅ M-Pesa transaction created:', mpesaTransaction._id);
+      console.log('✅ Transaction record created:', transaction._id);
 
       return {
         success: true,

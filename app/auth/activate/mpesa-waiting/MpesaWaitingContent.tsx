@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, CheckCircle, XCircle, Clock, Phone, UserCheck } from 'lucide-react';
-import { checkMpesaPaymentStatus, completeActivationAfterPayment } from '@/app/actions/activation';
+import { checkActivationPaymentStatus, completeActivationAfterPayment } from '@/app/actions/activation';
 
 // NOTE: The 'status' field here should align with the high-level statuses returned by your server action
 interface PaymentStatus {
@@ -40,9 +40,9 @@ export default function MpesaWaitingContent() {
     if (!checkoutRequestId) return;
 
     try {
-      // Assuming checkMpesaPaymentStatus returns:
+      // Assuming checkActivationPaymentStatus returns:
       // { success: true, data: { status: 'completed' | 'cancelled' | 'timeout' | 'failed' | 'pending', ... } }
-      const result = await checkMpesaPaymentStatus(checkoutRequestId);
+      const result = await checkActivationPaymentStatus(checkoutRequestId);
       setPollingCount(prev => prev + 1);
 
       if (result.success && result.data) {

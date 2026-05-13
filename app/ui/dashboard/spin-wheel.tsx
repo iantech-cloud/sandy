@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Zap, Plus, RotateCcw, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { depositSpinWalletViaMpesa, checkSpinDepositMpesaStatus } from '@/app/actions/spin'
 
 // ─── Prize configuration ───────────────────────────────────────────────────
 const PRIZES = [
@@ -254,19 +255,18 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
     setDeposit({ phase: 'sending', message: 'Sending M-Pesa prompt…' })
 
     try {
-      const res  = await fetch('/api/spin-wallet/deposit', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ phoneNumber: phone, amount_cents: SPIN_COST_CENTS }),
+      // Call the server action directly
+      const data = await depositSpinWalletViaMpesa({
+        amount: SPIN_COST_CENTS / 100,  // Convert cents to KES
+        phoneNumber: phone
       })
-      const data = await res.json()
 
       if (!data.success) {
         setDeposit({ phase: 'failed', message: data.message ?? 'Failed to send M-Pesa prompt.' })
         return
       }
 
-      const checkoutId = extractCheckoutId(data)
+      const checkoutId = extractCheckoutId(data.data)
 
       if (!checkoutId) {
         console.error('[SpinWheel] No checkoutId in deposit response:', data)
@@ -279,31 +279,27 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
 
       setDeposit({ phase: 'polling', message: 'Check your phone and enter your M-Pesa PIN…' })
 
-      // Poll /api/spin-wallet/check_status with exponential backoff
-      // Route is at check_status/ (not status/) — confirmed from your file structure
-      const backoff = [3000, 4000, 5000, 6000, 8000, 10000]
-      for (const delay of backoff) {
-        await sleep(delay)
+      // Poll checkSpinDepositMpesaStatus with 4-second intervals (matching deposit.ts pattern)
+      const maxAttempts = 30  // 30 attempts * 4 seconds = 2 minutes max
+      for (let i = 0; i < maxAttempts; i++) {
+        await sleep(4000)
         try {
-          const statusRes  = await fetch(
-            `/api/spin-wallet/check_status?checkoutRequestId=${encodeURIComponent(checkoutId)}`
-          )
-          const statusData = await statusRes.json()
+          const statusData = await checkSpinDepositMpesaStatus(checkoutId)
 
           console.log('[SpinWheel] Poll result:', statusData)
 
-          if (statusData.status === 'completed') {
+          if (statusData.data?.status === 'completed') {
             setDeposit({ phase: 'success', message: 'KES 30 added to your spin wallet!' })
             await loadAll()
             return
           }
 
-          if (statusData.status === 'failed') {
+          if (statusData.data?.status === 'failed' || statusData.data?.status === 'cancelled' || statusData.data?.status === 'timeout') {
             setDeposit({ phase: 'failed', message: 'Payment was cancelled or failed. Please try again.' })
             return
           }
 
-          // status === 'pending' → keep polling
+          // status === 'initiated' → keep polling
 
         } catch (pollErr) {
           console.error('[SpinWheel] Poll error (non-fatal, continuing):', pollErr)
