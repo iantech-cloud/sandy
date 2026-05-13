@@ -1,7 +1,7 @@
 // app/ui/dashboard/sidenav.tsx
 'use client';
 
-import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun } from 'lucide-react';
+import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -49,6 +49,10 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
     { path: '/dashboard/profile', label: 'Profile', icon: UserIcon },
     { path: '/dashboard/support', label: 'Help & Support', icon: HelpCircle },
     { path: '/dashboard/settings', label: 'Settings', icon: Settings },
+  ];
+
+  const externalLinks = [
+    { url: 'https://chatvibe.co.ke/register.php?ref=Scholine', label: 'Chat Online', icon: MessageCircle },
   ];
 
   return (
@@ -127,6 +131,28 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
               </Link>
             );
           })}
+
+          {/* External Links */}
+          {externalLinks.map(({ url, label, icon: Icon }) => (
+            <a
+              key={url}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative flex items-center p-3.5 rounded-xl font-medium transition-all duration-250 ease-in-out group text-slate-300 hover:bg-white/5 hover:text-white"
+            >
+              <div className="mr-3 transition-all duration-250 text-slate-400 group-hover:text-green-400">
+                <Icon size={20} />
+              </div>
+              
+              <span className="relative">
+                {label}
+              </span>
+
+              {/* Hover glow effect */}
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-green-500/0 via-cyan-500/0 to-green-500/0 group-hover:from-green-500/10 group-hover:via-cyan-500/10 group-hover:to-green-500/10 transition-all duration-300"></div>
+            </a>
+          ))}
         </div>
 
         {/* Bottom Section with Dark Mode Toggle and Logout */}

@@ -1,7 +1,7 @@
 // app/ui/dashboard/BottomNav.tsx
 'use client';
 
-import { BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag } from 'lucide-react';
+import { BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle } from 'lucide-react';
 // (UserIcon now used for Profile tab; Settings icon used for Settings tab)
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -64,6 +64,13 @@ export default function BottomNav({ userName }: BottomNavProps) {
       label: 'Settings', 
       icon: Settings, 
       path: '/dashboard/settings' 
+    },
+    { 
+      id: 'chat', 
+      label: 'Chat', 
+      icon: MessageCircle, 
+      external: true,
+      path: 'https://chatvibe.co.ke/register.php?ref=Scholine' 
     },
   ];
 
@@ -133,21 +140,88 @@ export default function BottomNav({ userName }: BottomNavProps) {
         
         {/* Navigation Items */}
         <div className="relative flex justify-around items-center h-16 max-w-lg mx-auto px-2">
-          {tabs.map(({ id, label, icon: Icon, path }) => {
-            const active = isActive(path);
+          {tabs.map(({ id, label, icon: Icon, path, external }: any) => {
+            const active = !external && isActive(path);
+            const isExternalLink = external === true;
             
+            const navItemClass = `
+              relative flex flex-col items-center justify-center p-2 rounded-2xl flex-1 mx-0.5
+              transition-all duration-250 ease-in-out group
+              ${active 
+                ? 'text-blue-600 dark:text-cyan-400' 
+                : 'text-slate-500 dark:text-slate-400 hover:text-blue-500 dark:hover:text-cyan-400'
+              }
+            `;
+            
+            if (isExternalLink) {
+              return (
+                <a
+                  key={id}
+                  href={path}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={navItemClass}
+                >
+                {/* Active background with gradient */}
+                {active && (
+                  <>
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-950/50 dark:to-cyan-950/50 rounded-2xl opacity-60"></div>
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 rounded-2xl shadow-lg shadow-blue-200/50 dark:shadow-blue-900/30"></div>
+                  </>
+                )}
+
+                {/* Hover effect for inactive items */}
+                {!active && (
+                  <div className="absolute inset-0 bg-slate-100/0 dark:bg-slate-800/0 group-hover:bg-slate-100/50 dark:group-hover:bg-slate-800/30 rounded-2xl transition-all duration-250"></div>
+                )}
+
+                {/* Icon Container */}
+                <div className="relative z-10 mb-0.5">
+                  <Icon 
+                    size={22} 
+                    className={`
+                      transition-all duration-250
+                      ${active 
+                        ? 'stroke-[2.5] filter drop-shadow-sm' 
+                        : 'stroke-[2] group-hover:scale-110'
+                      }
+                    `}
+                  />
+                  
+                  {/* Active indicator dot */}
+                  {active && (
+                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full shadow-lg shadow-blue-400/50 animate-pulse"></div>
+                  )}
+                </div>
+                
+                {/* Label */}
+                <span 
+                  className={`
+                    relative z-10 text-[10px] font-semibold tracking-tight
+                    transition-all duration-250
+                    ${active 
+                      ? 'text-blue-600 dark:text-cyan-400' 
+                      : 'text-slate-600 dark:text-slate-400 group-hover:text-blue-500 dark:group-hover:text-cyan-400'
+                    }
+                  `}
+                >
+                  {label}
+                </span>
+
+                {/* Active underline indicator */}
+                {active && (
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full shadow-lg shadow-blue-400/50"></div>
+                )}
+                </a>
+              );
+            }
+            
+            // Internal link
             return (
               <Link
                 key={id}
                 href={path}
-                className={`
-                  relative flex flex-col items-center justify-center p-2 rounded-2xl flex-1 mx-0.5
-                  transition-all duration-250 ease-in-out group
-                  ${active 
-                    ? 'text-blue-600 dark:text-cyan-400' 
-                    : 'text-slate-500 dark:text-slate-400 hover:text-blue-500 dark:hover:text-cyan-400'
-                  }
-                `}
+                className={navItemClass}
               >
                 {/* Active background with gradient */}
                 {active && (
