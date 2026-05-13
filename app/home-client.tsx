@@ -45,7 +45,7 @@ const valuePropositions: ValueProp[] = [
 ];
 
 const steps: Step[] = [
-  { step: '01', title: 'Create Account', description: "Sign up in minutes with your email and phone number. A one-time registration fee of Ksh 1000 applies." },
+  { step: '01', title: 'Create Account', description: "Sign up in minutes with your email and phone number. A one-time activation fee of KES 90 applies." },
   { step: '02', title: 'Choose Your Hustle', description: 'Select from 9 different earning methods that match your skills and interests.' },
   { step: '03', title: 'Start Earning', description: 'Complete tasks, projects, or activities and watch your earnings grow daily.' },
   { step: '04', title: 'Withdraw Instantly', description: 'Request withdrawals anytime via M-Pesa and receive your money within minutes.' },
