@@ -403,7 +403,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
     }
 
     // Constants for activation fee split
-    const ACTIVATION_FEE_CENTS = 10000; // KSH 100
+    const ACTIVATION_FEE_CENTS = 9000; // KES 90
 
     // ============================================================================
     // STEP 1: Handle activation fee payment (user side)
@@ -436,7 +436,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
       await activationTransaction.save({ session });
     } else {
       // ✅ FIXED: Admin activates without payment - NO BONUS given to user
-      // User gets activation WITHOUT paying, company keeps full KES 100 as profit
+      // User gets activation WITHOUT paying, company keeps full KES 90 as profit
       feeDeducted = false;
 
       // Create a reference transaction for tracking only (no money movement for user)
