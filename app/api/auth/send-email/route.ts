@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-// Configure nodemailer transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_APP_PASSWORD, // Use app password, not regular password
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+const getEmailFrom = () => {
+  const fromName = process.env.EMAIL_FROM_NAME || 'HustleHub Africa';
+  const fromAddress = process.env.EMAIL_FROM_ADDRESS || 'noreply@hustlehubafrica.com';
+  return `${fromName} <${fromAddress}>`;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,24 +30,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Send email
-    const mailOptions = {
-      from: {
-        name: process.env.EMAIL_FROM_NAME || 'Your App',
-        address: process.env.EMAIL_USER || 'noreply@yourapp.com',
-      },
+    if (!process.env.RESEND_API_KEY) {
+      return NextResponse.json(
+        { error: 'Email service not configured - missing RESEND_API_KEY' },
+        { status: 500 }
+      );
+    }
+
+    // Send email using Resend
+    const result = await resend.emails.send({
+      from: getEmailFrom(),
       to,
       subject,
       html: html || undefined,
       text: text || undefined,
-    };
+    });
 
-    const result = await transporter.sendMail(mailOptions);
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
 
     return NextResponse.json({
       success: true,
-      messageId: result.messageId,
-      response: result.response,
+      messageId: result.data?.id,
+      response: result.data,
     });
 
   } catch (error: any) {
@@ -67,12 +72,19 @@ export async function POST(request: NextRequest) {
 // Optional: GET method to test email configuration
 export async function GET(request: NextRequest) {
   try {
-    // Verify transporter configuration
-    await transporter.verify();
+    if (!process.env.RESEND_API_KEY) {
+      return NextResponse.json(
+        {
+          error: 'Email configuration error',
+          details: 'RESEND_API_KEY is not configured',
+        },
+        { status: 500 }
+      );
+    }
     
     return NextResponse.json({
       success: true,
-      message: 'Email transporter is configured correctly',
+      message: 'Email service is configured correctly (Resend)',
     });
   } catch (error: any) {
     return NextResponse.json(

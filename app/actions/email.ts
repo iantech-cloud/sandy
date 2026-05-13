@@ -1,26 +1,18 @@
 // app/actions/email.ts
 'use server';
 
-import nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
+import { Resend } from 'resend';
 import { Profile } from '@/app/lib/models/Profile';
 import { connectToDatabase } from '@/app/lib/mongoose';
 import { decrypt } from '@/app/lib/encryption';
 
-let transporter: Transporter | null = null;
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-function getTransporter(): Transporter {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
-    });
-  }
-  return transporter;
-}
+const getEmailFrom = () => {
+  const fromName = process.env.EMAIL_FROM_NAME || 'HustleHub Africa';
+  const fromAddress = process.env.EMAIL_FROM_ADDRESS || 'noreply@hustlehubafrica.com';
+  return `${fromName} <${fromAddress}>`;
+};
 
 /**
  * Get user's anti-phishing code for email inclusion
@@ -125,8 +117,8 @@ export async function sendSupportEmail(formData: {
   try {
     console.log('📧 Attempting to send support email from:', formData.email);
 
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-      console.error('❌ Missing email environment variables');
+    if (!process.env.RESEND_API_KEY) {
+      console.error('❌ Missing RESEND_API_KEY environment variable');
       return { 
         success: false, 
         error: 'Email service not configured properly' 
@@ -136,10 +128,10 @@ export async function sendSupportEmail(formData: {
     const antiPhishingCode = await getUserAntiPhishingCode(formData.email);
     const antiPhishingSection = generateAntiPhishingSection(antiPhishingCode);
 
-    // Email to support team
-    const supportMailOptions = {
-      from: `"HustleHub Africa Support" <${process.env.GMAIL_USER}>`,
-      to: process.env.GMAIL_USER, // Send to ourselves
+    // Send email to support team
+    const supportResult = await resend.emails.send({
+      from: getEmailFrom(),
+      to: process.env.EMAIL_FROM_ADDRESS || 'noreply@hustlehubafrica.com',
       subject: `Support Request: ${formData.subject}`,
       html: `
         <!DOCTYPE html>
@@ -192,11 +184,11 @@ export async function sendSupportEmail(formData: {
         </body>
         </html>
       `,
-    };
+    });
 
-    // Auto-reply to user
-    const userMailOptions = {
-      from: `"HustleHub Africa Support" <${process.env.GMAIL_USER}>`,
+    // Send auto-reply to user
+    const userResult = await resend.emails.send({
+      from: getEmailFrom(),
       to: formData.email,
       subject: `We've received your support request: ${formData.subject}`,
       html: `
@@ -267,23 +259,20 @@ export async function sendSupportEmail(formData: {
         </body>
         </html>
       `,
-    };
+    });
 
-    await getTransporter().verify();
-    console.log('✅ Email transporter verified successfully');
-
-    // Send both emails
-    const supportResult = await getTransporter().sendMail(supportMailOptions);
-    const userResult = await getTransporter().sendMail(userMailOptions);
+    if (supportResult.error || userResult.error) {
+      throw new Error(`Email send error: ${supportResult.error?.message || userResult.error?.message}`);
+    }
 
     console.log('✅ Support emails sent successfully');
-    console.log('📨 Support Message ID:', supportResult.messageId);
-    console.log('📨 User Auto-reply Message ID:', userResult.messageId);
+    console.log('📨 Support Message ID:', supportResult.data?.id);
+    console.log('📨 User Auto-reply Message ID:', userResult.data?.id);
 
     return { 
       success: true, 
-      messageId: supportResult.messageId,
-      autoReplyMessageId: userResult.messageId,
+      messageId: supportResult.data?.id,
+      autoReplyMessageId: userResult.data?.id,
       hasAntiPhishingCode: !!antiPhishingCode
     };
   } catch (error) {
@@ -293,24 +282,7 @@ export async function sendSupportEmail(formData: {
       console.error('Error details:', {
         name: error.name,
         message: error.message,
-        stack: error.stack
       });
-
-      if (error.message.includes('Invalid login')) {
-        console.error('🔐 Authentication failed. Check GMAIL_USER and GMAIL_APP_PASSWORD');
-        return { 
-          success: false, 
-          error: 'Email authentication failed. Please check email configuration.' 
-        };
-      }
-
-      if (error.message.includes('ENOTFOUND')) {
-        console.error('🌐 Network error. Check internet connection.');
-        return { 
-          success: false, 
-          error: 'Network error. Please check your connection.' 
-        };
-      }
     }
 
     return { 
@@ -325,8 +297,8 @@ export async function sendVerificationEmail(email: string, token: string) {
   try {
     console.log('📧 Attempting to send verification email to:', email);
 
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-      console.error('❌ Missing email environment variables');
+    if (!process.env.RESEND_API_KEY) {
+      console.error('❌ Missing RESEND_API_KEY environment variable');
       return { 
         success: false, 
         error: 'Email service not configured properly' 
@@ -347,8 +319,8 @@ export async function sendVerificationEmail(email: string, token: string) {
       antiPhishingCodePreview: antiPhishingCode ? `${antiPhishingCode.substring(0, 3)}...` : 'None'
     });
 
-    const mailOptions = {
-      from: `"HustleHub Africa" <${process.env.GMAIL_USER}>`,
+    const result = await resend.emails.send({
+      from: getEmailFrom(),
       to: email,
       subject: 'Verify Your Email - HustleHub Africa',
       html: `
@@ -418,18 +390,18 @@ export async function sendVerificationEmail(email: string, token: string) {
         </body>
         </html>
       `,
-    };
+    });
 
-    await getTransporter().verify();
-    console.log('✅ Email transporter verified successfully');
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
 
-    const result = await getTransporter().sendMail(mailOptions);
     console.log('✅ Email sent successfully to:', email);
-    console.log('📨 Message ID:', result.messageId);
+    console.log('📨 Message ID:', result.data?.id);
 
     return { 
       success: true, 
-      messageId: result.messageId,
+      messageId: result.data?.id,
       email: email,
       hasAntiPhishingCode: !!antiPhishingCode
     };
@@ -440,24 +412,7 @@ export async function sendVerificationEmail(email: string, token: string) {
       console.error('Error details:', {
         name: error.name,
         message: error.message,
-        stack: error.stack
       });
-
-      if (error.message.includes('Invalid login')) {
-        console.error('🔐 Authentication failed. Check GMAIL_USER and GMAIL_APP_PASSWORD');
-        return { 
-          success: false, 
-          error: 'Email authentication failed. Please check email configuration.' 
-        };
-      }
-
-      if (error.message.includes('ENOTFOUND')) {
-        console.error('🌐 Network error. Check internet connection.');
-        return { 
-          success: false, 
-          error: 'Network error. Please check your connection.' 
-        };
-      }
     }
 
     return { 
@@ -476,8 +431,8 @@ export async function sendVerificationCodeEmail(
   try {
     console.log(`📧 Sending verification code to: ${email} for ${purpose}`);
 
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-      console.error('❌ Missing email environment variables');
+    if (!process.env.RESEND_API_KEY) {
+      console.error('❌ Missing RESEND_API_KEY environment variable');
       return { 
         success: false, 
         error: 'Email service not configured properly' 
@@ -494,11 +449,7 @@ export async function sendVerificationCodeEmail(
       antiPhishingCodePreview: antiPhishingCode ? `${antiPhishingCode.substring(0, 3)}...` : 'None'
     });
 
-    const mailOptions = {
-      from: `"HustleHub Africa" <${process.env.GMAIL_USER}>`,
-      to: email,
-      subject: `Verification Code - ${purpose}`,
-      html: `
+    const htmlContent = `
         <!DOCTYPE html>
         <html>
         <head>
@@ -564,15 +515,23 @@ export async function sendVerificationCodeEmail(
       `,
     };
 
-    await getTransporter().verify();
-    const result = await getTransporter().sendMail(mailOptions);
+    const result = await resend.emails.send({
+      from: getEmailFrom(),
+      to: email,
+      subject: `Verification Code - ${purpose}`,
+      html: htmlContent,
+    });
+
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
 
     console.log('✅ Verification code email sent successfully');
-    console.log('📨 Message ID:', result.messageId);
+    console.log('📨 Message ID:', result.data?.id);
 
     return { 
       success: true, 
-      messageId: result.messageId,
+      messageId: result.data?.id,
       hasAntiPhishingCode: !!antiPhishingCode
     };
   } catch (error) {
@@ -597,8 +556,8 @@ export async function sendWelcomeEmail(email: string, username: string) {
       antiPhishingCodePreview: antiPhishingCode ? `${antiPhishingCode.substring(0, 3)}...` : 'None'
     });
 
-    const mailOptions = {
-      from: `"HustleHub Africa" <${process.env.GMAIL_USER}>`,
+    const result = await resend.emails.send({
+      from: getEmailFrom(),
       to: email,
       subject: 'Welcome to HustleHub Africa!',
       html: `
@@ -655,14 +614,71 @@ export async function sendWelcomeEmail(email: string, username: string) {
         </body>
         </html>
       `,
-    };
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Welcome to HustleHub Africa</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f9fafb;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+                <div style="background: linear-gradient(135deg, #4F46E5, #7E22CE); padding: 30px; text-align: center; color: white;">
+                    <h1 style="margin: 0; font-size: 28px; font-weight: bold;">HustleHub Africa</h1>
+                    <p style="margin: 5px 0 0 0; opacity: 0.9;">Welcome to Our Community!</p>
+                </div>
 
-    const result = await getTransporter().sendMail(mailOptions);
+                <div style="padding: 30px;">
+                    <h2 style="color: #1f2937; margin-bottom: 20px;">Hello ${username}!</h2>
+                    <p style="color: #6b7280; line-height: 1.6; margin-bottom: 25px;">
+                        Your email has been successfully verified! Welcome to Africa's premier earning platform.
+                    </p>
+
+                    ${antiPhishingSection}
+
+                    <p style="color: #6b7280; line-height: 1.6; margin-bottom: 20px;">
+                        Get ready to start earning through:
+                    </p>
+                    <ul style="color: #6b7280; line-height: 1.6; margin-bottom: 25px;">
+                        <li>💼 Surveys and market research</li>
+                        <li>📝 Content creation opportunities</li>
+                        <li>👥 Referral commissions</li>
+                        <li>🎯 Various earning tasks</li>
+                    </ul>
+
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/dashboard" 
+                          style="background-color: #4F46E5; color: white; padding: 14px 32px; 
+                                 text-decoration: none; border-radius: 8px; display: inline-block;
+                                 font-weight: bold; font-size: 16px; border: none; cursor: pointer;
+                                 box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);">
+                            Go to Dashboard
+                        </a>
+                    </div>
+                </div>
+
+                <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+                    <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                        © 2024 HustleHub Africa. All rights reserved.<br>
+                        Building Africa's Premier Earning Platform
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+      `,
+    });
+
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+
     console.log('✅ Welcome email sent to:', email);
 
     return { 
       success: true, 
-      messageId: result.messageId,
+      messageId: result.data?.id,
       hasAntiPhishingCode: !!antiPhishingCode
     };
   } catch (error) {
@@ -694,8 +710,8 @@ export async function sendInitialPaymentInvoice(
   try {
     console.log('📧 Sending initial payment invoice to:', email);
 
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-      console.error('❌ Missing email environment variables');
+    if (!process.env.RESEND_API_KEY) {
+      console.error('❌ Missing RESEND_API_KEY environment variable');
       return { 
         success: false, 
         error: 'Email service not configured properly' 
@@ -705,8 +721,8 @@ export async function sendInitialPaymentInvoice(
     const antiPhishingCode = await getUserAntiPhishingCode(email);
     const antiPhishingSection = generateAntiPhishingSection(antiPhishingCode);
 
-    const mailOptions = {
-      from: `"HustleHub Africa Billing" <${process.env.GMAIL_USER}>`,
+    const result = await resend.emails.send({
+      from: getEmailFrom(),
       to: email,
       subject: `Payment Invoice #${invoiceData.invoiceNumber} - Account Activation Required`,
       html: `
@@ -817,13 +833,14 @@ export async function sendInitialPaymentInvoice(
         </body>
         </html>
       `,
-    };
+    });
 
-    await getTransporter().verify();
-    const result = await getTransporter().sendMail(mailOptions);
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
 
     console.log('✅ Initial payment invoice sent successfully');
-    console.log('📨 Message ID:', result.messageId);
+    console.log('📨 Message ID:', result.data?.id);
     console.log('📄 Invoice Details:', {
       invoiceNumber: invoiceData.invoiceNumber,
       amount: invoiceData.amount,
@@ -832,7 +849,7 @@ export async function sendInitialPaymentInvoice(
 
     return { 
       success: true, 
-      messageId: result.messageId,
+      messageId: result.data?.id,
       invoiceNumber: invoiceData.invoiceNumber,
       hasAntiPhishingCode: !!antiPhishingCode
     };
@@ -865,8 +882,8 @@ export async function sendPaymentConfirmationInvoice(
   try {
     console.log('📧 Sending payment confirmation invoice to:', email);
 
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-      console.error('❌ Missing email environment variables');
+    if (!process.env.RESEND_API_KEY) {
+      console.error('❌ Missing RESEND_API_KEY environment variable');
       return { 
         success: false, 
         error: 'Email service not configured properly' 
@@ -882,8 +899,8 @@ export async function sendPaymentConfirmationInvoice(
       manual: 'Manual Payment'
     }[invoiceData.paymentMethod];
 
-    const mailOptions = {
-      from: `"HustleHub Africa Billing" <${process.env.GMAIL_USER}>`,
+    const result = await resend.emails.send({
+      from: getEmailFrom(),
       to: email,
       subject: `Payment Confirmation #${invoiceData.invoiceNumber} - Account Activated`,
       html: `
@@ -1012,13 +1029,14 @@ export async function sendPaymentConfirmationInvoice(
         </body>
         </html>
       `,
-    };
+    });
 
-    await getTransporter().verify();
-    const result = await getTransporter().sendMail(mailOptions);
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
 
     console.log('✅ Payment confirmation invoice sent successfully');
-    console.log('📨 Message ID:', result.messageId);
+    console.log('📨 Message ID:', result.data?.id);
     console.log('📄 Confirmation Details:', {
       confirmationNumber: invoiceData.invoiceNumber,
       transactionId: invoiceData.transactionId,
@@ -1028,7 +1046,7 @@ export async function sendPaymentConfirmationInvoice(
 
     return { 
       success: true, 
-      messageId: result.messageId,
+      messageId: result.data?.id,
       confirmationNumber: invoiceData.invoiceNumber,
       hasAntiPhishingCode: !!antiPhishingCode
     };
@@ -1046,38 +1064,41 @@ export async function testEmailConfig() {
   try {
     console.log('🧪 Testing email configuration...');
 
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
-      console.error('❌ Missing environment variables: GMAIL_USER or GMAIL_APP_PASSWORD');
+    if (!process.env.RESEND_API_KEY) {
+      console.error('❌ Missing environment variables: RESEND_API_KEY');
       return { 
         success: false, 
-        error: 'Missing email environment variables' 
+        error: 'Missing RESEND_API_KEY environment variable' 
       };
     }
 
-    const testTransporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
+    // Test Resend configuration by sending a test email
+    const testResult = await resend.emails.send({
+      from: getEmailFrom(),
+      to: 'test@example.com', // Resend will validate without actually sending
+      subject: 'Test Email Configuration',
+      html: '<p>This is a test email.</p>',
     });
 
-    await testTransporter.verify();
+    if (testResult.error) {
+      throw new Error(testResult.error.message);
+    }
+
     console.log('✅ Email configuration is correct and working');
 
     return { 
       success: true, 
-      message: 'Email configuration is correct and working',
-      email: process.env.GMAIL_USER 
+      message: 'Email configuration is correct and working (Resend)',
+      email: process.env.EMAIL_FROM_ADDRESS 
     };
   } catch (error) {
     console.error('❌ Email configuration test failed:', error);
 
     let errorMessage = 'Email configuration failed';
     if (error instanceof Error) {
-      if (error.message.includes('Invalid login')) {
-        errorMessage = 'Gmail authentication failed. Check your GMAIL_APP_PASSWORD.';
-      } else if (error.message.includes('ENOTFOUND')) {
+      if (error.message.includes('Resend API')) {
+        errorMessage = 'Resend API authentication failed. Check your RESEND_API_KEY.';
+      } else if (error.message.includes('Network') || error.message.includes('ENOTFOUND')) {
         errorMessage = 'Network error. Check your internet connection.';
       } else {
         errorMessage = error.message;
