@@ -973,8 +973,11 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
         status: 'pending',
         mpesa_transaction_id: mpesaTransaction._id,
         
-        // ✅ REQUIRED fields for transaction tracking
-        target_type: 'activation',
+        // ✅ REQUIRED fields for transaction tracking.
+        // target_type must match schema enum ['user','company'].
+        // deposit_type in metadata identifies this as an activation payment
+        // so the callback can route it correctly.
+        target_type: 'user',
         target_id: userProfile._id.toString(),
         
         metadata: {

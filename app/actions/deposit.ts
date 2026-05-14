@@ -185,14 +185,20 @@ async function validateDeposit(
         return { valid: false, message: 'User not found' };
     }
 
+    // Only block if there is a *recent* in-flight wallet deposit (within the
+    // last 3 minutes). Stale 'initiated'/'pending' records left behind by failed
+    // spin-wallet or activation deposits must not prevent new wallet deposits.
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
     const pendingMpesaTransaction = await (MpesaTransaction as any).findOne({
         user_id: userId,
         status: { $in: ['initiated', 'pending'] },
         phone_number: formattedPhone,
+        source: 'wallet',
+        created_at: { $gte: threeMinutesAgo },
     });
 
     if (pendingMpesaTransaction) {
-        return { valid: false, message: 'You have a pending M-Pesa transaction. Please complete or wait for it to be processed.' };
+        return { valid: false, message: 'You have a pending M-Pesa deposit in progress. Please wait for it to complete before starting another.' };
     }
 
     return { valid: true, message: 'Validation passed', data: { formattedPhone } };
