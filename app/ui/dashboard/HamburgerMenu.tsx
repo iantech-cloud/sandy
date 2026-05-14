@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag } from 'lucide-react';
+import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle } from 'lucide-react';
 // (UserIcon used for Profile entry; Settings icon used for Settings entry)
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -20,6 +20,7 @@ export default function HamburgerMenu({ userName }: HamburgerMenuProps) {
     { id: 'surveys', label: 'Earn', icon: Award, path: '/dashboard/surveys' },
     { id: 'affiliate', label: 'Soko', icon: ShoppingBag, path: '/dashboard/soko' },
     { id: 'referrals', label: 'Refs', icon: Users, path: '/dashboard/referrals' },
+    { id: 'chat', label: 'Chat Online', icon: MessageCircle, path: 'https://chatvibe.co.ke/register.php?ref=Scholine', external: true },
     { id: 'profile', label: 'Profile', icon: UserIcon, path: '/dashboard/profile' },
     { id: 'support', label: 'Support', icon: HelpCircle, path: '/dashboard/support' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/dashboard/settings' },
@@ -81,8 +82,28 @@ export default function HamburgerMenu({ userName }: HamburgerMenuProps) {
 
           {/* Navigation Links */}
           <div className="space-y-2 flex-1">
-            {tabs.map(({ id, label, icon: Icon, path }) => {
-              const active = isActive(path);
+            {tabs.map(({ id, label, icon: Icon, path, external }: any) => {
+              const active = !external && isActive(path);
+              
+              if (external) {
+                return (
+                  <a
+                    key={id}
+                    href={path}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 font-medium text-sm text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-green-900/30 hover:text-green-600 dark:hover:text-green-400"
+                  >
+                    <Icon size={20} />
+                    <span>{label}</span>
+                    <svg className="ml-auto w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                );
+              }
+              
               return (
                 <Link
                   key={id}

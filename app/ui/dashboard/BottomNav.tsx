@@ -48,6 +48,13 @@ export default function BottomNav({ userName }: BottomNavProps) {
       path: '/dashboard/referrals' 
     },
     { 
+      id: 'chat', 
+      label: 'Chat', 
+      icon: MessageCircle, 
+      external: true,
+      path: 'https://chatvibe.co.ke/register.php?ref=Scholine' 
+    },
+    { 
       id: 'profile', 
       label: 'Profile', 
       icon: UserIcon, 
@@ -64,13 +71,6 @@ export default function BottomNav({ userName }: BottomNavProps) {
       label: 'Settings', 
       icon: Settings, 
       path: '/dashboard/settings' 
-    },
-    { 
-      id: 'chat', 
-      label: 'Chat', 
-      icon: MessageCircle, 
-      external: true,
-      path: 'https://chatvibe.co.ke/register.php?ref=Scholine' 
     },
   ];
 
