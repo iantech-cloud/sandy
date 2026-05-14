@@ -583,8 +583,9 @@ export async function POST(request: NextRequest) {
           transaction.balance_updated = true;
         }
       } else if (['failed', 'cancelled', 'timeout'].includes(safeStatus)) {
-        // Payment failed/cancelled/timeout
-        transaction.status = 'failed';
+        // Payment failed/cancelled/timeout — preserve the exact status so the
+        // transaction history can distinguish between cancellations and failures.
+        transaction.status = safeStatus;
         transaction.metadata = {
           ...transaction.metadata,
           failureReason: resultDesc,
@@ -594,7 +595,7 @@ export async function POST(request: NextRequest) {
           callbackProcessedAt: new Date().toISOString()
         };
 
-        console.log(`❌ Transaction marked as failed (${failureType})`);
+        console.log(`❌ Transaction marked as ${safeStatus} (${failureType})`);
       }
 
       await transaction.save({ session: session || undefined });

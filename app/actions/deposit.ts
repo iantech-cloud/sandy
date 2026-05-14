@@ -38,6 +38,7 @@ interface DepositHistoryItem {
     description: string;
     date: string;
     status: string;
+    transaction_code?: string;
     mpesaReceiptNumber?: string;
 }
 
@@ -590,6 +591,9 @@ export async function checkMpesaPaymentStatus(checkoutRequestId: string): Promis
 
         if (['completed', 'failed', 'cancelled', 'timeout'].includes(safeStatus)) {
             try {
+                // Only sync the Transaction record status. Wallet crediting is
+                // exclusively handled by the M-Pesa callback route to prevent
+                // multi-credit from repeated polling cycles.
                 await syncTransactionWithMpesaStatus(
                     mpesaTransaction._id,
                     safeStatus,
@@ -597,32 +601,8 @@ export async function checkMpesaPaymentStatus(checkoutRequestId: string): Promis
                     queryData.ResultDesc,
                     queryData.MpesaReceiptNumber
                 );
-
-                if (safeStatus === 'completed') {
-                    // 🔒 Idempotency: only credit main wallet if the callback has not
-                    // already done so AND the deposit_type is for the main wallet.
-                    const alreadyProcessed = mpesaTransaction.metadata?.callback_processed === true;
-                    const depositType = mpesaTransaction.metadata?.deposit_type;
-                    const isMainWallet = depositType === 'wallet' || depositType === 'wallet_topup' || !depositType;
-
-                    if (alreadyProcessed) {
-                        console.log('⏭️ Skipping main wallet credit — callback already processed this transaction');
-                    } else if (!isMainWallet) {
-                        console.log(`⏭️ Skipping main wallet credit — deposit_type=${depositType}`);
-                    } else {
-                        await updateUserBalance(mpesaTransaction.user_id, mpesaTransaction.amount_cents);
-                        // Mark so subsequent polls do not re-credit
-                        mpesaTransaction.metadata = {
-                            ...(mpesaTransaction.metadata || {}),
-                            callback_processed: true,
-                            credited_via: 'polling',
-                            credited_at: new Date().toISOString(),
-                        };
-                        await mpesaTransaction.save();
-                    }
-                }
             } catch (updateError) {
-                console.error('❌ Failed to update transaction or user balance:', updateError);
+                console.error('❌ Failed to sync transaction status:', updateError);
             }
         }
 
@@ -753,7 +733,8 @@ export async function getDepositHistory(limit: number = 20, page: number = 1): P
             description: deposit.description,
             date: deposit.created_at?.toISOString() || new Date().toISOString(),
             status: deposit.status,
-            mpesaReceiptNumber: deposit.metadata?.mpesa_receipt_number
+            transaction_code: deposit.transaction_code,
+            mpesaReceiptNumber: deposit.metadata?.mpesa_receipt_number || deposit.metadata?.mpesaReceiptNumber
         }));
 
         return {
