@@ -16,7 +16,8 @@ import { depositSpinWalletViaMpesa } from '@/app/actions/spin'
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
-    if (!session?.user?.id) {
+    // Support both session.user.id and session.user.email for auth check
+    if (!session?.user?.id && !session?.user?.email) {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
     }
 

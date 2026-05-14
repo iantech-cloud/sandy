@@ -74,11 +74,16 @@ export default function WalletPage() {
     console.log('Transforming transaction:', tx);
     
     // Handle amount safely
+    // NOTE: getDepositHistory already returns `amount` in KES (not cents),
+    // so we should NOT divide by 100 again. Only divide amount_cents if it's
+    // the raw cents value from a different source.
     let amount = 0;
-    if (tx.amount_cents && !isNaN(tx.amount_cents)) {
-      amount = tx.amount_cents / 100;
-    } else if (tx.amount && !isNaN(tx.amount)) {
+    if (typeof tx.amount === 'number' && !isNaN(tx.amount)) {
+      // `amount` is already in KES (from getDepositHistory)
       amount = tx.amount;
+    } else if (typeof tx.amount_cents === 'number' && !isNaN(tx.amount_cents)) {
+      // Raw cents value needs conversion
+      amount = tx.amount_cents / 100;
     }
     
     // Handle description safely
