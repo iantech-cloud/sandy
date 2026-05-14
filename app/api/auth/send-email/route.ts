@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resend: Resend | null = null;
+
+const getResendClient = () => {
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resend;
+};
 
 const getEmailFrom = () => {
   const fromName = process.env.EMAIL_FROM_NAME || 'HustleHub Africa';
@@ -38,7 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Send email using Resend
-    const result = await resend.emails.send({
+    const result = await getResendClient().emails.send({
       from: getEmailFrom(),
       to,
       subject,
