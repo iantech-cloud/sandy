@@ -168,7 +168,7 @@ export default function ConfirmContent() {
                   <p className="text-sm text-blue-700 font-medium mb-1">Next Steps:</p>
                   <ul className="text-sm text-blue-600 text-left space-y-1">
                     <li>• Log in with your email and password</li>
-                    <li>• Complete the activation payment of <strong>KES 100</strong></li>
+                    <li>• Complete the activation payment of <strong>KES 90</strong></li>
                     <li>• Start earning immediately after activation</li>
                   </ul>
                 </div>

@@ -155,19 +155,13 @@ export interface CreateReferralRequest {
 // --- End New Referral Types ---
 
 export interface CommissionConfig {
-  directReferral: number; // KSH 800 for direct referral
-  level1: number; // KSH 100 for level 1 downline
-  level2: number; // KSH 50 for level 2 downline
-  level3: number; // KSH 25 for level 3 downline
-  activationAmount: number; // KSH 1000 activation fee
+  directReferral: number; // KSH 70 for direct referral
+  activationAmount: number; // KSH 90 activation fee
 }
 
 export const COMMISSION_CONFIG: CommissionConfig = {
-  directReferral: 80000, // in cents (800 KSH)
-  level1: 10000, // in cents (100 KSH)
-  level2: 5000, // in cents (50 KSH)
-  level3: 2500, // in cents (25 KSH)
-  activationAmount: 100000 // in cents (1000 KSH)
+  directReferral: 7000, // in cents (70 KSH)
+  activationAmount: 9000 // in cents (90 KSH)
 };
 
 // Updated Stats interface (includes referral stats and per-source wallet aggregations)

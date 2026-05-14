@@ -375,11 +375,9 @@ export default function ReferEarn() {
 
 // Data arrays
 const referEarnCommissions = [
-  { tier: 'Direct Referral Bonus', amount: '$10 per signup' },
-  { tier: 'Level 2 Referrals', amount: '$5 per signup' },
-  { tier: 'Level 3 Referrals', amount: '$2 per signup' },
-  { tier: 'Activity Bonus', amount: '$20 monthly' },
-  { tier: 'Team Performance Bonus', amount: 'Up to $500' }
+  { tier: 'Direct Referral Bonus', amount: 'KES 70 per signup' },
+  { tier: 'Activity Bonus', amount: 'KES 20 monthly' },
+  { tier: 'Team Performance Bonus', amount: 'Up to KES 500' }
 ]
 
 const affiliateCommissions = [
@@ -479,8 +477,8 @@ const faqs = [
     answer: 'Not necessarily. While social media helps, many successful referrers start with personal networks, email lists, or niche communities. Quality relationships often convert better than large audiences.'
   },
   {
-    question: 'How are the referral levels calculated?',
-    answer: 'Level 1: People you directly refer. Level 2: People referred by your Level 1 referrals. Level 3: People referred by your Level 2 referrals. You earn commissions from all three levels.'
+    question: 'How does the referral system work?',
+    answer: 'You earn KES 70 for each person you directly refer who activates their account. Simply share your unique referral link or code, and when they sign up and pay the KES 90 activation fee, you earn your commission automatically.'
   },
   {
     question: 'Can I combine refer-earn with other earning methods on the platform?',

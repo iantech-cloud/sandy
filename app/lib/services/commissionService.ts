@@ -1,10 +1,9 @@
 import { connectToDatabase, Profile, Referral, DownlineUser, Transaction, ActivationPayment } from '@/app/lib/models';
 
-// Updated commission configuration per referral system spec
+// Updated commission configuration - Direct referrals only (single level)
 export const COMMISSION_CONFIG = {
-  level1: 7000,  // KES 70 for direct referrals (Level 1)
-  level2: 1000,  // KES 10 for indirect referrals (Level 2)
-  activationFee: 10000 // KES 100 activation fee
+  level1: 7000,  // KES 70 for direct referrals
+  activationFee: 9000 // KES 90 activation fee
 };
 
 export class CommissionService {
@@ -43,15 +42,12 @@ export class CommissionService {
 
       const directReferrer = directReferral.referrer_id;
       
-      // Process direct referral commission (Level 0)
+      // Process direct referral commission only (single level system)
       const directCommission = await this.processDirectReferralCommission(
         directReferrer, 
         approvedUser,
         directReferral
       );
-
-      // Process level 1 downline commission (only one level)
-      await this.processLevel1Commission(directReferrer, approvedUser);
 
       console.log(`Successfully processed commissions for approved user: ${approvedUserId}`);
       
