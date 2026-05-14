@@ -446,7 +446,7 @@ const AdditionalContent: React.FC = () => (
         </h3>
         
         <p className="mb-6">
-          When people search for "how to make money online Kenya," security is often a major concern. HustleHub Africa employs bank-grade encryption and secure payment processing to protect your earnings and personal information. Our transparent fee structure (one-time Ksh 1000 registration) means no hidden costs or surprise deductions from your hard-earned money.
+          When people search for "how to make money online Kenya," security is often a major concern. HustleHub Africa employs bank-grade encryption and secure payment processing to protect your earnings and personal information. Our transparent fee structure (one-time Ksh 90 registration) means no hidden costs or surprise deductions from your hard-earned money.
         </p>
 
         <h3 className="text-2xl font-bold text-gray-900 mt-8 mb-4">
@@ -499,7 +499,7 @@ const FinalCTA: React.FC = () => (
       </div>
 
       <p className="text-base font-semibold mt-2 mb-8 opacity-90">
-        <span className="text-green-400">One-time Registration Fee: Ksh 1000</span>
+        <span className="text-green-400">One-time Activation Fee: Ksh 90</span>
       </p>
 
       <div className="flex flex-wrap justify-center items-center text-sm space-x-4 sm:space-x-8 mt-10">

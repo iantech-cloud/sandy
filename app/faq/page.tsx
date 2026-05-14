@@ -16,12 +16,12 @@ const faqData: FAQItem[] = [
   // Registration & Account
   {
     question: "How do I create an account on HustleHub Africa?",
-    answer: "Creating an account is simple! Click the 'Get Started' button on our homepage, fill in your details including your email and phone number, pay the one-time registration fee of Ksh 1000, and you'll have immediate access to all earning methods.",
+    answer: "Creating an account is simple! Click the 'Get Started' button on our homepage, fill in your details including your email and phone number, pay the one-time activation fee of Ksh 90, and you'll have immediate access to all earning methods.",
     category: "Registration & Account"
   },
   {
     question: "Is there a registration fee?",
-    answer: "Yes, there is a one-time registration fee of Ksh 1000. This gives you lifetime access to all 9 earning methods on our platform with no additional hidden charges.",
+    answer: "Yes, there is a one-time activation fee of Ksh 90. This gives you lifetime access to all 9 earning methods on our platform with no additional hidden charges.",
     category: "Registration & Account"
   },
   {

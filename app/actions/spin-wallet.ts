@@ -174,13 +174,16 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
       }
     }
 
-    const status = await queryStkPushStatus(checkoutRequestId)
-    console.log(`[SpinWallet] STK status for ${checkoutRequestId}:`, status)
+    const queryResult = await queryStkPushStatus(checkoutRequestId)
+    console.log(`[SpinWallet] STK status for ${checkoutRequestId}:`, queryResult)
 
-    if (status.success && status.status === 'completed') {
+    // Handle the response structure from queryStkPushStatus
+    // It returns: { success, status, resultCode, resultDesc, checkoutRequestId, merchantRequestId, responseDescription }
+    if (queryResult.success && queryResult.status === 'completed') {
       deposit.mpesa_status = 'completed'
       deposit.status = 'completed'
-      deposit.mpesa_receipt_number = status.mpesaReceiptNumber
+      // Note: queryStkPushStatus doesn't return mpesaReceiptNumber directly
+      // It would need to be fetched from the callback data
       deposit.deposited_at = new Date()
 
       spinWallet.balance_cents += deposit.amount_cents
@@ -196,8 +199,9 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
         source: 'mpesa',
         description: `Spin wallet deposit - KES ${deposit.amount_cents / 100}`,
         metadata: {
-          mpesa_receipt: status.mpesaReceiptNumber,
           checkout_request_id: checkoutRequestId,
+          result_code: queryResult.resultCode,
+          result_desc: queryResult.resultDesc,
         },
       })
 
@@ -209,7 +213,7 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
         message: `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`,
         balance: spinWallet.balance_cents,
       }
-    } else if (status.status === 'pending') {
+    } else if (queryResult.status === 'pending') {
       return {
         success: true,
         status: 'pending',
@@ -217,14 +221,15 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
         balance: spinWallet.balance_cents,
       }
     } else {
-      deposit.mpesa_status = status.status || 'failed'
+      // Handle failed, cancelled, or timeout statuses
+      deposit.mpesa_status = queryResult.status || 'failed'
       deposit.status = 'failed'
       await spinWallet.save()
 
       return {
         success: false,
-        status: 'failed',
-        message: 'Payment failed or was cancelled.',
+        status: queryResult.status || 'failed',
+        message: queryResult.resultDesc || 'Payment failed or was cancelled.',
         balance: spinWallet.balance_cents,
       }
     }

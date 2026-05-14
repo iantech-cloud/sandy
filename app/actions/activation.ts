@@ -189,19 +189,23 @@ function mapMpesaResultCodeToDatabase(resultCode: string): number {
 }
 
 /**
- * M-Pesa STK Push initiation with proper URL registration and enhanced metadata
+ * M-Pesa STK Push initiation - matching deposit.ts working pattern exactly
+ * Amount is in CENTS - will be converted to KES for M-Pesa
  */
 async function initiateMpesaSTKPush(
   phoneNumber: string, 
-  amount: number, 
+  amountCents: number, 
   description: string,
   reference: string,
   activationPaymentId: string
 ): Promise<MpesaSTKPushResult> {
   try {
+    // Convert cents to KES for M-Pesa API
+    const amountKES = Math.floor(amountCents / 100);
+    
     console.log('🔍 M-Pesa STK Push Initiation Started');
     console.log('📱 Phone:', phoneNumber);
-    console.log('💰 Amount (cents):', amount, '| Amount (KES):', Math.floor(amount / 100));
+    console.log('💰 Amount (cents):', amountCents, '| Amount (KES):', amountKES);
     console.log('📝 Description:', description);
     console.log('🏷️ Reference:', reference);
     console.log('🎯 Activation Payment ID:', activationPaymentId);
@@ -235,20 +239,27 @@ async function initiateMpesaSTKPush(
     const accessToken = await getMpesaAccessToken();
     console.log('✅ Access token obtained');
 
-    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    // Generate timestamp matching deposit.ts format
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const timestamp = `${year}${month}${day}${hours}${minutes}${seconds}`;
+    
     const password = Buffer.from(`${BusinessShortCode}${PassKey}${timestamp}`).toString('base64');
 
     console.log('⏰ Timestamp:', timestamp);
     console.log('🔐 Password (base64):', password.substring(0, 20) + '...');
-
-    const amountInShillings = Math.floor(amount / 100);
     
     const stkPushPayload = {
       BusinessShortCode: BusinessShortCode,
       Password: password,
       Timestamp: timestamp,
       TransactionType: 'CustomerPayBillOnline',
-      Amount: amountInShillings,
+      Amount: amountKES,
       PartyA: phoneNumber,
       PartyB: BusinessShortCode,
       PhoneNumber: phoneNumber,

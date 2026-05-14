@@ -71,10 +71,6 @@ interface CommissionStats {
     totalEarnings: number; 
     count: number;
   };
-  level2: { 
-    totalEarnings: number; 
-    count: number;
-  };
   total: number;
 }
 
@@ -215,37 +211,25 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
       return { success: false, message: 'User not found' };
     }
 
-    // Get Level 1 commissions (direct referrals - KES 70 each)
-    const level1Transactions = await (Transaction as any).find({
+    // Get direct referral commissions (KES 70 each)
+    // Look for REFERRAL transactions with level 1 or no level specified (for backward compatibility)
+    const directReferralTransactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
-      'metadata.level': 1
+      $or: [
+        { 'metadata.level': 1 },
+        { 'metadata.level': { $exists: false } }
+      ]
     }).lean();
 
-    const level1Earnings = level1Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
-
-    // Get Level 2 commissions (indirect referrals - KES 10 each)
-    const level2Transactions = await (Transaction as any).find({
-      user_id: currentUser._id,
-      type: 'REFERRAL',
-      'metadata.level': 2
-    }).lean();
-
-    const level2Earnings = level2Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
-
-    // Calculate total
-    const totalEarnings = level1Earnings + level2Earnings;
+    const level1Earnings = directReferralTransactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
 
     const stats: CommissionStats = {
       level1: {
         totalEarnings: level1Earnings,
-        count: level1Transactions.length
+        count: directReferralTransactions.length
       },
-      level2: {
-        totalEarnings: level2Earnings,
-        count: level2Transactions.length
-      },
-      total: totalEarnings
+      total: level1Earnings
     };
 
     return {
