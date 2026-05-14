@@ -159,10 +159,15 @@ async function sendMpesaPaymentConfirmationInvoice(
 export async function POST(request: NextRequest) {
   let callbackData: any = null;
   let session: mongoose.ClientSession | null = null;
+  const callbackReceivedAt = new Date();
   
   try {
     const body = await request.json();
-    console.log('📞 M-Pesa Callback received:', JSON.stringify(body, null, 2));
+    console.log('========================================');
+    console.log('📞 M-PESA CALLBACK RECEIVED FROM SAFARICOM');
+    console.log('========================================');
+    console.log('⏰ Timestamp:', callbackReceivedAt.toISOString());
+    console.log('📦 Raw Payload:', JSON.stringify(body, null, 2));
 
     // Connect to database FIRST
     await connectToDatabase();
@@ -185,19 +190,22 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     });
 
-    // Log the callback for auditing
+    // Log the callback for auditing - ALWAYS record received callbacks
     const callbackLog = new MpesaCallbackLog({
       checkout_request_id: checkoutRequestID,
       merchant_request_id: callbackData.MerchantRequestID,
       result_code: resultCode,
       result_desc: resultDesc,
       payload: body,
-      ip_address: request.headers.get('x-forwarded-for') || request.headers.get('remote-addr'),
-      user_agent: request.headers.get('user-agent'),
+      ip_address: request.headers.get('x-forwarded-for') || request.headers.get('remote-addr') || 'unknown',
+      user_agent: request.headers.get('user-agent') || 'unknown',
       is_activation_callback: true,
-      processed: false
+      processed: false,
+      received_from_safaricom: true, // Mark as received from Safaricom
+      callback_received_at: callbackReceivedAt,
     });
     await callbackLog.save();
+    console.log('📝 Callback logged to database with ID:', callbackLog._id);
 
     // Start a database transaction for data consistency
     session = await mongoose.startSession();
@@ -348,7 +356,8 @@ export async function POST(request: NextRequest) {
     mpesaTransaction.metadata = {
       ...(mpesaTransaction.metadata || {}),
       callback_processed: true,
-      callback_processed_at: new Date().toISOString(),
+      callback_processed_at: callbackReceivedAt.toISOString(),
+      callback_received_from_safaricom: true, // Explicitly mark as received from Safaricom
       deposit_type: depositType !== 'unknown' ? depositType : rawDepositType,
     };
 

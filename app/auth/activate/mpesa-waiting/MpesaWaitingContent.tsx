@@ -32,8 +32,8 @@ export default function MpesaWaitingContent() {
   const [isActivatingAccount, setIsActivatingAccount] = useState(false);
 
   // Constants for polling
-  const POLLING_INTERVAL = 5000; // 5 seconds fixed interval
-  const MAX_POLLING_ATTEMPTS = 48; // 48 attempts * 5s = 240 seconds (~4 minutes)
+  const POLLING_INTERVAL = 4000; // 4 seconds for faster response
+  const MAX_POLLING_ATTEMPTS = 60; // 60 attempts * 4s = 240 seconds (~4 minutes)
 
   // Poll for payment status using server action with fixed intervals
   const pollPaymentStatus = useCallback(async () => {

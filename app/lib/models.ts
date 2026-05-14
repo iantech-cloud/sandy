@@ -1023,6 +1023,12 @@ const MpesaCallbackLogSchema = new Schema({
   },
   
   is_activation_callback: { type: Boolean, default: false },
+  received_from_safaricom: { type: Boolean, default: true },
+  callback_received_at: { type: Date },
+  processed_at: { type: Date },
+  final_status: { type: String },
+  failure_type: { type: String },
+  confirmation_invoice_sent: { type: Boolean },
   
 }, {
   timestamps: { createdAt: 'created_at' },
