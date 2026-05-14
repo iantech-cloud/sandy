@@ -279,7 +279,7 @@ export default function DashboardPage() {
               <Target className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-indigo-600" />
               Earning Summary
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+            <div className="grid grid-cols-1 gap-2 sm:gap-3">
               <div className="bg-indigo-600 rounded-lg px-3 py-2 shadow-sm">
                 <div className="flex items-center gap-1.5">
                   <DollarSign className="w-3.5 h-3.5 text-white/80" />
@@ -324,7 +324,7 @@ export default function DashboardPage() {
               <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-green-600" />
               Earnings by Source
             </h2>
-            <div className="flex flex-wrap gap-2 sm:gap-3">
+            <div className="grid grid-cols-1 gap-2 sm:gap-3">
               <div className="flex items-center gap-2 bg-blue-100 border border-blue-200 rounded-lg px-3 py-2">
                 <Share2 className="w-4 h-4 text-blue-600" />
                 <span className="text-xs text-blue-700 font-medium">Direct Referral</span>
