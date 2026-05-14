@@ -1,7 +1,7 @@
 // app/ui/dashboard/BottomNav.tsx
 'use client';
 
-import { BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle } from 'lucide-react';
+import { BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle, ClipboardList } from 'lucide-react';
 // (UserIcon now used for Profile tab; Settings icon used for Settings tab)
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -34,6 +34,12 @@ export default function BottomNav({ userName }: BottomNavProps) {
       label: 'Earn', 
       icon: Award, 
       path: '/dashboard/surveys' 
+    },
+    { 
+      id: 'tasks', 
+      label: 'Tasks', 
+      icon: ClipboardList, 
+      path: '/dashboard/content' 
     },
     { 
       id: 'affiliate', 

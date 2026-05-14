@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle } from 'lucide-react';
+import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle, ClipboardList } from 'lucide-react';
 // (UserIcon used for Profile entry; Settings icon used for Settings entry)
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -18,6 +18,7 @@ export default function HamburgerMenu({ userName }: HamburgerMenuProps) {
     { id: 'dashboard', label: 'Home', icon: BarChart, path: '/dashboard' },
     { id: 'wallet', label: 'Wallet', icon: Wallet, path: '/dashboard/wallet' },
     { id: 'surveys', label: 'Earn', icon: Award, path: '/dashboard/surveys' },
+    { id: 'tasks', label: 'Tasks', icon: ClipboardList, path: '/dashboard/content' },
     { id: 'affiliate', label: 'Soko', icon: ShoppingBag, path: '/dashboard/soko' },
     { id: 'referrals', label: 'Refs', icon: Users, path: '/dashboard/referrals' },
     { id: 'chat', label: 'Chat Online', icon: MessageCircle, path: 'https://chatvibe.co.ke/register.php?ref=Scholine', external: true },
