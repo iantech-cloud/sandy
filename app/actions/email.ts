@@ -6,7 +6,14 @@ import { Profile } from '@/app/lib/models/Profile';
 import { connectToDatabase } from '@/app/lib/mongoose';
 import { decrypt } from '@/app/lib/encryption';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resend: Resend | null = null;
+
+const getResendClient = () => {
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resend;
+};
 
 const getEmailFrom = () => {
   const fromName = process.env.EMAIL_FROM_NAME || 'HustleHub Africa';
@@ -129,7 +136,7 @@ export async function sendSupportEmail(formData: {
     const antiPhishingSection = generateAntiPhishingSection(antiPhishingCode);
 
     // Send email to support team
-    const supportResult = await resend.emails.send({
+    const supportResult = await getResendClient().emails.send({
       from: getEmailFrom(),
       to: process.env.EMAIL_FROM_ADDRESS || 'noreply@hustlehubafrica.com',
       subject: `Support Request: ${formData.subject}`,
@@ -187,7 +194,7 @@ export async function sendSupportEmail(formData: {
     });
 
     // Send auto-reply to user
-    const userResult = await resend.emails.send({
+    const userResult = await getResendClient().emails.send({
       from: getEmailFrom(),
       to: formData.email,
       subject: `We've received your support request: ${formData.subject}`,
@@ -319,7 +326,7 @@ export async function sendVerificationEmail(email: string, token: string) {
       antiPhishingCodePreview: antiPhishingCode ? `${antiPhishingCode.substring(0, 3)}...` : 'None'
     });
 
-    const result = await resend.emails.send({
+    const result = await getResendClient().emails.send({
       from: getEmailFrom(),
       to: email,
       subject: 'Verify Your Email - HustleHub Africa',
@@ -512,10 +519,9 @@ export async function sendVerificationCodeEmail(
             </div>
         </body>
         </html>
-      `,
-    };
+      `;
 
-    const result = await resend.emails.send({
+    const result = await getResendClient().emails.send({
       from: getEmailFrom(),
       to: email,
       subject: `Verification Code - ${purpose}`,
@@ -556,7 +562,7 @@ export async function sendWelcomeEmail(email: string, username: string) {
       antiPhishingCodePreview: antiPhishingCode ? `${antiPhishingCode.substring(0, 3)}...` : 'None'
     });
 
-    const result = await resend.emails.send({
+    const result = await getResendClient().emails.send({
       from: getEmailFrom(),
       to: email,
       subject: 'Welcome to HustleHub Africa!',
@@ -721,7 +727,7 @@ export async function sendInitialPaymentInvoice(
     const antiPhishingCode = await getUserAntiPhishingCode(email);
     const antiPhishingSection = generateAntiPhishingSection(antiPhishingCode);
 
-    const result = await resend.emails.send({
+    const result = await getResendClient().emails.send({
       from: getEmailFrom(),
       to: email,
       subject: `Payment Invoice #${invoiceData.invoiceNumber} - Account Activation Required`,
@@ -899,7 +905,7 @@ export async function sendPaymentConfirmationInvoice(
       manual: 'Manual Payment'
     }[invoiceData.paymentMethod];
 
-    const result = await resend.emails.send({
+    const result = await getResendClient().emails.send({
       from: getEmailFrom(),
       to: email,
       subject: `Payment Confirmation #${invoiceData.invoiceNumber} - Account Activated`,
@@ -1073,7 +1079,7 @@ export async function testEmailConfig() {
     }
 
     // Test Resend configuration by sending a test email
-    const testResult = await resend.emails.send({
+    const testResult = await getResendClient().emails.send({
       from: getEmailFrom(),
       to: 'test@example.com', // Resend will validate without actually sending
       subject: 'Test Email Configuration',
