@@ -279,41 +279,41 @@ export default function DashboardPage() {
               <Target className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-indigo-600" />
               Earning Summary
             </h2>
-            <div className="grid grid-cols-1 gap-2 sm:gap-3">
-              <div className="bg-indigo-600 rounded-lg px-3 py-2 shadow-sm">
-                <div className="flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 text-white/80" />
-                  <span className="text-[10px] text-white/80 font-medium">Available</span>
+            <div className="grid grid-cols-1 gap-3 sm:gap-4">
+              <div className="bg-indigo-600 rounded-lg px-4 py-4 shadow-sm">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <DollarSign className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Available Balance</span>
                 </div>
-                <p className="text-sm font-bold text-white">KES {stats.availableBalance.toFixed(0)}</p>
+                <p className="text-base font-bold text-white">KES {stats.availableBalance.toFixed(0)}</p>
               </div>
-              <div className="bg-green-600 rounded-lg px-3 py-2 shadow-sm">
-                <div className="flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5 text-white/80" />
-                  <span className="text-[10px] text-white/80 font-medium">Today</span>
+              <div className="bg-green-600 rounded-lg px-4 py-4 shadow-sm">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <TrendingUp className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Today&apos;s Earnings</span>
                 </div>
-                <p className="text-sm font-bold text-white">KES {(stats.todayEarnings || 0).toFixed(0)}</p>
+                <p className="text-base font-bold text-white">KES {(stats.todayEarnings || 0).toFixed(0)}</p>
               </div>
-              <div className="bg-purple-600 rounded-lg px-3 py-2 shadow-sm">
-                <div className="flex items-center gap-1.5">
-                  <Trophy className="w-3.5 h-3.5 text-white/80" />
-                  <span className="text-[10px] text-white/80 font-medium">Lifetime</span>
+              <div className="bg-purple-600 rounded-lg px-4 py-4 shadow-sm">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Trophy className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Lifetime Earnings</span>
                 </div>
-                <p className="text-sm font-bold text-white">KES {stats.totalEarnings.toFixed(0)}</p>
+                <p className="text-base font-bold text-white">KES {stats.totalEarnings.toFixed(0)}</p>
               </div>
-              <div className="bg-yellow-500 rounded-lg px-3 py-2 shadow-sm">
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-white/80" />
-                  <span className="text-[10px] text-white/80 font-medium">Pending W/D</span>
+              <div className="bg-yellow-500 rounded-lg px-4 py-4 shadow-sm">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Clock className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Pending Withdrawal</span>
                 </div>
-                <p className="text-sm font-bold text-white">KES {stats.pendingWithdrawals.toFixed(0)}</p>
+                <p className="text-base font-bold text-white">KES {stats.pendingWithdrawals.toFixed(0)}</p>
               </div>
-              <div className="bg-orange-500 rounded-lg px-3 py-2 shadow-sm">
-                <div className="flex items-center gap-1.5">
-                  <ArrowRight className="w-3.5 h-3.5 text-white/80" />
-                  <span className="text-[10px] text-white/80 font-medium">Today W/D</span>
+              <div className="bg-orange-500 rounded-lg px-4 py-4 shadow-sm">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <ArrowRight className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Today&apos;s Withdrawal</span>
                 </div>
-                <p className="text-sm font-bold text-white">KES {(stats.todayWithdrawals || 0).toFixed(0)}</p>
+                <p className="text-base font-bold text-white">KES {(stats.todayWithdrawals || 0).toFixed(0)}</p>
               </div>
             </div>
           </div>
@@ -324,36 +324,48 @@ export default function DashboardPage() {
               <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-green-600" />
               Earnings by Source
             </h2>
-            <div className="grid grid-cols-1 gap-2 sm:gap-3">
-              <div className="flex items-center gap-2 bg-blue-100 border border-blue-200 rounded-lg px-3 py-2">
-                <Share2 className="w-4 h-4 text-blue-600" />
-                <span className="text-xs text-blue-700 font-medium">Direct Referral</span>
-                <span className="text-sm font-bold text-blue-800">KES {(stats.directReferralEarnings || 0).toFixed(0)}</span>
+            <div className="grid grid-cols-1 gap-3 sm:gap-4">
+              <div className="flex flex-col justify-center gap-2 bg-blue-100 border border-blue-200 rounded-lg px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <Share2 className="w-5 h-5 text-blue-600" />
+                  <span className="text-sm text-blue-700 font-medium">Direct Referral</span>
+                </div>
+                <span className="text-base font-bold text-blue-800">KES {(stats.directReferralEarnings || 0).toFixed(0)}</span>
               </div>
-              <div className="flex items-center gap-2 bg-green-100 border border-green-200 rounded-lg px-3 py-2">
-                <Users className="w-4 h-4 text-green-600" />
-                <span className="text-xs text-green-700 font-medium">Downline</span>
-                <span className="text-sm font-bold text-green-800">KES {(stats.downlineEarnings || 0).toFixed(0)}</span>
+              <div className="flex flex-col justify-center gap-2 bg-green-100 border border-green-200 rounded-lg px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-green-600" />
+                  <span className="text-sm text-green-700 font-medium">Downline Commission</span>
+                </div>
+                <span className="text-base font-bold text-green-800">KES {(stats.downlineEarnings || 0).toFixed(0)}</span>
               </div>
-              <div className="flex items-center gap-2 bg-pink-100 border border-pink-200 rounded-lg px-3 py-2">
-                <Gift className="w-4 h-4 text-pink-600" />
-                <span className="text-xs text-pink-700 font-medium">Spin Wallet</span>
-                <span className="text-sm font-bold text-pink-800">KES {(stats.spinEarnings || 0).toFixed(0)}</span>
+              <div className="flex flex-col justify-center gap-2 bg-pink-100 border border-pink-200 rounded-lg px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <Gift className="w-5 h-5 text-pink-600" />
+                  <span className="text-sm text-pink-700 font-medium">Spin Wallet Earnings</span>
+                </div>
+                <span className="text-base font-bold text-pink-800">KES {(stats.spinEarnings || 0).toFixed(0)}</span>
               </div>
-              <div className="flex items-center gap-2 bg-orange-100 border border-orange-200 rounded-lg px-3 py-2">
-                <ClipboardCheck className="w-4 h-4 text-orange-600" />
-                <span className="text-xs text-orange-700 font-medium">Survey</span>
-                <span className="text-sm font-bold text-orange-800">KES {(stats.surveyEarnings || 0).toFixed(0)}</span>
+              <div className="flex flex-col justify-center gap-2 bg-orange-100 border border-orange-200 rounded-lg px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck className="w-5 h-5 text-orange-600" />
+                  <span className="text-sm text-orange-700 font-medium">Survey Earnings</span>
+                </div>
+                <span className="text-base font-bold text-orange-800">KES {(stats.surveyEarnings || 0).toFixed(0)}</span>
               </div>
-              <div className="flex items-center gap-2 bg-cyan-100 border border-cyan-200 rounded-lg px-3 py-2">
-                <CheckCircle className="w-4 h-4 text-cyan-600" />
-                <span className="text-xs text-cyan-700 font-medium">Task</span>
-                <span className="text-sm font-bold text-cyan-800">KES {(stats.taskEarnings || 0).toFixed(0)}</span>
+              <div className="flex flex-col justify-center gap-2 bg-cyan-100 border border-cyan-200 rounded-lg px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-cyan-600" />
+                  <span className="text-sm text-cyan-700 font-medium">Task Earnings</span>
+                </div>
+                <span className="text-base font-bold text-cyan-800">KES {(stats.taskEarnings || 0).toFixed(0)}</span>
               </div>
-              <div className="flex items-center gap-2 bg-purple-100 border border-purple-200 rounded-lg px-3 py-2">
-                <Sparkles className="w-4 h-4 text-purple-600" />
-                <span className="text-xs text-purple-700 font-medium">Bonus</span>
-                <span className="text-sm font-bold text-purple-800">KES {(stats.bonusEarnings || 0).toFixed(0)}</span>
+              <div className="flex flex-col justify-center gap-2 bg-purple-100 border border-purple-200 rounded-lg px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-purple-600" />
+                  <span className="text-sm text-purple-700 font-medium">Bonus Earnings</span>
+                </div>
+                <span className="text-base font-bold text-purple-800">KES {(stats.bonusEarnings || 0).toFixed(0)}</span>
               </div>
             </div>
           </div>
