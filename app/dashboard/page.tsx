@@ -248,26 +248,25 @@ export default function DashboardPage() {
       <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-bl from-purple-400/10 to-transparent rounded-full blur-3xl animate-pulse pointer-events-none"></div>
       <div className="absolute bottom-0 left-0 w-72 h-72 bg-gradient-to-tr from-orange-400/10 to-transparent rounded-full blur-3xl animate-pulse delay-1000 pointer-events-none"></div>
 
-      {/* Welcome Header with Bold Design */}
-      <div className="relative mb-6 bg-white rounded-2xl p-4 sm:p-6 lg:p-8 shadow-xl border-2 border-purple-500 overflow-hidden group hover:shadow-2xl hover:scale-105 hover:-translate-y-1 transition-all duration-300">
+      {/* Welcome Header */}
+      <div className="relative mb-4 bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-purple-400 overflow-hidden">
         {/* Accent bar */}
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-purple-600"></div>
+        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-purple-600"></div>
         
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center space-x-3 flex-1 min-w-0">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/50 group-hover:shadow-purple-500/70 transition-all duration-300 group-hover:scale-110 flex-shrink-0">
-              <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+        <div className="relative z-10 flex items-center justify-between gap-3">
+          <div className="flex items-center space-x-2 flex-1 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center shadow-md flex-shrink-0">
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 truncate">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
                 Welcome back, {profile?.username || 'User'}!
               </h2>
-              <p className="text-slate-600 mt-1 text-xs sm:text-sm hidden sm:block">Here's what's happening with your account today</p>
             </div>
           </div>
-          <div className="flex items-center space-x-2 sm:space-x-3 bg-purple-50 px-3 sm:px-5 py-2 sm:py-3 rounded-xl border border-purple-200 flex-shrink-0">
-            <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 flex-shrink-0" />
-            <span className="text-sm sm:text-base lg:text-lg font-bold text-purple-700 whitespace-nowrap">Level {profile?.level}</span>
+          <div className="flex items-center space-x-1.5 bg-purple-50 px-2.5 py-1.5 rounded-lg border border-purple-200 flex-shrink-0">
+            <Trophy className="w-4 h-4 text-purple-600 flex-shrink-0" />
+            <span className="text-xs sm:text-sm font-bold text-purple-700 whitespace-nowrap">Level {profile?.level}</span>
           </div>
         </div>
       </div>
@@ -281,40 +280,40 @@ export default function DashboardPage() {
               Earning Summary
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-              <div className="bg-indigo-600 rounded-xl p-3 shadow-md">
-                <div className="flex items-center gap-2 mb-1">
-                  <DollarSign className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Available</span>
+              <div className="bg-indigo-600 rounded-lg px-3 py-2 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-white/80" />
+                  <span className="text-[10px] text-white/80 font-medium">Available</span>
                 </div>
-                <p className="text-lg font-bold text-white">KES {stats.availableBalance.toFixed(0)}</p>
+                <p className="text-sm font-bold text-white">KES {stats.availableBalance.toFixed(0)}</p>
               </div>
-              <div className="bg-green-600 rounded-xl p-3 shadow-md">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Today</span>
+              <div className="bg-green-600 rounded-lg px-3 py-2 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-white/80" />
+                  <span className="text-[10px] text-white/80 font-medium">Today</span>
                 </div>
-                <p className="text-lg font-bold text-white">KES {(stats.todayEarnings || 0).toFixed(0)}</p>
+                <p className="text-sm font-bold text-white">KES {(stats.todayEarnings || 0).toFixed(0)}</p>
               </div>
-              <div className="bg-purple-600 rounded-xl p-3 shadow-md">
-                <div className="flex items-center gap-2 mb-1">
-                  <Trophy className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Lifetime</span>
+              <div className="bg-purple-600 rounded-lg px-3 py-2 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  <Trophy className="w-3.5 h-3.5 text-white/80" />
+                  <span className="text-[10px] text-white/80 font-medium">Lifetime</span>
                 </div>
-                <p className="text-lg font-bold text-white">KES {stats.totalEarnings.toFixed(0)}</p>
+                <p className="text-sm font-bold text-white">KES {stats.totalEarnings.toFixed(0)}</p>
               </div>
-              <div className="bg-yellow-500 rounded-xl p-3 shadow-md">
-                <div className="flex items-center gap-2 mb-1">
-                  <Clock className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Pending W/D</span>
+              <div className="bg-yellow-500 rounded-lg px-3 py-2 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-white/80" />
+                  <span className="text-[10px] text-white/80 font-medium">Pending W/D</span>
                 </div>
-                <p className="text-lg font-bold text-white">KES {stats.pendingWithdrawals.toFixed(0)}</p>
+                <p className="text-sm font-bold text-white">KES {stats.pendingWithdrawals.toFixed(0)}</p>
               </div>
-              <div className="bg-orange-500 rounded-xl p-3 shadow-md">
-                <div className="flex items-center gap-2 mb-1">
-                  <ArrowRight className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Today W/D</span>
+              <div className="bg-orange-500 rounded-lg px-3 py-2 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                  <ArrowRight className="w-3.5 h-3.5 text-white/80" />
+                  <span className="text-[10px] text-white/80 font-medium">Today W/D</span>
                 </div>
-                <p className="text-lg font-bold text-white">KES {(stats.todayWithdrawals || 0).toFixed(0)}</p>
+                <p className="text-sm font-bold text-white">KES {(stats.todayWithdrawals || 0).toFixed(0)}</p>
               </div>
             </div>
           </div>
@@ -375,47 +374,44 @@ export default function DashboardPage() {
       {/* Quick Actions Grid with Enhanced Styling */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         {/* Spin-to-Win Card */}
-        <div className="group relative bg-white rounded-2xl p-4 sm:p-6 shadow-xl border-2 border-red-500 hover:shadow-2xl transition-all duration-300 overflow-hidden hover:scale-105 hover:-translate-y-1">
+        <div className="group relative bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-red-400 hover:shadow-xl transition-all duration-300 overflow-hidden">
           {/* Accent bar */}
-          <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600"></div>
+          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-600"></div>
           <div className="relative z-10">
-            <div className="flex items-center space-x-2 sm:space-x-3 mb-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-red-600 to-rose-500 flex items-center justify-center shadow-lg shadow-red-500/40 group-hover:shadow-red-500/60 transition-all duration-300 group-hover:rotate-12 flex-shrink-0">
-                <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            <div className="flex items-center space-x-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-rose-500 flex items-center justify-center shadow-md flex-shrink-0">
+                <Gift className="w-4 h-4 text-white" />
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-slate-900">Spin-to-Win</h3>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">Spin-to-Win</h3>
             </div>
             
-            <p className="text-slate-600 mb-4 text-xs sm:text-sm">Try your luck and win exciting prizes!</p>
+            <p className="text-slate-600 mb-2 text-[11px] sm:text-xs">Try your luck and win prizes!</p>
             
             <button
               onClick={handleSpinClick}
               disabled={refreshingStats}
-              className="w-full py-2.5 sm:py-3 px-4 sm:px-6 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-red-500/40 hover:shadow-xl hover:shadow-red-500/50 transition-all duration-250 flex items-center justify-center transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-2 px-3 bg-gradient-to-r from-red-600 to-rose-600 text-white font-semibold text-xs sm:text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-250 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {refreshingStats ? (
                 <>
-                  <Loader2 className="animate-spin mr-2" size={16} />
-                  <span className="hidden sm:inline">Refreshing...</span>
-                  <span className="sm:hidden">Loading...</span>
+                  <Loader2 className="animate-spin mr-1.5" size={14} />
+                  <span>Loading...</span>
                 </>
               ) : (
                 <>
-                  <Gift className="mr-2" size={18} />
-                  <span className="hidden sm:inline">Open Spin Wheel</span>
-                  <span className="sm:hidden">Spin</span>
-                  <ArrowRight className="ml-2 hidden sm:inline" size={16} />
+                  <Gift className="mr-1.5" size={14} />
+                  <span>Open Spin Wheel</span>
                 </>
               )}
             </button>
             
             {spinMessage && (
-              <div className={`mt-4 p-3 rounded-xl text-center font-medium text-sm backdrop-blur-sm ${
+              <div className={`mt-2 p-2 rounded-lg text-center font-medium text-[11px] ${
                 spinMessage.includes('Congratulations')
-                  ? 'bg-green-100/80 text-green-700 border border-green-300'
+                  ? 'bg-green-100 text-green-700 border border-green-200'
                   : spinMessage.includes('Not enough')
-                  ? 'bg-red-100/80 text-red-700 border border-red-300'
-                  : 'bg-blue-100/80 text-blue-700 border border-blue-300'
+                  ? 'bg-red-100 text-red-700 border border-red-200'
+                  : 'bg-blue-100 text-blue-700 border border-blue-200'
               }`}>
                 {spinMessage}
               </div>
@@ -424,9 +420,9 @@ export default function DashboardPage() {
         </div>
 
         {/* Wallet Pay Card */}
-        <div className="group relative bg-white rounded-2xl p-4 sm:p-6 shadow-xl border-2 border-blue-500 hover:shadow-2xl transition-all duration-300 overflow-hidden hover:scale-105 hover:-translate-y-1">
+        <div className="group relative bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-blue-400 hover:shadow-xl transition-all duration-300 overflow-hidden">
           {/* Accent bar */}
-          <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600"></div>
+          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-600"></div>
           <div className="relative z-10">
             <WalletPay 
               onDepositSuccess={() => {
@@ -439,39 +435,39 @@ export default function DashboardPage() {
         </div>
 
         {/* Referral Card */}
-        <div className="group relative bg-white rounded-2xl p-4 sm:p-6 shadow-xl border-2 border-cyan-500 hover:shadow-2xl transition-all duration-300 overflow-hidden hover:scale-105 hover:-translate-y-1">
+        <div className="group relative bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-cyan-400 hover:shadow-xl transition-all duration-300 overflow-hidden">
           {/* Accent bar */}
-          <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-600"></div>
+          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-cyan-600"></div>
           <div className="relative z-10">
-            <div className="flex items-center space-x-2 sm:space-x-3 mb-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-teal-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-teal-500/40 group-hover:shadow-teal-500/60 transition-all duration-300 flex-shrink-0">
-                <Share2 className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            <div className="flex items-center space-x-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-600 to-cyan-500 flex items-center justify-center shadow-md flex-shrink-0">
+                <Share2 className="w-4 h-4 text-white" />
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-slate-900">Refer & Earn</h3>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">Refer & Earn</h3>
             </div>
-            <p className="text-slate-600 mb-4 text-xs sm:text-sm">Share your referral link to earn bonuses</p>
-            <div className="space-y-3">
+            <p className="text-slate-600 mb-2 text-[11px] sm:text-xs">Share your referral link to earn bonuses</p>
+            <div className="space-y-2">
               {profile?.referral_id && (
-                <div className="bg-gradient-to-br from-teal-100 to-cyan-100 p-3 sm:p-4 rounded-2xl border border-teal-300">
-                  <p className="text-xs text-teal-700 mb-2 uppercase tracking-wide font-semibold">Your Referral Link</p>
-                  <p className="text-xs sm:text-sm font-medium bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent mb-3 font-mono break-all">
+                <div className="bg-gradient-to-br from-teal-50 to-cyan-50 p-2 sm:p-3 rounded-lg border border-teal-200">
+                  <p className="text-[10px] text-teal-700 mb-1 uppercase tracking-wide font-semibold">Your Referral Link</p>
+                  <p className="text-[10px] sm:text-[11px] font-medium text-teal-600 mb-2 font-mono break-all leading-tight">
                     {typeof window !== 'undefined' ? `${window.location.origin}/auth/register?ref=${profile.referral_id}` : `/auth/register?ref=${profile.referral_id}`}
                   </p>
                   <button
                     onClick={() => handleCopyReferralLink(profile.referral_id!)}
-                    className="w-full py-2 px-3 sm:px-4 text-xs sm:text-sm bg-gradient-to-r from-teal-600 to-cyan-500 text-white font-semibold rounded-xl hover:from-teal-700 hover:to-cyan-600 shadow-lg shadow-teal-500/40 hover:shadow-teal-500/50 transition-all duration-250 transform hover:scale-105 flex items-center justify-center"
+                    className="w-full py-1.5 px-2 text-[11px] sm:text-xs bg-gradient-to-r from-teal-600 to-cyan-500 text-white font-semibold rounded-lg shadow-sm hover:shadow-md transition-all duration-250 flex items-center justify-center"
                   >
-                    <Copy className="w-4 h-4 mr-2" />
+                    <Copy className="w-3 h-3 mr-1.5" />
                     Copy Link
                   </button>
                 </div>
               )}
             </div>
             {referralMessage && (
-              <div className={`mt-4 p-3 rounded-xl text-center font-medium text-sm backdrop-blur-sm ${
+              <div className={`mt-2 p-2 rounded-lg text-center font-medium text-[11px] ${
                 referralMessage.includes('copied')
-                  ? 'bg-green-100/80 text-green-700 border border-green-300'
-                  : 'bg-blue-100/80 text-blue-700 border border-blue-300'
+                  ? 'bg-green-100 text-green-700 border border-green-200'
+                  : 'bg-blue-100 text-blue-700 border border-blue-200'
               }`}>
                 {referralMessage}
               </div>
