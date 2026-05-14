@@ -400,9 +400,10 @@ export async function processMpesaDeposit(depositData: {
                 stk_push_response: stkData,
                 result_code: 1032,
                 result_desc: 'STK Push initiated successfully',
+                source: 'wallet',
                 metadata: {
                     user_username: currentUser.username,
-                    deposit_type: 'wallet_topup',
+                    deposit_type: 'wallet',
                     initiated_at: new Date().toISOString(),
                     callback_url: MPESA_CONFIG.callbackURL
                 }
@@ -598,7 +599,27 @@ export async function checkMpesaPaymentStatus(checkoutRequestId: string): Promis
                 );
 
                 if (safeStatus === 'completed') {
-                    await updateUserBalance(mpesaTransaction.user_id, mpesaTransaction.amount_cents);
+                    // 🔒 Idempotency: only credit main wallet if the callback has not
+                    // already done so AND the deposit_type is for the main wallet.
+                    const alreadyProcessed = mpesaTransaction.metadata?.callback_processed === true;
+                    const depositType = mpesaTransaction.metadata?.deposit_type;
+                    const isMainWallet = depositType === 'wallet' || depositType === 'wallet_topup' || !depositType;
+
+                    if (alreadyProcessed) {
+                        console.log('⏭️ Skipping main wallet credit — callback already processed this transaction');
+                    } else if (!isMainWallet) {
+                        console.log(`⏭️ Skipping main wallet credit — deposit_type=${depositType}`);
+                    } else {
+                        await updateUserBalance(mpesaTransaction.user_id, mpesaTransaction.amount_cents);
+                        // Mark so subsequent polls do not re-credit
+                        mpesaTransaction.metadata = {
+                            ...(mpesaTransaction.metadata || {}),
+                            callback_processed: true,
+                            credited_via: 'polling',
+                            credited_at: new Date().toISOString(),
+                        };
+                        await mpesaTransaction.save();
+                    }
                 }
             } catch (updateError) {
                 console.error('❌ Failed to update transaction or user balance:', updateError);

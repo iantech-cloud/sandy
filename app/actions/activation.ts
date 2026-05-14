@@ -955,7 +955,8 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
         metadata: {
           activation_payment_id: activationPayment._id,
           callback_url: mpesaResult.callbackUrl,
-          user_username: userProfile.username
+          user_username: userProfile.username,
+          deposit_type: 'activation'
         }
       });
       await mpesaTransaction.save();

@@ -546,7 +546,7 @@ async function ensureSpinPrizes(): Promise<void> {
       const totalProbability = defaultPrizes.reduce((sum, p) => sum + p.base_probability, 0)
       
       console.log(`✅ Created ${defaultPrizes.length} spin prizes`)
-      console.log(`📊 Total probability: ${totalProbability}%`)
+      console.log(`��� Total probability: ${totalProbability}%`)
     }
   } catch (error) {
     console.error('Error ensuring spin prizes:', error)
@@ -881,9 +881,10 @@ export async function depositSpinWalletViaMpesa(depositData: {
         stk_push_response: stkData,
         result_code: 1032,
         result_desc: 'STK Push initiated successfully',
+        source: 'wallet',
         metadata: {
           user_username: currentUser.username,
-          deposit_type: 'spin_wallet_topup',
+          deposit_type: 'spin_wallet',
           initiated_at: new Date().toISOString(),
           callback_url: MPESA_CONFIG.callbackURL
         }
@@ -892,11 +893,15 @@ export async function depositSpinWalletViaMpesa(depositData: {
       const transaction = await (Transaction as any).create({
         user_id: currentUser._id,
         amount_cents: amountCents,
-        type: 'SPIN_DEPOSIT',
+        // Use 'DEPOSIT' (valid enum value). The target_type distinguishes
+        // this from a main-wallet deposit, and the callback router will
+        // credit the SpinWallet (not Profile.balance_cents) based on
+        // MpesaTransaction.metadata.deposit_type === 'spin_wallet'.
+        type: 'DEPOSIT',
         description: `M-Pesa spin wallet deposit from ${formattedPhone}`,
         status: 'pending',
         mpesa_transaction_id: mpesaTransaction._id,
-        
+
         // Required fields for transaction tracking
         target_type: 'spin_wallet',
         target_id: currentUser._id.toString(),
@@ -1077,9 +1082,21 @@ export async function checkSpinDepositMpesaStatus(checkoutRequestId: string): Pr
           queryData.MpesaReceiptNumber
         );
 
-        // If completed, update spin wallet
-        if (safeStatus === 'completed') {
+        // 🔒 Idempotency: callback may have already credited this spin wallet.
+        // Only credit here if the callback hasn't processed it yet.
+        const alreadyProcessed = mpesaTransaction.metadata?.callback_processed === true;
+
+        if (safeStatus === 'completed' && !alreadyProcessed) {
           await updateSpinWallet(mpesaTransaction.user_id, mpesaTransaction.amount_cents);
+          mpesaTransaction.metadata = {
+            ...(mpesaTransaction.metadata || {}),
+            callback_processed: true,
+            credited_via: 'polling',
+            credited_at: new Date().toISOString(),
+          };
+          await mpesaTransaction.save();
+        } else if (safeStatus === 'completed' && alreadyProcessed) {
+          console.log('⏭️ Skipping spin wallet credit — callback already processed');
         }
       } catch (updateError) {
         console.error('❌ Failed to update transaction or spin wallet:', updateError);
