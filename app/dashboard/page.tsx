@@ -357,33 +357,6 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-              <div className="flex items-center gap-2 bg-green-100 border border-green-200 rounded-lg px-3 py-2">
-                <Users className="w-4 h-4 text-green-600" />
-                <span className="text-xs text-green-700 font-medium">Downline</span>
-                <span className="text-sm font-bold text-green-800">KES {(stats.downlineEarnings || 0).toFixed(0)}</span>
-              </div>
-              <div className="flex items-center gap-2 bg-pink-100 border border-pink-200 rounded-lg px-3 py-2">
-                <Gift className="w-4 h-4 text-pink-600" />
-                <span className="text-xs text-pink-700 font-medium">Spin Wallet</span>
-                <span className="text-sm font-bold text-pink-800">KES {(stats.spinEarnings || 0).toFixed(0)}</span>
-              </div>
-              <div className="flex items-center gap-2 bg-orange-100 border border-orange-200 rounded-lg px-3 py-2">
-                <ClipboardCheck className="w-4 h-4 text-orange-600" />
-                <span className="text-xs text-orange-700 font-medium">Survey</span>
-                <span className="text-sm font-bold text-orange-800">KES {(stats.surveyEarnings || 0).toFixed(0)}</span>
-              </div>
-              <div className="flex items-center gap-2 bg-cyan-100 border border-cyan-200 rounded-lg px-3 py-2">
-                <CheckCircle className="w-4 h-4 text-cyan-600" />
-                <span className="text-xs text-cyan-700 font-medium">Task</span>
-                <span className="text-sm font-bold text-cyan-800">KES {(stats.taskEarnings || 0).toFixed(0)}</span>
-              </div>
-              <div className="flex items-center gap-2 bg-purple-100 border border-purple-200 rounded-lg px-3 py-2">
-                <Sparkles className="w-4 h-4 text-purple-600" />
-                <span className="text-xs text-purple-700 font-medium">Bonus</span>
-                <span className="text-sm font-bold text-purple-800">KES {(stats.bonusEarnings || 0).toFixed(0)}</span>
-              </div>
-            </div>
-          </div>
         </>
       ) : (
         <p className="text-center text-slate-500 mb-8 py-12 bg-white rounded-2xl shadow-md border border-slate-200">No statistics available.</p>
