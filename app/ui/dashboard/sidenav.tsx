@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle } from 'lucide-react';
+import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -45,6 +45,7 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
     { path: '/dashboard', label: 'Dashboard', icon: BarChart },
     { path: '/dashboard/wallet', label: 'Wallet & Pay', icon: Wallet },
     { path: '/dashboard/surveys', label: 'Earn Surveys', icon: Award },
+    { path: '/dashboard/content', label: 'Tasks', icon: ClipboardList },
     { path: '/dashboard/referrals', label: 'Referrals', icon: Users },
     { path: '/dashboard/soko', label: 'Affiliate Marketing', icon: ShoppingBag },
     { path: '/dashboard/profile', label: 'Profile', icon: UserIcon },

@@ -6,38 +6,28 @@ import {
   DollarSign, 
   TrendingUp, 
   CheckCircle, 
-  RotateCw, 
   Users, 
   Loader2, 
   AlertTriangle, 
   Gift, 
   Share2, 
   ClipboardCheck,
-  FileText,
-  Plus,
-  BookOpen,
   Clock,
-  AlertCircle,
-  CheckSquare,
   X,
   ArrowRight,
   BarChart3,
   Sparkles,
   Trophy,
   Target,
-  Zap
+  Copy
 } from 'lucide-react';
-import Link from 'next/link';
 
-import Card from '@/app/ui/dashboard/Card';
 import TransactionHistory from '@/app/ui/dashboard/TransactionHistory';
 import WalletPay from '@/app/ui/dashboard/WalletPay';
 import SpinWheel from '@/app/ui/dashboard/spin-wheel';
 import UserReports from '@/app/ui/dashboard/userReports';
 import { fetchDashboardData } from '@/app/lib/data';
 import { useDashboard } from './DashboardContext';
-import { getUserContentStats, getRecentSubmissions } from '@/app/actions/dashboard/content';
-import { getUserSpinStats } from '@/app/actions/spin';
 import TransactionTrendsChart from '@/app/ui/dashboard/chart';
 
 // =============================================================================
@@ -113,57 +103,21 @@ interface DashboardData {
   transactions: Transaction[];
 }
 
-interface ContentStats {
-  totalSubmissions: number;
-  pending: number;
-  approved: number;
-  rejected: number;
-  revisionRequested: number;
-  totalEarned: number;
-  averageEarnings: number;
-}
 
-interface RecentSubmission {
-  _id: string;
-  title: string;
-  content_type: string;
-  status: 'pending' | 'approved' | 'rejected' | 'revision_requested';
-  payment_status: 'pending' | 'paid' | 'rejected';
-  payment_amount: number;
-  submission_date: string;
-  task_category: string;
-}
-
-interface SpinStats {
-  totalSpins: number;
-  totalWins: number;
-  winRate: number;
-  totalPrizeValue: number;
-  currentStreak: number;
-  bestStreak: number;
-  availableSpins: number;
-  totalSpinsUsed: number;
-}
 
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
 export default function DashboardPage() {
-  const { user, spinMutation } = useDashboard();
+  const { user } = useDashboard();
   const [spinMessage, setSpinMessage] = useState<string | null>(null);
   const [referralMessage, setReferralMessage] = useState<string | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [contentStats, setContentStats] = useState<ContentStats | null>(null);
-  const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmission[]>([]);
-  const [spinStats, setSpinStats] = useState<SpinStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [contentLoading, setContentLoading] = useState(true);
-  const [spinStatsLoading, setSpinStatsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const [showSpinWheel, setShowSpinWheel] = useState(false);
-  const [spinResult, setSpinResult] = useState<any>(null);
   const [refreshingStats, setRefreshingStats] = useState(false);
 
   useEffect(() => {
@@ -186,96 +140,18 @@ export default function DashboardPage() {
     loadDashboardData();
   }, [user]);
 
-  useEffect(() => {
-    if (!user) return;
-
-    const loadContentData = async () => {
-      try {
-        setContentLoading(true);
-        const [statsResult, submissionsResult] = await Promise.allSettled([
-          getUserContentStats(),
-          getRecentSubmissions(5)
-        ]);
-
-        if (statsResult.status === 'fulfilled' && (statsResult.value as any).success) {
-          setContentStats((statsResult.value as any).data);
-        } else {
-          console.error('Failed to load content stats:', statsResult.status === 'rejected' ? statsResult.reason : (statsResult.value as any).message);
-        }
-
-        if (submissionsResult.status === 'fulfilled' && (submissionsResult.value as any).success) {
-          setRecentSubmissions((submissionsResult.value as any).data || []);
-        } else {
-          console.error('Failed to load recent submissions:', submissionsResult.status === 'rejected' ? submissionsResult.reason : (submissionsResult.value as any).message);
-        }
-      } catch (err) {
-        console.error('Failed to load content data:', err);
-      } finally {
-        setContentLoading(false);
-      }
-    };
-
-    loadContentData();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const loadSpinStats = async () => {
-      try {
-        setSpinStatsLoading(true);
-        console.log('🔄 Loading spin stats for user:', user.id);
-        
-        const result = await getUserSpinStats(user.id);
-        
-        if (result.success && result.data) {
-          console.log('✅ Spin stats loaded:', result.data);
-          setSpinStats(result.data);
-        } else {
-          console.error('❌ Failed to load spin stats:', result.message);
-          setSpinStats({
-            totalSpins: 0,
-            totalWins: 0,
-            winRate: 0,
-            totalPrizeValue: 0,
-            currentStreak: 0,
-            bestStreak: 0,
-            availableSpins: dashboardData?.stats.availableSpins || 0,
-            totalSpinsUsed: 0
-          });
-        }
-      } catch (err) {
-        console.error('❌ Error loading spin stats:', err);
-        setSpinStats({
-          totalSpins: 0,
-          totalWins: 0,
-          winRate: 0,
-          totalPrizeValue: 0,
-          currentStreak: 0,
-          bestStreak: 0,
-          availableSpins: dashboardData?.stats.availableSpins || 0,
-          totalSpinsUsed: 0
-        });
-      } finally {
-        setSpinStatsLoading(false);
-      }
-    };
-
-    loadSpinStats();
-  }, [user, dashboardData?.stats.availableSpins]);
+  
 
   const handleSpinClick = () => {
     setShowSpinWheel(true);
     setSpinMessage('');
-    setSpinResult(null);
   };
 
   const handleSpinComplete = async (result: any) => {
-    console.log('🎯 Spin completed with result:', result);
-    setSpinResult(result);
+    console.log('Spin completed with result:', result);
     
     if (result.success) {
-      setSpinMessage(`🎉 Congratulations! You won: ${result.prizeName}`);
+      setSpinMessage(`Congratulations! You won: ${result.prizeName}`);
     } else {
       setSpinMessage(result.message || 'Spin completed. Better luck next time!');
     }
@@ -283,23 +159,8 @@ export default function DashboardPage() {
     if (user) {
       try {
         setRefreshingStats(true);
-        console.log('🔄 Force refreshing dashboard data and spin stats after spin...');
-        
-        const [updatedDashboardData, updatedSpinStats] = await Promise.allSettled([
-          fetchDashboardData(user.id),
-          getUserSpinStats(user.id)
-        ]);
-
-        if (updatedDashboardData.status === 'fulfilled') {
-          setDashboardData(updatedDashboardData.value);
-          console.log('✅ Dashboard data refreshed');
-        }
-
-        if (updatedSpinStats.status === 'fulfilled' && updatedSpinStats.value.success) {
-          setSpinStats(updatedSpinStats.value.data);
-          console.log('✅ Spin stats refreshed:', updatedSpinStats.value.data);
-        }
-
+        const updatedDashboardData = await fetchDashboardData(user.id);
+        setDashboardData(updatedDashboardData);
       } catch (err) {
         console.error('Failed to refresh data after spin:', err);
       } finally {
@@ -312,56 +173,19 @@ export default function DashboardPage() {
     }, 3000);
   };
 
-  const handleCopyReferralCode = async (referralId: string) => {
+  const handleCopyReferralLink = async (referralId: string) => {
     try {
-      await navigator.clipboard.writeText(referralId);
-      setReferralMessage('Referral code copied to clipboard!');
+      const referralLink = `${window.location.origin}/auth/register?ref=${referralId}`;
+      await navigator.clipboard.writeText(referralLink);
+      setReferralMessage('Referral link copied to clipboard!');
       setTimeout(() => setReferralMessage(null), 3000);
     } catch (err) {
-      setReferralMessage('Failed to copy referral code.');
+      setReferralMessage('Failed to copy referral link.');
       setTimeout(() => setReferralMessage(null), 3000);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'bg-green-100 text-green-800 border border-green-200';
-      case 'pending': return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-      case 'rejected': return 'bg-red-100 text-red-800 border border-red-200';
-      case 'revision_requested': return 'bg-orange-100 text-orange-800 border border-orange-200';
-      default: return 'bg-gray-100 text-gray-800 border border-gray-200';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'approved': return <CheckSquare className="w-4 h-4" />;
-      case 'pending': return <Clock className="w-4 h-4" />;
-      case 'rejected': return <AlertCircle className="w-4 h-4" />;
-      case 'revision_requested': return <RotateCw className="w-4 h-4" />;
-      default: return <Clock className="w-4 h-4" />;
-    }
-  };
-
-  const formatPayment = (amount: number) => {
-    return `KES ${amount.toFixed(2)}`;
-  };
-
-  useEffect(() => {
-    if (dashboardData?.stats) {
-      console.log('📊 Current Dashboard Stats:', {
-        totalSpins: dashboardData.stats.totalSpins,
-        totalWins: dashboardData.stats.totalWins,
-        winRate: dashboardData.stats.winRate,
-        currentStreak: dashboardData.stats.currentStreak,
-        availableSpins: dashboardData.stats.availableSpins
-      });
-    }
-    
-    if (spinStats) {
-      console.log('🎯 Current Spin Stats:', spinStats);
-    }
-  }, [dashboardData, spinStats]);
+  
 
   if (!user) {
     return (
@@ -418,17 +242,6 @@ export default function DashboardPage() {
 
   const { profile, stats, receipts, transactions } = dashboardData || {};
 
-  const displayStats = {
-    ...stats,
-    totalSpins: spinStats?.totalSpins ?? stats?.totalSpins ?? 0,
-    totalWins: spinStats?.totalWins ?? stats?.totalWins ?? 0,
-    winRate: spinStats?.winRate ?? stats?.winRate ?? 0,
-    currentStreak: spinStats?.currentStreak ?? stats?.currentStreak ?? 0,
-    bestStreak: spinStats?.bestStreak ?? stats?.bestStreak ?? 0,
-    availableSpins: spinStats?.availableSpins ?? stats?.availableSpins ?? 0,
-    totalSpinsUsed: spinStats?.totalSpinsUsed ?? stats?.totalSpinsUsed ?? 0,
-  };
-
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 md:p-8 min-h-screen relative">
       {/* Animated background elements */}
@@ -459,64 +272,90 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Wallet Summary - Top 4 Critical Cards */}
-      {displayStats ? (
+      {/* Earning Summary - Compact Cards */}
+      {stats ? (
         <>
           <div className="mb-6 sm:mb-8">
             <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4 flex items-center">
               <Target className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-indigo-600" />
-              Wallet Summary
+              Earning Summary
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-              <Card title="Available Balance" value={`KES ${displayStats.availableBalance.toFixed(2)}`} icon={DollarSign} color="indigo" />
-              <Card title="Today's Earnings" value={`KES ${(displayStats.todayEarnings || 0).toFixed(2)}`} icon={TrendingUp} color="green" />
-              <Card title="Lifetime Earnings" value={`KES ${displayStats.totalEarnings.toFixed(2)}`} icon={Trophy} color="purple" />
-              <Card title="Today's Withdrawals" value={`KES ${(displayStats.todayWithdrawals || 0).toFixed(2)}`} icon={ArrowRight} color="yellow" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+              <div className="bg-indigo-600 rounded-xl p-3 shadow-md">
+                <div className="flex items-center gap-2 mb-1">
+                  <DollarSign className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Available</span>
+                </div>
+                <p className="text-lg font-bold text-white">KES {stats.availableBalance.toFixed(0)}</p>
+              </div>
+              <div className="bg-green-600 rounded-xl p-3 shadow-md">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingUp className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Today</span>
+                </div>
+                <p className="text-lg font-bold text-white">KES {(stats.todayEarnings || 0).toFixed(0)}</p>
+              </div>
+              <div className="bg-purple-600 rounded-xl p-3 shadow-md">
+                <div className="flex items-center gap-2 mb-1">
+                  <Trophy className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Lifetime</span>
+                </div>
+                <p className="text-lg font-bold text-white">KES {stats.totalEarnings.toFixed(0)}</p>
+              </div>
+              <div className="bg-yellow-500 rounded-xl p-3 shadow-md">
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Pending W/D</span>
+                </div>
+                <p className="text-lg font-bold text-white">KES {stats.pendingWithdrawals.toFixed(0)}</p>
+              </div>
+              <div className="bg-orange-500 rounded-xl p-3 shadow-md">
+                <div className="flex items-center gap-2 mb-1">
+                  <ArrowRight className="w-4 h-4 text-white/80" />
+                  <span className="text-xs text-white/80 font-medium">Today W/D</span>
+                </div>
+                <p className="text-lg font-bold text-white">KES {(stats.todayWithdrawals || 0).toFixed(0)}</p>
+              </div>
             </div>
           </div>
 
-          {/* Earnings by Source - per-source wallets */}
+          {/* Earnings by Source - Small Containers */}
           <div className="mb-6 sm:mb-8">
             <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4 flex items-center">
               <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-green-600" />
               Earnings by Source
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-5">
-              <Card title="Referral Earnings" value={`KES ${(displayStats.directReferralEarnings || 0).toFixed(2)}`} icon={Share2} color="blue" />
-              <Card title="Spin Wallet" value={`KES ${(displayStats.spinEarnings || 0).toFixed(2)}`} icon={Gift} color="pink" />
-              <Card title="Survey Earnings" value={`KES ${(displayStats.surveyEarnings || 0).toFixed(2)}`} icon={ClipboardCheck} color="orange" />
-              <Card title="Task Earnings" value={`KES ${(displayStats.taskEarnings || 0).toFixed(2)}`} icon={CheckSquare} color="cyan" />
-              <Card title="Bonus Earnings" value={`KES ${(displayStats.bonusEarnings || 0).toFixed(2)}`} icon={Sparkles} color="purple" />
-              <Card title="Downline Earnings" value={`KES ${(displayStats.downlineEarnings || 0).toFixed(2)}`} icon={Users} color="green" />
-            </div>
-          </div>
-
-          {/* Quick Stats Cluster */}
-          <div className="mb-6 sm:mb-8">
-            <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4 flex items-center">
-              <Zap className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-orange-600" />
-              Activity Snapshot
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-              <Card title="Available Spins" value={displayStats.availableSpins.toString()} icon={RotateCw} color="red" />
-              <Card title="Tasks Completed" value={profile?.tasks_completed?.toString() || '0'} icon={CheckCircle} color="cyan" />
-              <Card title="Pending Withdrawals" value={`KES ${displayStats.pendingWithdrawals.toFixed(2)}`} icon={Clock} color="yellow" />
-              <Card title="Level / Rank" value={`Level ${displayStats.level} (${displayStats.rank})`} icon={Trophy} color="purple" />
-            </div>
-          </div>
-
-          {/* Spin Performance Cluster */}
-          <div className="mb-6 sm:mb-8">
-            <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4 flex items-center">
-              <RotateCw className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-red-600" />
-              Spin Performance
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-5">
-              <Card title="Total Spins" value={displayStats.totalSpins?.toString() || '0'} icon={RotateCw} color="purple" loading={spinStatsLoading} />
-              <Card title="Total Wins" value={displayStats.totalWins?.toString() || '0'} icon={Gift} color="green" loading={spinStatsLoading} />
-              <Card title="Win Rate" value={`${displayStats.winRate?.toFixed(1) || '0.0'}%`} icon={TrendingUp} color="blue" loading={spinStatsLoading} />
-              <Card title="Current Streak" value={displayStats.currentStreak?.toString() || '0'} icon={CheckCircle} color="orange" loading={spinStatsLoading} />
-              <Card title="Best Streak" value={displayStats.bestStreak?.toString() || '0'} icon={Trophy} color="yellow" loading={spinStatsLoading} />
+            <div className="flex flex-wrap gap-2 sm:gap-3">
+              <div className="flex items-center gap-2 bg-blue-100 border border-blue-200 rounded-lg px-3 py-2">
+                <Share2 className="w-4 h-4 text-blue-600" />
+                <span className="text-xs text-blue-700 font-medium">Direct Referral</span>
+                <span className="text-sm font-bold text-blue-800">KES {(stats.directReferralEarnings || 0).toFixed(0)}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-green-100 border border-green-200 rounded-lg px-3 py-2">
+                <Users className="w-4 h-4 text-green-600" />
+                <span className="text-xs text-green-700 font-medium">Downline</span>
+                <span className="text-sm font-bold text-green-800">KES {(stats.downlineEarnings || 0).toFixed(0)}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-pink-100 border border-pink-200 rounded-lg px-3 py-2">
+                <Gift className="w-4 h-4 text-pink-600" />
+                <span className="text-xs text-pink-700 font-medium">Spin Wallet</span>
+                <span className="text-sm font-bold text-pink-800">KES {(stats.spinEarnings || 0).toFixed(0)}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-orange-100 border border-orange-200 rounded-lg px-3 py-2">
+                <ClipboardCheck className="w-4 h-4 text-orange-600" />
+                <span className="text-xs text-orange-700 font-medium">Survey</span>
+                <span className="text-sm font-bold text-orange-800">KES {(stats.surveyEarnings || 0).toFixed(0)}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-cyan-100 border border-cyan-200 rounded-lg px-3 py-2">
+                <CheckCircle className="w-4 h-4 text-cyan-600" />
+                <span className="text-xs text-cyan-700 font-medium">Task</span>
+                <span className="text-sm font-bold text-cyan-800">KES {(stats.taskEarnings || 0).toFixed(0)}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-purple-100 border border-purple-200 rounded-lg px-3 py-2">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                <span className="text-xs text-purple-700 font-medium">Bonus</span>
+                <span className="text-sm font-bold text-purple-800">KES {(stats.bonusEarnings || 0).toFixed(0)}</span>
+              </div>
             </div>
           </div>
         </>
@@ -547,21 +386,11 @@ export default function DashboardPage() {
               <h3 className="text-lg sm:text-xl font-bold text-slate-900">Spin-to-Win</h3>
             </div>
             
-            <div className="bg-gradient-to-r from-red-100 to-pink-100 p-3 sm:p-4 rounded-xl mb-4 border border-red-300">
-              <p className="text-xs sm:text-sm text-slate-600 mb-1">Available Spins</p>
-              <p className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-red-600 to-rose-600 bg-clip-text text-transparent">
-                {displayStats?.availableSpins || profile?.available_spins || 0}
-              </p>
-            </div>
-            
-            <p className="text-xs text-slate-500 mb-4 flex items-center">
-              <Zap className="w-4 h-4 mr-1 text-orange-500" />
-              Cost per spin: <span className="font-semibold ml-1">5 spins</span>
-            </p>
+            <p className="text-slate-600 mb-4 text-xs sm:text-sm">Try your luck and win exciting prizes!</p>
             
             <button
               onClick={handleSpinClick}
-              disabled={refreshingStats || spinStatsLoading}
+              disabled={refreshingStats}
               className="w-full py-2.5 sm:py-3 px-4 sm:px-6 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-red-500/40 hover:shadow-xl hover:shadow-red-500/50 transition-all duration-250 flex items-center justify-center transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {refreshingStats ? (
@@ -582,7 +411,7 @@ export default function DashboardPage() {
             
             {spinMessage && (
               <div className={`mt-4 p-3 rounded-xl text-center font-medium text-sm backdrop-blur-sm ${
-                spinMessage.includes('Congratulations') || spinMessage.includes('🎉')
+                spinMessage.includes('Congratulations')
                   ? 'bg-green-100/80 text-green-700 border border-green-300'
                   : spinMessage.includes('Not enough')
                   ? 'bg-red-100/80 text-red-700 border border-red-300'
@@ -620,19 +449,20 @@ export default function DashboardPage() {
               </div>
               <h3 className="text-lg sm:text-xl font-bold text-slate-900">Refer & Earn</h3>
             </div>
-            <p className="text-slate-600 mb-4 text-xs sm:text-sm">Share your referral code to earn bonuses</p>
+            <p className="text-slate-600 mb-4 text-xs sm:text-sm">Share your referral link to earn bonuses</p>
             <div className="space-y-3">
               {profile?.referral_id && (
-                <div className="bg-gradient-to-br from-teal-100 to-cyan-100 p-3 sm:p-4 rounded-2xl text-center border border-teal-300">
-                  <p className="text-xs text-teal-700 mb-2 uppercase tracking-wide font-semibold">Your Referral Code</p>
-                  <p className="text-lg sm:text-xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent mb-3 font-mono break-all">
-                    {profile.referral_id}
+                <div className="bg-gradient-to-br from-teal-100 to-cyan-100 p-3 sm:p-4 rounded-2xl border border-teal-300">
+                  <p className="text-xs text-teal-700 mb-2 uppercase tracking-wide font-semibold">Your Referral Link</p>
+                  <p className="text-xs sm:text-sm font-medium bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent mb-3 font-mono break-all">
+                    {typeof window !== 'undefined' ? `${window.location.origin}/auth/register?ref=${profile.referral_id}` : `/auth/register?ref=${profile.referral_id}`}
                   </p>
                   <button
-                    onClick={() => handleCopyReferralCode(profile.referral_id!)}
-                    className="w-full py-2 px-3 sm:px-4 text-xs sm:text-sm bg-gradient-to-r from-teal-600 to-cyan-500 text-white font-semibold rounded-xl hover:from-teal-700 hover:to-cyan-600 shadow-lg shadow-teal-500/40 hover:shadow-teal-500/50 transition-all duration-250 transform hover:scale-105"
+                    onClick={() => handleCopyReferralLink(profile.referral_id!)}
+                    className="w-full py-2 px-3 sm:px-4 text-xs sm:text-sm bg-gradient-to-r from-teal-600 to-cyan-500 text-white font-semibold rounded-xl hover:from-teal-700 hover:to-cyan-600 shadow-lg shadow-teal-500/40 hover:shadow-teal-500/50 transition-all duration-250 transform hover:scale-105 flex items-center justify-center"
                   >
-                    Copy Code
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Link
                   </button>
                 </div>
               )}
@@ -748,156 +578,6 @@ export default function DashboardPage() {
           title="Recent Activity" 
           limit={10} 
         />
-      </div>
-
-      {/* Content Creation Section with Modern Design */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-        <div className="lg:col-span-4 bg-white/70 backdrop-blur-xl p-6 rounded-3xl shadow-lg border border-white/50">
-          <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-purple-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
-                <FileText className="w-5 h-5 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900">Content Creation Dashboard</h3>
-            </div>
-            <div className="flex gap-3 flex-wrap">
-              <Link
-                href="/dashboard/content/create"
-                className="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-250 transform hover:scale-105"
-              >
-                <Plus className="w-5 h-5 mr-2" />
-                Create Content
-              </Link>
-              <Link
-                href="/dashboard/content"
-                className="inline-flex items-center px-5 py-2.5 border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold rounded-xl hover:bg-white hover:border-blue-300 hover:text-blue-600 transition-all duration-250 shadow-sm hover:shadow-md"
-              >
-                <FileText className="w-5 h-5 mr-2" />
-                View All
-              </Link>
-              <Link
-                href="/dashboard/blog"
-                className="inline-flex items-center px-5 py-2.5 border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold rounded-xl hover:bg-white hover:border-cyan-300 hover:text-cyan-600 transition-all duration-250 shadow-sm hover:shadow-md"
-              >
-                <BookOpen className="w-5 h-5 mr-2" />
-                Read Blogs
-              </Link>
-            </div>
-          </div>
-
-          {contentLoading ? (
-            <div className="flex justify-center py-12">
-              <div className="relative inline-flex">
-                <Loader2 className="animate-spin text-blue-600 w-8 h-8" />
-                <div className="absolute inset-0 animate-ping">
-                  <Loader2 className="text-cyan-400 w-8 h-8 opacity-20" />
-                </div>
-              </div>
-              <p className="ml-3 text-slate-600 font-medium">Loading content stats...</p>
-            </div>
-          ) : contentStats ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-blue-100/50 backdrop-blur-sm rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all duration-250">
-                <div className="text-3xl font-bold text-blue-600 mb-2">{contentStats.totalSubmissions}</div>
-                <div className="text-sm text-blue-800 font-semibold">Total Submissions</div>
-              </div>
-              <div className="text-center p-6 bg-gradient-to-br from-yellow-50 to-yellow-100/50 backdrop-blur-sm rounded-2xl border border-yellow-200 shadow-sm hover:shadow-md transition-all duration-250">
-                <div className="text-3xl font-bold text-yellow-600 mb-2">{contentStats.pending}</div>
-                <div className="text-sm text-yellow-800 font-semibold">Pending Review</div>
-              </div>
-              <div className="text-center p-6 bg-gradient-to-br from-green-50 to-green-100/50 backdrop-blur-sm rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all duration-250">
-                <div className="text-3xl font-bold text-green-600 mb-2">{contentStats.approved}</div>
-                <div className="text-sm text-green-800 font-semibold">Approved</div>
-              </div>
-              <div className="text-center p-6 bg-gradient-to-br from-purple-50 to-purple-100/50 backdrop-blur-sm rounded-2xl border border-purple-200 shadow-sm hover:shadow-md transition-all duration-250">
-                <div className="text-3xl font-bold text-purple-600 mb-2">
-                  KES {contentStats.totalEarned.toFixed(2)}
-                </div>
-                <div className="text-sm text-purple-800 font-semibold">Total Earned</div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-center text-slate-500 py-8">No content statistics available.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Recent Submissions with Modern Design */}
-      <div className="bg-white/70 backdrop-blur-xl p-6 rounded-3xl shadow-lg border border-white/50">
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-              <FileText className="w-5 h-5 text-white" />
-            </div>
-            <h3 className="text-2xl font-bold text-slate-900">Recent Submissions</h3>
-          </div>
-          <Link
-            href="/dashboard/content"
-            className="text-blue-600 hover:text-blue-800 font-semibold text-sm flex items-center group"
-          >
-            View All 
-            <ArrowRight className="ml-1 w-4 h-4 group-hover:translate-x-1 transition-transform duration-250" />
-          </Link>
-        </div>
-
-        {contentLoading ? (
-          <div className="flex justify-center py-12">
-            <div className="relative inline-flex">
-              <Loader2 className="animate-spin text-blue-600 w-6 h-6" />
-              <div className="absolute inset-0 animate-ping">
-                <Loader2 className="text-cyan-400 w-6 h-6 opacity-20" />
-              </div>
-            </div>
-            <p className="ml-2 text-slate-600">Loading submissions...</p>
-          </div>
-        ) : recentSubmissions.length > 0 ? (
-          <div className="space-y-3">
-            {recentSubmissions.map((submission) => (
-              <div
-                key={submission._id}
-                className="flex items-center justify-between p-5 border-2 border-slate-200 bg-white/50 backdrop-blur-sm rounded-2xl hover:bg-white hover:border-blue-300 hover:shadow-md transition-all duration-250 group"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2 flex-wrap">
-                    <h4 className="font-semibold text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors duration-250">
-                      {submission.title}
-                    </h4>
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(submission.status)}`}>
-                      {getStatusIcon(submission.status)}
-                      <span className="ml-1.5 capitalize">{submission.status.replace('_', ' ')}</span>
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-slate-600 flex-wrap">
-                    <span className="capitalize font-medium">{submission.content_type.replace('_', ' ')}</span>
-                    <span className="text-slate-400">•</span>
-                    <span>{submission.task_category}</span>
-                    <span className="text-slate-400">•</span>
-                    <span className="font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
-                      {formatPayment(submission.payment_amount)}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right text-sm text-slate-500 ml-4">
-                  {new Date(submission.submission_date).toLocaleDateString()}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-8 h-8 text-slate-400" />
-            </div>
-            <p className="text-slate-500 mb-4 font-medium">No submissions yet</p>
-            <Link
-              href="/dashboard/content/create"
-              className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-250 transform hover:scale-105"
-            >
-              <Plus className="w-5 h-5 mr-2" />
-              Create Your First Submission
-            </Link>
-          </div>
-        )}
       </div>
     </div>
   );
