@@ -140,7 +140,9 @@ export default function WalletPage() {
       amount: amount,
       description: description,
       date: date,
-      status: tx.status || 'completed'
+      status: tx.status || 'completed',
+      transaction_code: tx.transaction_code || undefined,
+      mpesa_receipt_number: tx.mpesaReceiptNumber || tx.mpesa_receipt_number || undefined
     };
   };
 

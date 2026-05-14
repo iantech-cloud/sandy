@@ -546,7 +546,7 @@ async function ensureSpinPrizes(): Promise<void> {
       const totalProbability = defaultPrizes.reduce((sum, p) => sum + p.base_probability, 0)
       
       console.log(`✅ Created ${defaultPrizes.length} spin prizes`)
-      console.log(`��� Total probability: ${totalProbability}%`)
+      console.log(`����� Total probability: ${totalProbability}%`)
     }
   } catch (error) {
     console.error('Error ensuring spin prizes:', error)
@@ -902,8 +902,11 @@ export async function depositSpinWalletViaMpesa(depositData: {
         status: 'pending',
         mpesa_transaction_id: mpesaTransaction._id,
 
-        // Required fields for transaction tracking
-        target_type: 'spin_wallet',
+        // Required fields for transaction tracking.
+        // target_type must be 'user' (schema enum: ['user','company']).
+        // The callback router differentiates spin vs main-wallet deposits
+        // via MpesaTransaction.metadata.deposit_type === 'spin_wallet'.
+        target_type: 'user',
         target_id: currentUser._id.toString(),
         
         metadata: {

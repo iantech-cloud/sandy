@@ -699,7 +699,7 @@ const TransactionSchema = new Schema({
   description: { type: String, required: true },
   status: {
     type: String,
-    enum: ['pending', 'completed', 'failed', 'cancelled'],
+    enum: ['pending', 'completed', 'failed', 'cancelled', 'timeout'],
     default: 'completed',
     required: true
   },

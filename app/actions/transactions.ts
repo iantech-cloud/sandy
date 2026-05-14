@@ -304,7 +304,13 @@ export async function processMpesaDeposit(depositData: {
 				status: 'initiated',
 				stk_push_response: stkData,
 				result_code: 1032,
-				result_desc: 'STK Push initiated successfully'
+				result_desc: 'STK Push initiated successfully',
+				source: 'wallet',
+				metadata: {
+					user_username: currentUser.username,
+					deposit_type: 'wallet',
+					initiated_at: new Date().toISOString(),
+				}
 			});
 
 			// FIXED: Add target_type and target_id
