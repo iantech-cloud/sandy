@@ -1,6 +1,6 @@
 // app/api/mpesa/callback/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase, Transaction, Profile, MpesaTransaction, ActivationPayment, MpesaCallbackLog } from '@/app/lib/models';
+import { connectToDatabase, Transaction, Profile, MpesaTransaction, ActivationPayment, MpesaCallbackLog, SpinWallet } from '@/app/lib/models';
 import mongoose from 'mongoose';
 import { completeActivationAfterPayment } from '@/app/actions/activation';
 import { sendPaymentConfirmationInvoice } from '@/app/actions/email';
@@ -227,8 +227,43 @@ export async function POST(request: NextRequest) {
       amount: mpesaTransaction.amount_cents / 100,
       previousStatus: mpesaTransaction.status,
       source: mpesaTransaction.source,
+      depositType: mpesaTransaction.metadata?.deposit_type,
       isActivationPayment: mpesaTransaction.is_activation_payment
     });
+
+    // ========================================================================
+    // 🔒 IDEMPOTENCY GUARD — prevent double processing
+    // If this transaction has already been processed to a terminal state,
+    // skip everything and return success to Safaricom.
+    // ========================================================================
+    const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
+    if (terminalStatuses.includes(mpesaTransaction.status) && mpesaTransaction.metadata?.callback_processed) {
+      console.log('⚠️ Callback already processed for this transaction, skipping:', {
+        transactionId: mpesaTransaction._id,
+        currentStatus: mpesaTransaction.status,
+      });
+      await session.abortTransaction();
+      await MpesaCallbackLog.findByIdAndUpdate(callbackLog._id, {
+        processed: true,
+        processed_at: new Date(),
+        processing_error: 'Duplicate callback - already processed',
+        final_status: mpesaTransaction.status,
+      });
+      return NextResponse.json({ ResultCode: 0, ResultDesc: 'Already processed' });
+    }
+
+    // Normalize deposit_type from metadata. Accept both legacy and new values.
+    const rawDepositType = mpesaTransaction.metadata?.deposit_type || '';
+    let depositType: 'wallet' | 'spin_wallet' | 'activation' | 'unknown' = 'unknown';
+    if (rawDepositType === 'wallet' || rawDepositType === 'wallet_topup') {
+      depositType = 'wallet';
+    } else if (rawDepositType === 'spin_wallet' || rawDepositType === 'spin_wallet_topup') {
+      depositType = 'spin_wallet';
+    } else if (rawDepositType === 'activation' || mpesaTransaction.is_activation_payment) {
+      depositType = 'activation';
+    }
+
+    console.log('🎯 Resolved deposit_type:', { rawDepositType, depositType });
 
     // Map to VALID enum values
     const safeResultCode = mapMpesaResultCode(resultCode);
@@ -308,7 +343,97 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Mark this transaction as processed by the callback so duplicate
+    // callbacks (and concurrent polling) cannot double-credit a wallet.
+    mpesaTransaction.metadata = {
+      ...(mpesaTransaction.metadata || {}),
+      callback_processed: true,
+      callback_processed_at: new Date().toISOString(),
+      deposit_type: depositType !== 'unknown' ? depositType : rawDepositType,
+    };
+
     await mpesaTransaction.save({ session });
+
+    // ========================================================================
+    // 🎰 PAYMENT ROUTER — SPIN WALLET
+    // If this deposit was for a spin wallet top-up, credit the SpinWallet
+    // (not the main Profile.balance_cents). Also update the embedded
+    // deposit record so the user's spin history reflects success/failure.
+    // ========================================================================
+    if (depositType === 'spin_wallet') {
+      let spinWallet = await (SpinWallet as any).findOne({
+        user_id: mpesaTransaction.user_id,
+      }).session(session);
+
+      if (!spinWallet) {
+        // Create on demand (callback should not fail just because wallet doc is missing)
+        const created = await (SpinWallet as any).create([{
+          user_id: mpesaTransaction.user_id,
+          balance_cents: 0,
+          total_deposited_cents: 0,
+          total_used_cents: 0,
+          total_spins: 0,
+          deposits: [],
+        }], { session });
+        spinWallet = created[0];
+      }
+
+      // Locate any existing embedded deposit record for this checkout id
+      const existingDeposit = spinWallet.deposits.find(
+        (d: any) => d.mpesa_checkout_request_id === checkoutRequestID
+      );
+
+      if (safeStatus === 'completed') {
+        // Guard against double credit even if we somehow re-enter this block
+        const alreadyCompleted = existingDeposit?.status === 'completed';
+        if (!alreadyCompleted) {
+          spinWallet.balance_cents += mpesaTransaction.amount_cents;
+          spinWallet.total_deposited_cents += mpesaTransaction.amount_cents;
+
+          if (existingDeposit) {
+            existingDeposit.status = 'completed';
+            existingDeposit.mpesa_status = 'completed';
+            existingDeposit.mpesa_receipt_number = mpesaTransaction.mpesa_receipt_number;
+            existingDeposit.deposited_at = new Date();
+          } else {
+            spinWallet.deposits.push({
+              amount_cents: mpesaTransaction.amount_cents,
+              mpesa_checkout_request_id: checkoutRequestID,
+              mpesa_merchant_request_id: mpesaTransaction.merchant_request_id,
+              mpesa_receipt_number: mpesaTransaction.mpesa_receipt_number,
+              mpesa_status: 'completed',
+              status: 'completed',
+              phone_number: mpesaTransaction.phone_number,
+              deposited_at: new Date(),
+              created_at: new Date(),
+            });
+          }
+          console.log(
+            `💰 Credited SpinWallet: +${mpesaTransaction.amount_cents / 100} KES (user: ${mpesaTransaction.user_id})`
+          );
+        } else {
+          console.log('⚠️ SpinWallet deposit already completed, skipping credit');
+        }
+      } else if (['failed', 'cancelled', 'timeout'].includes(safeStatus)) {
+        if (existingDeposit) {
+          existingDeposit.status = 'failed';
+          existingDeposit.mpesa_status = safeStatus;
+        } else {
+          spinWallet.deposits.push({
+            amount_cents: mpesaTransaction.amount_cents,
+            mpesa_checkout_request_id: checkoutRequestID,
+            mpesa_merchant_request_id: mpesaTransaction.merchant_request_id,
+            mpesa_status: safeStatus,
+            status: 'failed',
+            phone_number: mpesaTransaction.phone_number,
+            created_at: new Date(),
+          });
+        }
+        console.log(`❌ SpinWallet deposit marked as failed (${failureType})`);
+      }
+
+      await spinWallet.save({ session });
+    }
 
     // Find associated activation payment WITH session
     const activationPayment = await ActivationPayment.findOne({
@@ -427,26 +552,35 @@ export async function POST(request: NextRequest) {
 
         console.log(`✅ Transaction marked as completed (${transactionFlow})`);
 
-        // Update user balance for completed transactions
-        if (!transaction.balance_updated) {
+        // Update main Profile.balance_cents ONLY for main-wallet deposits.
+        // Spin wallet deposits are credited above to SpinWallet, and
+        // activation payments do not credit any user wallet at all.
+        const shouldCreditMainWallet = depositType === 'wallet' || depositType === 'unknown';
+
+        if (!transaction.balance_updated && shouldCreditMainWallet) {
           const user = await Profile.findById(transaction.user_id).session(session || undefined);
-          
+
           if (user) {
             if (transactionFlow === 'credit') {
               // Money coming in
               user.balance_cents += transaction.amount_cents;
               user.total_earnings_cents = (user.total_earnings_cents || 0) + transaction.amount_cents;
-              console.log(`💰 Added ${transaction.amount_cents / 100} KES to user balance (CREDIT)`);
+              console.log(`💰 Added ${transaction.amount_cents / 100} KES to main wallet (CREDIT)`);
             } else {
               // Money going out (this shouldn't happen in callback, but handle it)
               user.balance_cents -= transaction.amount_cents;
               user.total_withdrawals_cents = (user.total_withdrawals_cents || 0) + transaction.amount_cents;
-              console.log(`💸 Deducted ${transaction.amount_cents / 100} KES from user balance (DEBIT)`);
+              console.log(`💸 Deducted ${transaction.amount_cents / 100} KES from main wallet (DEBIT)`);
             }
-            
+
             await user.save({ session: session || undefined });
             transaction.balance_updated = true;
           }
+        } else if (!shouldCreditMainWallet) {
+          console.log(`⏭️ Skipping main wallet credit (deposit_type=${depositType})`);
+          // Still mark the Transaction record itself as balance_updated so
+          // reconciliation jobs don't try to credit again.
+          transaction.balance_updated = true;
         }
       } else if (['failed', 'cancelled', 'timeout'].includes(safeStatus)) {
         // Payment failed/cancelled/timeout

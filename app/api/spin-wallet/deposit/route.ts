@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { initiatSpinDeposit } from '@/app/actions/spin-wallet'
+import { depositSpinWalletViaMpesa } from '@/app/actions/spin'
 
+/**
+ * Unified spin-wallet deposit endpoint.
+ *
+ * Routes to the canonical `depositSpinWalletViaMpesa` action which:
+ *   - Initiates a single STK Push
+ *   - Persists an MpesaTransaction with metadata.deposit_type = 'spin_wallet'
+ *   - Creates a Transaction record with target_type = 'spin_wallet'
+ *
+ * The unified `/api/mpesa/callback` route then credits the SpinWallet
+ * (not Profile.balance_cents) based on the deposit_type metadata.
+ */
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -10,7 +21,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { phoneNumber, amount_cents } = body
+    const { phoneNumber, amount_cents, amount } = body
 
     if (!phoneNumber || !phoneNumber.trim()) {
       return NextResponse.json(
@@ -19,9 +30,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Convert cents to KES amount
-    const amountKes = amount_cents ? amount_cents / 100 : 30
-    const result = await initiatSpinDeposit(phoneNumber.trim(), amountKes)
+    // Accept either `amount` (KES) or `amount_cents` (cents).
+    // KES is the canonical unit at the API boundary.
+    let amountKes: number
+    if (typeof amount === 'number' && amount > 0) {
+      amountKes = amount
+    } else if (typeof amount_cents === 'number' && amount_cents > 0) {
+      amountKes = amount_cents / 100
+    } else {
+      amountKes = 30 // Default spin cost
+    }
+
+    const result = await depositSpinWalletViaMpesa({
+      amount: amountKes,
+      phoneNumber: phoneNumber.trim(),
+    })
+
     return NextResponse.json(result)
   } catch (error) {
     console.error('[v0] Error initiating spin deposit:', error)
