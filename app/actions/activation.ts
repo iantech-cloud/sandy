@@ -593,7 +593,10 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
     }
 
     // If already final status, return immediately (no need to query M-Pesa again)
+    // This ensures we use the callback-provided data when available
     if (['completed', 'failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status)) {
+      console.log('✅ Transaction already in final state:', mpesaTransaction.status);
+      console.log('📝 Source:', mpesaTransaction.metadata?.callback_processed ? 'Safaricom Callback' : 'Database');
       return {
         success: true,
         data: {
@@ -604,7 +607,7 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
           isActivationPayment: true,
           completedAt: mpesaTransaction.completed_at,
           failedAt: mpesaTransaction.failed_at,
-          source: 'database'
+          source: mpesaTransaction.metadata?.callback_processed ? 'safaricom_callback' : 'database'
         },
         message: `Payment status: ${mpesaTransaction.status}`
       };
@@ -887,7 +890,9 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       return { success: false, message: 'Invalid phone number format. Use 07XXXXXXXX or 2547XXXXXXXX' };
     }
 
-    const activationAmount = userProfile.activation_amount_cents || 9000; // KES 90
+    // Always use 9000 cents (KES 90) as the standard activation fee
+    // This ensures consistency regardless of any legacy values in user profiles
+    const activationAmount = 9000; // KES 90 - standard activation fee
 
     console.log('🎯 Starting activation payment process:');
     console.log('👤 User:', userProfile.username);
