@@ -783,10 +783,16 @@ export async function getUserBalance(): Promise<BalanceResponse> {
             return { success: false, message: 'User not found' };
         }
 
+        const balanceInKes = (currentUser.balance_cents || 0) / 100;
+        console.log('[v0] getUserBalance debug:', {
+          balance_cents: currentUser.balance_cents || 0,
+          balance_kes: balanceInKes,
+          formula: `${(currentUser.balance_cents || 0)} / 100 = ${balanceInKes}`
+        });
         return {
             success: true,
             data: {
-                balance: (currentUser.balance_cents || 0) / 100,
+                balance: balanceInKes,
                 balance_cents: currentUser.balance_cents || 0
             },
             message: 'Balance fetched successfully'
