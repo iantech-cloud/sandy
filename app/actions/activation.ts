@@ -973,7 +973,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       const transaction = await (Transaction as any).create({
         user_id: userProfile._id,
         amount_cents: activationAmount,
-        type: 'ACTIVATION',
+        type: 'ACCOUNT_ACTIVATION',
         description: `Account activation fee via M-Pesa from ${formattedPhone}`,
         status: 'pending',
         mpesa_transaction_id: mpesaTransaction._id,
