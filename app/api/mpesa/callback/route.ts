@@ -572,8 +572,17 @@ export async function POST(request: NextRequest) {
           if (user) {
             if (transactionFlow === 'credit') {
               // Money coming in
+              const balanceBeforeUpdate = user.balance_cents;
               user.balance_cents += transaction.amount_cents;
               user.total_earnings_cents = (user.total_earnings_cents || 0) + transaction.amount_cents;
+              console.log('[v0] Balance update debug:', {
+                transaction_amount_cents: transaction.amount_cents,
+                transaction_amount_kes: transaction.amount_cents / 100,
+                balance_before_cents: balanceBeforeUpdate,
+                balance_after_cents: user.balance_cents,
+                difference_cents: transaction.amount_cents,
+                formula: `${transaction.amount_cents} cents = ${transaction.amount_cents / 100} KES`
+              });
               console.log(`💰 Added ${transaction.amount_cents / 100} KES to main wallet (CREDIT)`);
             } else {
               // Money going out (this shouldn't happen in callback, but handle it)

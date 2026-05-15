@@ -238,6 +238,11 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     } as ProfileDB;
 
     // 2. Construct Stats - FIXED VERSION
+    console.log('[v0] Balance conversion debug:', {
+      balance_cents: profileData.balance_cents,
+      converted_to_kes: centsToUnits(profileData.balance_cents),
+      formula: `${profileData.balance_cents} / 100 = ${centsToUnits(profileData.balance_cents)}`
+    });
     const stats = {
       totalEarnings: centsToUnits(profileData.total_earnings_cents),
       availableBalance: centsToUnits(profileData.balance_cents),
