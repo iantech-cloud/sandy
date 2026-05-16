@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto';
 import { Profile, Referral, DownlineUser, VerificationToken, connectToDatabase } from '@/app/lib/models'; 
 import { CommissionService } from '@/app/lib/services/commissionService';
 import { sendVerificationEmail } from '@/app/actions/email';
+import { formatPhoneNumber, isValidPhoneNumber } from '@/app/lib/utils/phoneFormatter';
 
 // Configuration for generating new referral IDs
 const REFERRAL_ID_LENGTH = 8;
@@ -46,6 +47,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Missing required fields.' }, { status: 400 });
     }
 
+    // Validate and format phone number
+    if (!isValidPhoneNumber(phone)) {
+      return NextResponse.json(
+        { message: 'Invalid phone number format. Please use: 791406285, 0791406285, 254791406285, or +254791406285' }, 
+        { status: 400 }
+      );
+    }
+
+    const formattedPhone = formatPhoneNumber(phone);
+    console.log('Formatted phone number:', formattedPhone);
+
     // Validate password strength
     if (password.length < 6) {
       return NextResponse.json({ message: 'Password must be at least 6 characters long.' }, { status: 400 });
@@ -62,7 +74,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Check for existing users (Uniqueness check)
-    const existingUser = await Profile.findOne({ $or: [{ username }, { email }] });
+    const existingUser = await Profile.findOne({ $or: [{ username }, { email }, { phone_number: formattedPhone }] });
 
     if (existingUser) {
       if (existingUser.username === username) {
@@ -70,6 +82,9 @@ export async function POST(request: NextRequest) {
       }
       if (existingUser.email === email) {
         return NextResponse.json({ message: 'Email already registered.' }, { status: 409 });
+      }
+      if (existingUser.phone_number === formattedPhone) {
+        return NextResponse.json({ message: 'Phone number already registered.' }, { status: 409 });
       }
     }
 
@@ -103,7 +118,7 @@ export async function POST(request: NextRequest) {
       _id: newUserId,
       username,
       email,
-      phone_number: phone,
+      phone_number: formattedPhone,
       password: hashedPassword, 
       referral_id: newUserReferralId,
       // Set initial status as pending approval

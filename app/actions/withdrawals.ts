@@ -10,6 +10,7 @@ import {
   AdminAuditLog
 } from '../lib/models';
 import { auth } from '@/auth';
+import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '../lib/utils/phoneFormatter';
 
 // ===========================
 // TYPES & INTERFACES
@@ -1390,6 +1391,16 @@ export async function validateWithdrawal(
     // Check user exists
     if (!withdrawal.user_id) {
       issues.push('User not found');
+    } else {
+      // CRITICAL: Verify withdrawal phone matches the user's registered phone
+      const user = withdrawal.user_id as any;
+      try {
+        if (!phoneNumbersMatch(withdrawal.mpesa_number, user.phone_number)) {
+          issues.push('Withdrawal phone number does not match user\'s registered phone number');
+        }
+      } catch (error) {
+        issues.push('Invalid phone number format in withdrawal');
+      }
     }
 
     // Validate M-Pesa number

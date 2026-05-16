@@ -5,6 +5,7 @@
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
 import { connectToDatabase, Profile, MpesaTransaction, Transaction } from '../lib/models';
+import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '../lib/utils/phoneFormatter';
 
 // M-Pesa configuration matching transactions.ts
 const MPESA_CONFIG = {
@@ -168,21 +169,28 @@ async function validateDeposit(
         return { valid: false, message: 'Amount must be between KES 10 and KES 70,000' };
     }
 
-    let formattedPhone = phoneNumber;
-    if (phoneNumber.startsWith('0') && phoneNumber.length === 10) {
-        formattedPhone = `254${phoneNumber.substring(1)}`;
-    } else if (phoneNumber.startsWith('+254')) {
-        formattedPhone = phoneNumber.substring(1);
+    // Validate and format phone number
+    if (!isValidPhoneNumber(phoneNumber)) {
+        return { valid: false, message: 'Invalid phone number format. Use 791406285, 0791406285, 254791406285, or +254791406285' };
     }
 
-    if (!formattedPhone.match(/^254[0-9]{9}$/)) {
-        return { valid: false, message: 'Invalid phone number format. Use 07XXXXXXXX, 2547XXXXXXXX, or +2547XXXXXXXX' };
-    }
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    const mpesaPhone = getMpesaPhoneFormat(formattedPhone);
 
     await connectToDatabase();
     const user = await (Profile as any).findOne({ _id: userId });
     if (!user) {
         return { valid: false, message: 'User not found' };
+    }
+
+    // CRITICAL: Verify that the phone number matches the user's registered phone
+    if (!phoneNumbersMatch(mpesaPhone, user.phone_number)) {
+        console.error('[v0] Phone number mismatch:', {
+            providedPhone: mpesaPhone,
+            registeredPhone: user.phone_number,
+            userId: userId
+        });
+        return { valid: false, message: 'Phone number does not match your registered phone number. Deposits can only be made from your registered phone number.' };
     }
 
     // Only block if there is a *recent* in-flight wallet deposit (within the
@@ -192,7 +200,7 @@ async function validateDeposit(
     const pendingMpesaTransaction = await (MpesaTransaction as any).findOne({
         user_id: userId,
         status: { $in: ['initiated', 'pending'] },
-        phone_number: formattedPhone,
+        phone_number: mpesaPhone,
         source: 'wallet',
         created_at: { $gte: threeMinutesAgo },
     });
@@ -201,7 +209,7 @@ async function validateDeposit(
         return { valid: false, message: 'You have a pending M-Pesa deposit in progress. Please wait for it to complete before starting another.' };
     }
 
-    return { valid: true, message: 'Validation passed', data: { formattedPhone } };
+    return { valid: true, message: 'Validation passed', data: { formattedPhone: mpesaPhone } };
 }
 
 /**
