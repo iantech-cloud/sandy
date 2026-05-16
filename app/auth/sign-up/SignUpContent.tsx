@@ -57,14 +57,37 @@ export default function SignUpContent() {
   const [success, setSuccess] = useState('');
   const [emailSent, setEmailSent] = useState(false);
   const [registrationData, setRegistrationData] = useState<any>(null);
+  const [referrerUsername, setReferrerUsername] = useState<string | null>(null);
+  const [hasValidReferral, setHasValidReferral] = useState(false);
   const router = useRouter();
 
-  // Auto-populate referral code from URL parameter
+  // Check for referral code in URL and fetch referrer info
   useEffect(() => {
     const refParam = searchParams.get('ref');
     if (refParam) {
       const formattedRef = refParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
       setFormData(prev => ({ ...prev, referralId: formattedRef }));
+      
+      // Fetch referrer info to display who referred the user
+      const fetchReferrer = async () => {
+        try {
+          const response = await fetch(`/api/referrer/${formattedRef}`);
+          if (response.ok) {
+            const data = await response.json();
+            setReferrerUsername(data.username);
+            setHasValidReferral(true);
+          } else {
+            setHasValidReferral(false);
+          }
+        } catch (err) {
+          console.error('Error fetching referrer:', err);
+          setHasValidReferral(false);
+        }
+      };
+      
+      fetchReferrer();
+    } else {
+      setHasValidReferral(false);
     }
   }, [searchParams]);
 
@@ -83,9 +106,9 @@ export default function SignUpContent() {
       setError('Please fill in all required fields.');
       return false;
     }
-    // Referral code is REQUIRED
-    if (!formData.referralId) {
-      setError('Referral code is required. You must sign up using a valid referral link.');
+    // Referral code is REQUIRED from URL parameter
+    if (!hasValidReferral || !formData.referralId) {
+      setError('Invalid or missing referral link. Please use a valid referral link to sign up.');
       return false;
     }
     if (formData.password.length < 6) {
@@ -108,11 +131,6 @@ export default function SignUpContent() {
     const phoneRegex = /^[0-9]{9}$/;
     if (!phoneRegex.test(formData.phone.replace(/\s/g, ''))) {
       setError('Please enter a valid Kenyan phone number (9 digits without +254).');
-      return false;
-    }
-    // Referral code validation
-    if (!/^[A-Z0-9]{1,10}$/.test(formData.referralId)) {
-      setError('Referral code must be 1-10 characters long and contain only uppercase letters and numbers.');
       return false;
     }
     return true;
@@ -185,14 +203,6 @@ export default function SignUpContent() {
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/\D/g, '').slice(0, 9);
     setFormData({ ...formData, phone: value });
-    setError('');
-    setSuccess('');
-  };
-
-  // Format referral ID to uppercase
-  const handleReferralIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    setFormData({ ...formData, referralId: value });
     setError('');
     setSuccess('');
   };
@@ -330,7 +340,54 @@ export default function SignUpContent() {
     );
   }
 
-  // Original Registration Form
+  // Show message if no valid referral link
+  if (!hasValidReferral) {
+    return (
+      <div className="min-h-screen bg-indigo-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 border border-indigo-100">
+          
+          <div className="text-center mb-8">
+            <div className="text-2xl font-extrabold text-indigo-600 mb-4">
+              HH HustleHub Africa
+            </div>
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 mb-4">
+              <svg className="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <h2 className="text-2xl font-extrabold text-gray-900">
+              Referral Link Required
+            </h2>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-xl bg-red-50 border border-red-200 p-4">
+              <p className="text-sm text-red-700">
+                HustleHub Africa is an <strong>invitation-only platform</strong>. You need a valid referral link to sign up.
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-blue-50 border border-blue-200 p-4">
+              <h3 className="font-semibold text-blue-800 mb-2">How to Get Started:</h3>
+              <ol className="space-y-2 text-sm text-blue-700 list-decimal list-inside">
+                <li>Ask an existing member for their referral link</li>
+                <li>Click on the referral link they share with you</li>
+                <li>Sign up using that link</li>
+              </ol>
+            </div>
+
+            <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-4">
+              <p className="text-sm text-indigo-700">
+                Don&apos;t know anyone yet? Connect with us on social media or check our community for members willing to refer new users!
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Original Registration Form with Referral Info
   return (
     <div className="min-h-screen bg-indigo-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 border border-indigo-100">
@@ -346,6 +403,23 @@ export default function SignUpContent() {
             Join the Pan-African Earning Platform
           </p>
         </div>
+
+        {/* Show who referred the user */}
+        {referrerUsername && (
+          <div className="mb-6 rounded-xl bg-green-50 border border-green-200 p-4">
+            <div className="flex items-start">
+              <svg className="w-5 h-5 mr-2 mt-0.5 flex-shrink-0 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <div>
+                <h3 className="font-semibold text-green-800">You were referred by</h3>
+                <p className="text-sm text-green-700 mt-1">
+                  <strong>{referrerUsername}</strong> will earn commission when you complete your activation
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Google Sign Up Button */}
         <div className="mb-6">
@@ -491,27 +565,7 @@ export default function SignUpContent() {
             />
           </div>
           
-          <div>
-            <label htmlFor="referralId" className="block text-sm font-medium text-gray-700">
-              Referral Code * (Required)
-            </label>
-            <input
-              id="referralId"
-              name="referralId"
-              type="text"
-              required
-              value={formData.referralId}
-              onChange={handleReferralIdChange}
-              placeholder="Enter your referral code"
-              pattern="[A-Z0-9]{1,10}"
-              title="1-10 uppercase letters and numbers only"
-              maxLength={10}
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Required. Uppercase letters and numbers only (max 10 characters). You must have a referral code to join.
-            </p>
-          </div>
+
 
           <div className="flex items-start">
             <div className="flex items-center h-5">

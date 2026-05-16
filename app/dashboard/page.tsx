@@ -175,7 +175,7 @@ export default function DashboardPage() {
 
   const handleCopyReferralLink = async (referralId: string) => {
     try {
-      const referralLink = `${window.location.origin}/auth/register?ref=${referralId}`;
+      const referralLink = `${window.location.origin}/auth/sign-up?ref=${referralId}`;
       await navigator.clipboard.writeText(referralLink);
       setReferralMessage('Referral link copied to clipboard!');
       setTimeout(() => setReferralMessage(null), 3000);
