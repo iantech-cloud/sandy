@@ -189,7 +189,28 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     ] = statsCalcAggregates;
 
     // profileData is a plain JavaScript object because of .lean()
-    const profileData = profileResult; 
+    const profileData = profileResult;
+
+    // CRITICAL: Normalize phone number to fix any malformed entries (e.g., +254254791406)
+    if (profileData.phone_number) {
+      try {
+        const normalizedPhone = formatPhoneNumber(profileData.phone_number);
+        if (normalizedPhone !== profileData.phone_number) {
+          console.log('[v0] Phone number normalized during fetch:', {
+            original: profileData.phone_number,
+            normalized: normalizedPhone,
+            userId: userId
+          });
+          profileData.phone_number = normalizedPhone;
+        }
+      } catch (error) {
+        console.error('[v0] Failed to normalize phone number:', {
+          phone: profileData.phone_number,
+          error: error,
+          userId: userId
+        });
+      }
+    }
 
     // Debug log to see what we're getting
     console.log('📊 Profile available_spins:', profileData.available_spins);
