@@ -201,7 +201,9 @@ export default function SignUpContent() {
 
   // Format phone input to show only numbers and auto-format
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, '').slice(0, 9);
+    const value = e.target.value;
+    // Allow any valid phone format (9-13 digits, optional +, optional 0 prefix)
+    // The phone formatter utility will normalize it during validation
     setFormData({ ...formData, phone: value });
     setError('');
     setSuccess('');
@@ -504,14 +506,13 @@ export default function SignUpContent() {
                 required
                 value={formData.phone}
                 onChange={handlePhoneChange}
-                placeholder="712345678"
-                pattern="[0-9]{9}"
-                maxLength={9}
+                placeholder="791406285 or 0791406285"
+                maxLength={13}
                 className="flex-1 block w-full px-4 py-2 border border-gray-300 rounded-r-xl focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
               />
             </div>
             <p className="mt-1 text-xs text-gray-500">
-              Enter your 9-digit M-Pesa number without +254
+              Enter your phone: 791406285, 0791406285, 254791406285, or +254791406285
             </p>
           </div>
 

@@ -616,43 +616,82 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
 
     // Query M-Pesa for latest status
     console.log('📡 Querying M-Pesa API for activation payment status...');
-    const accessToken = await getMpesaAccessToken();
-    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
-    const password = Buffer.from(`${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`).toString('base64');
+    
+    let accessToken, timestamp, password, queryPayload;
+    
+    try {
+      accessToken = await getMpesaAccessToken();
+      timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+      password = Buffer.from(`${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`).toString('base64');
 
-    const queryPayload = {
-      BusinessShortCode: process.env.MPESA_SHORTCODE,
-      Password: password,
-      Timestamp: timestamp,
-      CheckoutRequestID: checkoutRequestId
-    };
-
-    const mpesaApiUrl = (process.env.MPESA_ENVIRONMENT === 'production') 
-      ? 'https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query'
-      : 'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query';
-
-    const queryResponse = await fetch(mpesaApiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(queryPayload),
-    });
-
-    if (!queryResponse.ok) {
-      const errorText = await queryResponse.text();
-      console.error('❌ M-Pesa query API error:', errorText);
+      queryPayload = {
+        BusinessShortCode: process.env.MPESA_SHORTCODE,
+        Password: password,
+        Timestamp: timestamp,
+        CheckoutRequestID: checkoutRequestId
+      };
+    } catch (tokenError) {
+      console.error('❌ Failed to get M-Pesa access token:', tokenError);
+      // Return current transaction status from database
       return {
         success: true,
         data: {
           status: mpesaTransaction.status,
           resultCode: mpesaTransaction.result_code?.toString(),
-          resultDesc: mpesaTransaction.result_desc,
+          resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
+          source: 'database_fallback',
+          isActivationPayment: true,
+          message: 'Could not reach M-Pesa service, using last known status'
+        }
+      };
+    }
+
+    const mpesaApiUrl = (process.env.MPESA_ENVIRONMENT === 'production') 
+      ? 'https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query'
+      : 'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query';
+
+    let queryResponse;
+    try {
+      queryResponse = await fetch(mpesaApiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(queryPayload),
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      });
+    } catch (fetchError) {
+      console.error('❌ M-Pesa API fetch error:', fetchError);
+      // Return current transaction status from database as fallback
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultCode: mpesaTransaction.result_code?.toString(),
+          resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
+          source: 'database_fallback',
+          isActivationPayment: true,
+          fallbackReason: 'M-Pesa API unavailable'
+        },
+        message: 'M-Pesa service temporarily unavailable. Using last known status. Please check again in a moment.'
+      };
+    }
+
+    if (!queryResponse.ok) {
+      const errorText = await queryResponse.text();
+      console.error('❌ M-Pesa query API error:', errorText);
+      // Return current transaction status from database
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultCode: mpesaTransaction.result_code?.toString(),
+          resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
           source: 'database_fallback',
           isActivationPayment: true
         },
-        message: 'Using last known status'
+        message: 'Using last known status. Please wait for payment confirmation.'
       };
     }
 
@@ -741,9 +780,24 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
 
   } catch (error) {
     console.error('💥 Check activation payment status error:', error);
+    
+    // Provide more specific error messages based on the error type
+    let errorMessage = 'Failed to check activation payment status. Please try again.';
+    
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      errorMessage = 'Network error while checking payment status. The M-Pesa service may be temporarily unavailable. Please check again in a moment.';
+    } else if (error instanceof Error && error.message.includes('timeout')) {
+      errorMessage = 'Payment status check timed out. Please wait a moment and try again.';
+    }
+    
     return { 
       success: false, 
-      message: 'Failed to check activation payment status. Please try again.' 
+      message: errorMessage,
+      data: {
+        status: 'error',
+        resultCode: '9999',
+        resultDesc: 'Unable to verify payment status'
+      }
     };
   }
 }
@@ -1368,7 +1422,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     userProfile.is_active = true;
     userProfile.status = 'active';
     userProfile.is_verified = true;
-    userProfile.approval_status = 'approved'; // ✅ FIXED: Set approval_status to 'approved'
+    userProfile.approval_status = 'approved'; // ��� FIXED: Set approval_status to 'approved'
     userProfile.is_approved = true;
     userProfile.level = 1;
     userProfile.rank = 'Bronze'; // ✅ FIXED: Change rank from 'Unactivated' to 'Bronze'
