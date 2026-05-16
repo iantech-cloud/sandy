@@ -350,35 +350,27 @@ export default function SignUpContent() {
             <div className="text-2xl font-extrabold text-indigo-600 mb-4">
               HH HustleHub Africa
             </div>
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 mb-4">
-              <svg className="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-            </div>
-            <h2 className="text-2xl font-extrabold text-gray-900">
-              Referral Link Required
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              New here?
             </h2>
+            <p className="text-sm text-gray-600">
+              Signing up is easy. It only takes a few steps
+            </p>
           </div>
 
-          <div className="space-y-4">
-            <div className="rounded-xl bg-red-50 border border-red-200 p-4">
-              <p className="text-sm text-red-700">
-                HustleHub Africa is an <strong>invitation-only platform</strong>. You need a valid referral link to sign up.
+          <div className="space-y-6">
+            <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-4">
+              <p className="text-sm text-indigo-900 font-medium">
+                You must have a referrer to proceed. Kindly use your upline&apos;s link to create an account.
               </p>
             </div>
 
-            <div className="rounded-xl bg-blue-50 border border-blue-200 p-4">
-              <h3 className="font-semibold text-blue-800 mb-2">How to Get Started:</h3>
-              <ol className="space-y-2 text-sm text-blue-700 list-decimal list-inside">
-                <li>Ask an existing member for their referral link</li>
-                <li>Click on the referral link they share with you</li>
-                <li>Sign up using that link</li>
-              </ol>
-            </div>
-
-            <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-4">
-              <p className="text-sm text-indigo-700">
-                Don&apos;t know anyone yet? Connect with us on social media or check our community for members willing to refer new users!
+            <div className="text-center">
+              <p className="text-sm text-gray-600">
+                Already have an account?{' '}
+                <a href="/auth/login" className="font-semibold text-indigo-600 hover:text-indigo-700 transition-colors">
+                  Login
+                </a>
               </p>
             </div>
           </div>
