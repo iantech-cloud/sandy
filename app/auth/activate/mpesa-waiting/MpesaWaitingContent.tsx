@@ -238,10 +238,18 @@ export default function MpesaWaitingContent() {
         color: 'text-red-600',
         bgColor: 'bg-red-50',
         borderColor: 'border-red-200'
+      },
+      error: {
+        icon: <XCircle className="h-12 w-12 text-red-500" />,
+        title: 'Service Error',
+        description: paymentStatus.resultDesc || 'We could not verify your payment status. Your payment may still be processing. Please check your phone for confirmation.',
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        borderColor: 'border-red-200'
       }
     };
     
-    return baseConfig[status];
+    return baseConfig[status as keyof typeof baseConfig] || baseConfig.processing;
   };
 
   const statusConfig = getStatusConfig(paymentStatus.status);
@@ -386,7 +394,8 @@ export default function MpesaWaitingContent() {
             )}
             
             {(paymentStatus.status === 'success' || paymentStatus.status === 'cancelled' || 
-              paymentStatus.status === 'timeout' || paymentStatus.status === 'failed') && (
+              paymentStatus.status === 'timeout' || paymentStatus.status === 'failed' || 
+              paymentStatus.status === 'error') && (
               <>
                 {paymentStatus.status === 'success' ? (
                   <button
@@ -397,18 +406,28 @@ export default function MpesaWaitingContent() {
                   </button>
                 ) : (
                   <>
+                    {paymentStatus.status === 'error' && (
+                      <button
+                        onClick={pollPaymentStatus}
+                        className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                      >
+                        Retry Status Check
+                      </button>
+                    )}
                     <button
                       onClick={() => router.push('/auth/activate')}
                       className="flex-1 py-3 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                     >
                       Back to Activation
                     </button>
-                    <button
-                      onClick={() => router.push('/auth/activate')}
-                      className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                    >
-                      Try Again
-                    </button>
+                    {paymentStatus.status !== 'error' && (
+                      <button
+                        onClick={() => router.push('/auth/activate')}
+                        className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                      >
+                        Try Again
+                      </button>
+                    )}
                   </>
                 )}
               </>
