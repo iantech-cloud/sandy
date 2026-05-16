@@ -4,6 +4,7 @@
 import { auth } from '@/auth'; // NextAuth v5 auth import
 import { revalidatePath } from 'next/cache';
 import { connectToDatabase } from '@/app/lib/mongoose';
+import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
 import { 
   Profile, 
   MpesaTransaction, 
@@ -879,15 +880,22 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       return { success: false, message: 'Account is already activated' };
     }
 
-    const cleanPhone = phoneNumber.replace(/\D/g, '');
-    let formattedPhone = cleanPhone;
-    
-    if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
-      formattedPhone = `254${cleanPhone.substring(1)}`;
-    } else if (cleanPhone.startsWith('254') && cleanPhone.length === 12) {
-      formattedPhone = cleanPhone;
-    } else {
-      return { success: false, message: 'Invalid phone number format. Use 07XXXXXXXX or 2547XXXXXXXX' };
+    // Validate and format phone number
+    if (!isValidPhoneNumber(phoneNumber)) {
+      return { success: false, message: 'Invalid phone number format. Use 791406285, 0791406285, 254791406285, or +254791406285' };
+    }
+
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    const mpesaPhone = getMpesaPhoneFormat(formattedPhone);
+
+    // CRITICAL: Verify that the phone number matches the user's registered phone
+    if (!phoneNumbersMatch(mpesaPhone, userProfile.phone_number)) {
+      console.error('[v0] Phone number mismatch for activation:', {
+        providedPhone: mpesaPhone,
+        registeredPhone: userProfile.phone_number,
+        userId: userProfile._id
+      });
+      return { success: false, message: 'Phone number does not match your registered phone number. Activation payments must be made from your registered phone number.' };
     }
 
     // Always use 9000 cents (KES 90) as the standard activation fee
@@ -903,7 +911,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       user_id: userProfile._id,
       amount_cents: activationAmount,
       provider: 'mpesa',
-      phone_number: formattedPhone,
+      phone_number: mpesaPhone,
       status: 'pending',
       metadata: {
         activation_type: 'account_activation',
@@ -920,7 +928,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       user_id: userProfile._id,
       action: 'initiated',
       amount_cents: activationAmount,
-      phone_number: formattedPhone,
+      phone_number: mpesaPhone,
       status: 'pending',
       metadata: {
         activation_payment_id: activationPayment._id
@@ -929,7 +937,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
     await activationLog.save();
 
     const mpesaResult = await initiateMpesaSTKPush(
-      formattedPhone,
+      mpesaPhone,
       activationAmount,
       `Activation fee for ${userProfile.username}`,
       `ACTIVATION-${userProfile._id}`,
