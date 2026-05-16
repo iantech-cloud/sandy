@@ -7,14 +7,13 @@ import { connectToDatabase } from '@/app/lib/mongoose';
 import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
 import { 
   Profile, 
-  MpesaTransaction, 
-  ActivationPayment, 
-  Transaction, 
+  MpesaTransaction,
+  ActivationPayment,
   ActivationLog,
-  Referral,
   Earning,
-  AdminAuditLog,
-  Company
+  Transaction,
+  Referral,
+  DownlineUser
 } from '@/app/lib/models';
 
 // Import email function for payment confirmation
@@ -575,7 +574,7 @@ async function syncActivationTransactionWithMpesaStatus(
  */
 export async function checkActivationPaymentStatus(checkoutRequestId: string): Promise<ApiResponse<MpesaStatusData>> {
   try {
-    console.log('🔍 Checking activation payment status:', checkoutRequestId);
+    console.log('🔍 Checking activation payment status from local database:', checkoutRequestId);
 
     const session = await auth();
     
@@ -585,6 +584,38 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
 
     await connectToDatabase();
 
+    // CRITICAL: Check ActivationPayment record first (set by M-Pesa callback)
+    const activationPayment = await (ActivationPayment as any).findOne({
+      checkout_request_id: checkoutRequestId
+    });
+
+    if (activationPayment) {
+      console.log('✅ Found ActivationPayment from callback:', {
+        status: activationPayment.status,
+        resultCode: activationPayment.result_code,
+        source: 'callback'
+      });
+
+      // If callback has provided a final status, return it immediately
+      if (['completed', 'failed', 'cancelled', 'timeout'].includes(activationPayment.status)) {
+        return {
+          success: true,
+          data: {
+            status: activationPayment.status,
+            resultCode: activationPayment.result_code?.toString(),
+            resultDesc: activationPayment.result_desc,
+            mpesaReceiptNumber: activationPayment.mpesa_receipt_number,
+            isActivationPayment: true,
+            completedAt: activationPayment.completed_at,
+            failedAt: activationPayment.failed_at,
+            source: 'callback'
+          },
+          message: `Payment status: ${activationPayment.status}`
+        };
+      }
+    }
+
+    // Fallback: Check MpesaTransaction record
     const mpesaTransaction = await (MpesaTransaction as any).findOne({
       checkout_request_id: checkoutRequestId
     });
@@ -593,7 +624,7 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
       return { success: false, message: 'Transaction not found' };
     }
 
-    // If already final status, return immediately (no need to query M-Pesa again)
+    // If already final status from callback processing, return it
     // This ensures we use the callback-provided data when available
     if (['completed', 'failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status)) {
       console.log('✅ Transaction already in final state:', mpesaTransaction.status);
@@ -614,8 +645,28 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
       };
     }
 
-    // Query M-Pesa for latest status
-    console.log('📡 Querying M-Pesa API for activation payment status...');
+    // If callback has already processed this payment (metadata flag is set),
+    // return the callback-provided status without querying M-Pesa again
+    if (mpesaTransaction.metadata?.callback_processed) {
+      console.log('✅ Payment already processed by M-Pesa callback, returning cached status');
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultCode: mpesaTransaction.result_code?.toString(),
+          resultDesc: mpesaTransaction.result_desc,
+          mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+          isActivationPayment: true,
+          completedAt: mpesaTransaction.completed_at,
+          failedAt: mpesaTransaction.failed_at,
+          source: 'callback'
+        },
+        message: `Payment status: ${mpesaTransaction.status}`
+      };
+    }
+
+    // Only query M-Pesa if callback hasn't processed it yet (pending status)
+    console.log('📡 Payment still pending - polling M-Pesa API for status...');
     
     let accessToken, timestamp, password, queryPayload;
     
@@ -639,7 +690,7 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
           status: mpesaTransaction.status,
           resultCode: mpesaTransaction.result_code?.toString(),
           resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
-          source: 'database_fallback',
+          source: 'database',
           isActivationPayment: true,
           message: 'Could not reach M-Pesa service, using last known status'
         }
@@ -670,7 +721,7 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
           status: mpesaTransaction.status,
           resultCode: mpesaTransaction.result_code?.toString(),
           resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
-          source: 'database_fallback',
+          source: 'database',
           isActivationPayment: true,
           fallbackReason: 'M-Pesa API unavailable'
         },
@@ -688,7 +739,7 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
           status: mpesaTransaction.status,
           resultCode: mpesaTransaction.result_code?.toString(),
           resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
-          source: 'database_fallback',
+          source: 'database',
           isActivationPayment: true
         },
         message: 'Using last known status. Please wait for payment confirmation.'
@@ -701,7 +752,7 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
     const safeResultCode = mapMpesaResultCodeToDatabase(queryData.ResultCode);
     const safeStatus = mapMpesaStatusToDatabase(queryData.ResultCode).status;
 
-    // Update MpesaTransaction
+    // Update MpesaTransaction with queried status
     mpesaTransaction.status = safeStatus;
     mpesaTransaction.result_code = safeResultCode;
     mpesaTransaction.result_desc = queryData.ResultDesc || 'No description provided';
