@@ -7,12 +7,12 @@ import { Profile, connectToDatabase } from '@/app/lib/models';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { referralId: string } }
+  { params }: { params: Promise<{ referralId: string }> }
 ) {
   try {
     await connectToDatabase();
 
-    const { referralId } = params;
+    const { referralId } = await params;
 
     if (!referralId) {
       return NextResponse.json(
