@@ -10,6 +10,8 @@
  * - 0791406285 (10 digits with leading 0)
  * - 254791406285 (12 digits without +)
  * - +254791406285 (12 digits with +)
+ * 
+ * Also handles malformed inputs like +254254791406285 by stripping duplicate country codes
  */
 export function formatPhoneNumber(phoneNumber: string): string {
   if (!phoneNumber) return '';
@@ -20,6 +22,12 @@ export function formatPhoneNumber(phoneNumber: string): string {
   // Remove + prefix if present
   if (cleaned.startsWith('+')) {
     cleaned = cleaned.substring(1);
+  }
+
+  // MALFORMED INPUT FIX: Check for duplicate 254 at the start (e.g., 254254791406285)
+  if (cleaned.startsWith('254254')) {
+    // Remove the first occurrence of 254
+    cleaned = cleaned.substring(3);
   }
 
   // If it's just 9 digits, assume it's 254XXXXXXXXX

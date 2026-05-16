@@ -44,29 +44,16 @@ export default function WalletPage() {
   // Helper function to format phone number for display
   function formatPhoneForDisplay(phone: string): string {
     if (!phone) return '';
-    const cleanPhone = phone.replace(/\s/g, '');
-    if (cleanPhone.startsWith('254')) {
-      return `0${cleanPhone.substring(3)}`;
-    } else if (cleanPhone.startsWith('+254')) {
-      return `0${cleanPhone.substring(4)}`;
-    } else if (cleanPhone.startsWith('01')) {
-      return `0${cleanPhone.substring(1)}`;
+    try {
+      const formatted = formatPhoneNumber(phone);
+      // Convert +254XXXXXXXXX to 0XXXXXXXXX for display
+      if (formatted.startsWith('+254')) {
+        return `0${formatted.substring(4)}`;
+      }
+      return formatted;
+    } catch {
+      return phone;
     }
-    return cleanPhone;
-  }
-
-  // Helper function to format phone number for API (convert to 254 format)
-  function formatPhoneForAPI(phone: string): string {
-    if (!phone) return '';
-    const cleanPhone = phone.replace(/\s/g, '');
-    if (cleanPhone.startsWith('254')) {
-      return cleanPhone;
-    } else if (cleanPhone.startsWith('0')) {
-      return `254${cleanPhone.substring(1)}`;
-    } else if (cleanPhone.startsWith('+254')) {
-      return cleanPhone.substring(1);
-    }
-    return `254${cleanPhone}`;
   }
 
   // Function to transform transaction data to match TransactionHistory interface
@@ -255,7 +242,7 @@ export default function WalletPage() {
     setDepositMessage(null);
 
     try {
-      const formattedPhone = formatPhoneForAPI(depositPhoneNumber);
+      const formattedPhone = getMpesaPhoneFormat(depositPhoneNumber);
       
       console.log('Initiating deposit with:', {
         amount,
