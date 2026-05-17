@@ -305,18 +305,14 @@ export default function SignUpContent() {
               <ol className="space-y-2 text-sm text-indigo-700">
                 <li className="flex items-start">
                   <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">1</span>
-                  <span><strong>Verify your email</strong> - Click the link we sent to your email</span>
+                  <span><strong>Log in</strong> - Use your credentials to access your account</span>
                 </li>
                 <li className="flex items-start">
                   <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">2</span>
-                  <span><strong>Wait for admin approval</strong> - Our team will review your account</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">3</span>
                   <span><strong>Pay activation fee</strong> - KES 90 to activate your account</span>
                 </li>
                 <li className="flex items-start">
-                  <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">4</span>
+                  <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">3</span>
                   <span><strong>Start earning!</strong> - Access surveys, content creation, and referrals</span>
                 </li>
               </ol>

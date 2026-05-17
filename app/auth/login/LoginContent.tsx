@@ -625,15 +625,8 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
       if (authMethod === 'credentials') {
         console.log('Credentials user detected - using credentials flow');
         
-        // Check email verification FIRST for credentials users
-        if (!user.is_verified) {
-          console.log('Credentials user - Email not verified, redirecting to verify-email');
-          router.push('/auth/verify-email');
-          return;
-        }
-
-        // Profile is already completed during signup for credentials users
-        console.log('Credentials user - Profile completed during signup, skipping profile check');
+        // Email verification is no longer required - users proceed directly to activation
+        console.log('Credentials user - Proceeding to check activation status');
 
         // Check activation payment
         if (!user.isActivationPaid && !user.activation_paid_at) {
