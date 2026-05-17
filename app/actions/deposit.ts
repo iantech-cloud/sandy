@@ -728,7 +728,6 @@ export async function getDepositHistory(limit: number = 20, page: number = 1): P
 
         const deposits = await (Transaction as any).find({
             user_id: currentUser._id,
-            type: 'DEPOSIT'
         })
         .sort({ created_at: -1 })
         .skip(skip)
@@ -737,7 +736,6 @@ export async function getDepositHistory(limit: number = 20, page: number = 1): P
 
         const total = await (Transaction as any).countDocuments({
             user_id: currentUser._id,
-            type: 'DEPOSIT'
         });
 
         const transformedDeposits: DepositHistoryItem[] = deposits.map((deposit: any) => ({
