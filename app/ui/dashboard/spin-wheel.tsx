@@ -6,17 +6,18 @@ import { depositSpinWalletViaMpesa, checkSpinDepositMpesaStatus } from '@/app/ac
 import { transferMainToSpinWallet } from '@/app/actions/spin-wallet'
 
 // ─── Prize configuration ───────────────────────────────────────────────────
+// NOTE: The wheel ALWAYS lands on "Try Again" (index 9) - the other values are displayed for reference
 const PRIZES = [
-  { type: 'BONUS_CREDIT',    icon: '💰', label: 'Bonus Credit',     prob: 15, color: '#2DD4BF' },
-  { type: 'EXTRA_SPIN',      icon: '🎟️', label: 'Free Spin',        prob: 12, color: '#F87171' },
-  { type: 'AIRTIME',         icon: '📱', label: 'Airtime',           prob: 18, color: '#38BDF8' },
-  { type: 'SURVEY_BOOST',    icon: '🧾', label: 'Survey Boost',     prob: 10, color: '#34D399' },
-  { type: 'REFERRAL_BONUS',  icon: '🧭', label: 'Referral Bonus',   prob:  8, color: '#A78BFA' },
-  { type: 'MYSTERY_REWARD',  icon: '🎲', label: 'Mystery Reward',   prob:  7, color: '#FBBF24' },
-  { type: 'COURSE_ACCESS',   icon: '🧠', label: 'Free Course',      prob: 10, color: '#60A5FA' },
-  { type: 'COMMISSION_BOOST',icon: '💎', label: 'Commission Boost', prob:  8, color: '#C084FC' },
-  { type: 'BADGE_UNLOCK',    icon: '👑', label: 'Badge Unlock',     prob:  7, color: '#FB923C' },
-  { type: 'ZERO',            icon: '⭕', label: 'Try Again',         prob:  5, color: '#6B7280' },
+  { type: 'KES_10000',       icon: '🎁', label: 'KES 10,000',      prob:  0, color: '#10B981' },
+  { type: 'KES_5000',        icon: '💵', label: 'KES 5,000',       prob:  0, color: '#8B5CF6' },
+  { type: 'KES_2500',        icon: '💴', label: 'KES 2,500',       prob:  0, color: '#EC4899' },
+  { type: 'KES_1000',        icon: '💶', label: 'KES 1,000',       prob:  0, color: '#F59E0B' },
+  { type: 'KES_500',         icon: '💷', label: 'KES 500',         prob:  0, color: '#06B6D4' },
+  { type: 'KES_200',         icon: '💸', label: 'KES 200',         prob:  0, color: '#6366F1' },
+  { type: 'KES_100',         icon: '🏷️', label: 'KES 100',         prob:  0, color: '#14B8A6' },
+  { type: 'KES_50',          icon: '🔖', label: 'KES 50',          prob:  0, color: '#F97316' },
+  { type: 'FREE_SPIN',       icon: '🎟️', label: 'Free Spin',       prob:  0, color: '#3B82F6' },
+  { type: 'ZERO',            icon: '⭕', label: 'Try Again',        prob: 100, color: '#EF4444' },
 ] as const
 
 type PrizeType = typeof PRIZES[number]['type']
