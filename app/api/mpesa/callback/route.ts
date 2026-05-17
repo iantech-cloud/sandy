@@ -78,9 +78,16 @@ function getFailureType(resultCode: number): string {
 
 /**
  * Determine if transaction is credit (money in) or debit (money out)
+ * IMPORTANT: Activation and admin payments should NOT affect user balance
  */
-function getTransactionFlow(type: string): 'credit' | 'debit' {
+function getTransactionFlow(type: string): 'credit' | 'debit' | 'neutral' {
   const creditTypes = ['DEPOSIT', 'BONUS', 'TASK_PAYMENT', 'SPIN_WIN', 'REFERRAL', 'SURVEY'];
+  const neutralTypes = ['ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'ADMIN_ACTIVATION']; // These don't affect user balance
+  
+  if (neutralTypes.includes(type)) {
+    return 'neutral'; // Don't modify balance for activation/admin payments
+  }
+  
   return creditTypes.includes(type) ? 'credit' : 'debit';
 }
 
@@ -564,7 +571,7 @@ export async function POST(request: NextRequest) {
         // Update main Profile.balance_cents ONLY for main-wallet deposits.
         // Spin wallet deposits are credited above to SpinWallet, and
         // activation payments do not credit any user wallet at all.
-        const shouldCreditMainWallet = depositType === 'wallet' || depositType === 'unknown';
+        const shouldCreditMainWallet = (depositType === 'wallet' || depositType === 'unknown') && transactionFlow !== 'neutral';
 
         if (!transaction.balance_updated && shouldCreditMainWallet) {
           const user = await Profile.findById(transaction.user_id).session(session || undefined);
@@ -584,7 +591,7 @@ export async function POST(request: NextRequest) {
                 formula: `${transaction.amount_cents} cents = ${transaction.amount_cents / 100} KES`
               });
               console.log(`💰 Added ${transaction.amount_cents / 100} KES to main wallet (CREDIT)`);
-            } else {
+            } else if (transactionFlow === 'debit') {
               // Money going out (this shouldn't happen in callback, but handle it)
               user.balance_cents -= transaction.amount_cents;
               user.total_withdrawals_cents = (user.total_withdrawals_cents || 0) + transaction.amount_cents;
@@ -594,6 +601,9 @@ export async function POST(request: NextRequest) {
             await user.save({ session: session || undefined });
             transaction.balance_updated = true;
           }
+        } else if (transactionFlow === 'neutral') {
+          console.log(`⏭️ Skipping balance update for neutral transaction (type=${transaction.type})`);
+          transaction.balance_updated = true; // Mark as processed even though balance wasn't updated
         } else if (!shouldCreditMainWallet) {
           console.log(`⏭️ Skipping main wallet credit (deposit_type=${depositType})`);
           // Still mark the Transaction record itself as balance_updated so
