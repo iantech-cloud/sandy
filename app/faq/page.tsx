@@ -99,8 +99,8 @@ const faqData: FAQItem[] = [
   },
   {
     question: "How do I contact customer support?",
-    answer: "You can reach our support team via email at support@hustlehubafrica.com or by phone at +254 748 264 231 during business hours.",
-    category: "Platform & Support"
+    answer: "You can reach our support team via email at support@hustlehubafrica.com or by phone at +254 707 871154 during business hours.",
+    category: "Technical Support"
   },
   {
     question: "Where can I find more information about your services?",
