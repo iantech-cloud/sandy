@@ -489,6 +489,8 @@ const AdminAuditLogSchema = new Schema({
       'UPDATE_SPIN_SCHEDULE',
       'VIEW_SPIN_LOGS',
       'MANAGE_SPIN_PRIZES',
+      'SPIN_WIN',
+      'SPIN_ATTEMPT',
       'CREATE_BLOG_POST',
       'UPDATE_BLOG_POST',
       'DELETE_BLOG_POST',
