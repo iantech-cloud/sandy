@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Zap, Plus, RotateCcw, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { Zap, Plus, RotateCcw, X, CheckCircle, AlertCircle, Loader2, ArrowRight } from 'lucide-react'
 import { depositSpinWalletViaMpesa, checkSpinDepositMpesaStatus } from '@/app/actions/spin'
+import { transferMainToSpinWallet } from '@/app/actions/spin-wallet'
 
 // ─── Prize configuration ───────────────────────────────────────────────────
 const PRIZES = [
@@ -71,6 +72,7 @@ interface DepositState {
 
 interface SpinWheelProps {
   userId:          string
+  mainWalletBalance?: number
   onSpinComplete?: (result: SpinResult) => void
 }
 
@@ -153,19 +155,23 @@ function WheelSVG({ rotation, spinning }: { rotation: number; spinning: boolean 
 }
 
 // ─── Main component ────────────────────────────────────────────────────────
-export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
-  const [wallet,      setWallet]      = useState<SpinWalletData | null>(null)
-  const [wheelActive, setWheelActive] = useState(false)
-  const [loading,     setLoading]     = useState(true)
-  const [spinning,    setSpinning]    = useState(false)
-  const [rotation,    setRotation]    = useState(0)
-  const rotationRef                   = useRef(0)
-  const [result,      setResult]      = useState<SpinResult | null>(null)
-  const [spinError,   setSpinError]   = useState('')
-  const [showDeposit, setShowDeposit] = useState(false)
-  const [phone,       setPhone]       = useState('')
-  const [deposit,     setDeposit]     = useState<DepositState>({ phase: 'idle', message: '' })
-  const [spinAmount,  setSpinAmount]  = useState('30')  // Default to KES 30
+export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplete }: SpinWheelProps) {
+  const [wallet,           setWallet]           = useState<SpinWalletData | null>(null)
+  const [mainBalance,      setMainBalance]      = useState(mainWalletBalance)
+  const [wheelActive,      setWheelActive]      = useState(false)
+  const [loading,          setLoading]          = useState(true)
+  const [spinning,         setSpinning]         = useState(false)
+  const [rotation,         setRotation]         = useState(0)
+  const rotationRef                            = useRef(0)
+  const [result,           setResult]           = useState<SpinResult | null>(null)
+  const [spinError,        setSpinError]        = useState('')
+  const [showDeposit,      setShowDeposit]      = useState(false)
+  const [showTransfer,     setShowTransfer]     = useState(false)
+  const [phone,            setPhone]            = useState('')
+  const [deposit,          setDeposit]          = useState<DepositState>({ phase: 'idle', message: '' })
+  const [spinAmount,       setSpinAmount]       = useState('30')  // Default to KES 30
+  const [transferAmount,   setTransferAmount]   = useState('30')  // Amount to transfer
+  const [transferring,     setTransferring]     = useState(false)
 
   // ── Load all data in parallel ────────────────────────────────────────────
   const loadAll = useCallback(async () => {
@@ -253,6 +259,43 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
       setWallet(w => w ? { ...w, balance_cents: w.balance_cents + SPIN_COST_CENTS } : w)
       setSpinError('Network error. Please try again.')
       setSpinning(false)
+    }
+  }
+
+  // ── Transfer from main to spin wallet ────────────────────────────────────
+  const handleTransfer = async () => {
+    const transferKes = parseFloat(transferAmount || '30')
+    if (transferKes < 30 || transferKes > 70000) {
+      setDeposit({ phase: 'failed', message: 'Transfer amount must be between KES 30 and KES 70,000' })
+      return
+    }
+
+    if (mainBalance < transferKes) {
+      setDeposit({ phase: 'failed', message: `Insufficient main wallet balance. You have KES ${mainBalance.toFixed(2)}` })
+      return
+    }
+
+    setTransferring(true)
+    setDeposit({ phase: 'sending', message: 'Transferring to spin wallet...' })
+
+    try {
+      const result = await transferMainToSpinWallet(transferKes)
+
+      if (result.success) {
+        setDeposit({ phase: 'success', message: `Successfully transferred KES ${transferKes.toFixed(2)} to spin wallet` })
+        setMainBalance(result.main_balance / 100)
+        setWallet(w => w ? { ...w, balance_cents: result.spin_balance } : w)
+        setShowTransfer(false)
+        setTransferAmount('30')
+        setTimeout(() => setDeposit({ phase: 'idle', message: '' }), 3000)
+      } else {
+        setDeposit({ phase: 'failed', message: result.message || 'Transfer failed' })
+      }
+    } catch (error) {
+      console.error('Transfer error:', error)
+      setDeposit({ phase: 'failed', message: 'An error occurred during transfer' })
+    } finally {
+      setTransferring(false)
     }
   }
 
@@ -428,6 +471,28 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Spinning…</>
               : <><RotateCcw className="w-4 h-4" /> Spin — KES {spinAmount}</>
             }
+          </button>
+
+          {/* Main and Spin wallet display */}
+          <div className="flex gap-3 w-full max-w-xs text-sm">
+            <div className="flex-1 bg-gray-800 rounded-lg p-3 border border-gray-700">
+              <p className="text-xs text-gray-400 mb-1">Main Wallet</p>
+              <p className="font-bold text-white">KES {mainBalance.toFixed(2)}</p>
+            </div>
+            <div className="flex-1 bg-gray-800 rounded-lg p-3 border border-gray-700">
+              <p className="text-xs text-gray-400 mb-1">Spin Wallet</p>
+              <p className="font-bold text-yellow-400">KES {(wallet?.balance_cents ? wallet.balance_cents / 100 : 0).toFixed(2)}</p>
+            </div>
+          </div>
+
+          {/* Transfer button */}
+          <button
+            onClick={() => setShowTransfer(true)}
+            disabled={spinning || transferring || mainBalance < 30}
+            className="w-full max-w-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <ArrowRight className="w-4 h-4" />
+            Transfer to Spin Wallet
           </button>
 
           {/* Spin amount input */}
@@ -671,6 +736,100 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
                 You'll receive an M-Pesa prompt to confirm with your PIN
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Modal */}
+      {showTransfer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-gray-900 rounded-3xl shadow-2xl p-6 sm:p-8 w-full max-w-sm border border-gray-800 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Transfer to Spin Wallet</h2>
+                <p className="text-xs text-gray-500 mt-1">Move funds from main wallet to spin wallet</p>
+              </div>
+              <button
+                onClick={() => setShowTransfer(false)}
+                disabled={transferring}
+                className="text-gray-400 hover:text-white disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Balance display */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-800 rounded-xl p-3 border border-gray-700">
+                <p className="text-xs text-gray-400 mb-1">Available</p>
+                <p className="text-lg font-bold text-white">KES {mainBalance.toFixed(2)}</p>
+              </div>
+              <div className="bg-gray-800 rounded-xl p-3 border border-gray-700">
+                <p className="text-xs text-gray-400 mb-1">After transfer</p>
+                <p className="text-lg font-bold text-white">
+                  KES {Math.max(0, mainBalance - (parseFloat(transferAmount || '30'))).toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            {/* Transfer amount input */}
+            <div className="space-y-2">
+              <label htmlFor="transfer-amount" className="block text-sm font-medium text-gray-300">
+                Transfer amount (KES)
+              </label>
+              <input
+                id="transfer-amount"
+                type="number"
+                value={transferAmount}
+                onChange={e => setTransferAmount(e.target.value)}
+                min="30"
+                max="70000"
+                step="10"
+                disabled={transferring}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:opacity-50"
+              />
+              <p className="text-xs text-gray-600">Minimum KES 30, Maximum KES 70,000</p>
+            </div>
+
+            {/* Message display */}
+            {deposit.message && (
+              <div className={`rounded-lg p-3 text-sm ${
+                deposit.phase === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                deposit.phase === 'failed' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+              }`}>
+                {deposit.message}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleTransfer}
+                disabled={transferring || parseFloat(transferAmount || '0') < 30}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {transferring ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Transferring…
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight className="w-4 h-4" />
+                    Transfer Now
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowTransfer(false)}
+                disabled={transferring}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 font-bold py-3 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

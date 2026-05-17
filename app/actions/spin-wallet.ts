@@ -312,6 +312,95 @@ export async function getSpinWalletHistory(limit: number = 20) {
   }
 }
 
+export async function transferMainToSpinWallet(amountKes: number) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return { success: false, message: 'Unauthorized' }
+    }
+
+    if (amountKes <= 0) {
+      return { success: false, message: 'Amount must be greater than zero' }
+    }
+
+    const MIN_TRANSFER = 30
+    const MAX_TRANSFER = 70000
+    if (amountKes < MIN_TRANSFER || amountKes > MAX_TRANSFER) {
+      return { success: false, message: `Transfer amount must be between KES ${MIN_TRANSFER} and KES ${MAX_TRANSFER}` }
+    }
+
+    await connectToDatabase()
+
+    // Get user's main wallet balance
+    const user = await (Profile as any).findById(session.user.id).lean()
+    if (!user) {
+      return { success: false, message: 'User not found' }
+    }
+
+    const amountCents = Math.round(amountKes * 100)
+    if ((user as any).balance_cents < amountCents) {
+      return {
+        success: false,
+        message: `Insufficient main wallet balance. You have KES ${((user as any).balance_cents / 100).toFixed(2)} but need KES ${amountKes.toFixed(2)}`,
+      }
+    }
+
+    // Get or create spin wallet
+    let spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id })
+    if (!spinWallet) {
+      spinWallet = await (SpinWallet as any).create({
+        user_id: session.user.id,
+        balance_cents: 0,
+        total_deposited_cents: 0,
+        total_used_cents: 0,
+        total_spins: 0,
+      })
+    }
+
+    // Deduct from main wallet
+    await (Profile as any).findByIdAndUpdate(session.user.id, {
+      $inc: { balance_cents: -amountCents },
+    })
+
+    // Add to spin wallet
+    spinWallet.balance_cents += amountCents
+    spinWallet.total_deposited_cents += amountCents
+    spinWallet.deposits.push({
+      amount_cents: amountCents,
+      status: 'completed',
+      mpesa_status: 'main_wallet_transfer',
+      deposited_at: new Date(),
+      created_at: new Date(),
+    })
+    await spinWallet.save()
+
+    // Create transaction record
+    await (Transaction as any).create({
+      user_id: session.user.id,
+      type: 'SPIN_DEPOSIT',
+      amount_cents: amountCents,
+      status: 'completed',
+      source: 'main_wallet_transfer',
+      description: `Transfer to spin wallet - KES ${amountKes.toFixed(2)}`,
+      metadata: {
+        transfer_type: 'main_to_spin',
+      },
+    })
+
+    console.log(`[SpinWallet] Transfer completed — user: ${session.user.id}, amount: KES ${amountKes}`)
+
+    return {
+      success: true,
+      message: `Successfully transferred KES ${amountKes.toFixed(2)} to your spin wallet`,
+      spin_balance: spinWallet.balance_cents,
+      main_balance: (user as any).balance_cents - amountCents,
+    }
+  } catch (error) {
+    console.error('[SpinWallet] Error transferring to spin wallet:', error)
+    return { success: false, message: 'An error occurred during transfer' }
+  }
+}
+
 export async function adminAddSpinBalance(userId: string, amountKes: number, reason: string) {
   try {
     const session = await auth()
