@@ -13,12 +13,9 @@ export default async function VerifyLoginPage() {
   
   const user = session.user;
   
-  // Check email verification first
-  if (!user.is_verified) {
-    redirect('/auth/confirm');
-  }
+  // NOTE: Email verification is NOT required - all users proceed directly to activation
   
-  // Then check activation payment
+  // Check activation payment
   if (!user.activation_paid_at) {
     redirect('/auth/activate');
   }
