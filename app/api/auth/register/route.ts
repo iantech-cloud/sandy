@@ -6,9 +6,8 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
 // Import Mongoose models and the connection utility
-import { Profile, Referral, DownlineUser, VerificationToken, connectToDatabase } from '@/app/lib/models'; 
+import { Profile, Referral, DownlineUser, connectToDatabase } from '@/app/lib/models'; 
 import { CommissionService } from '@/app/lib/services/commissionService';
-import { sendVerificationEmail } from '@/app/actions/email';
 import { formatPhoneNumber, isValidPhoneNumber } from '@/app/lib/utils/phoneFormatter';
 
 // Configuration for generating new referral IDs
@@ -147,37 +146,7 @@ export async function POST(request: NextRequest) {
     });
 
     // 5. Generate verification token and send email
-    let emailSent = false;
-    try {
-      const verificationToken = randomUUID();
-      const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-      // Delete any existing tokens for this user
-      await VerificationToken.deleteMany({ user_id: newUser._id });
-
-      // Create new verification token
-      await VerificationToken.create({
-        token: verificationToken,
-        user_id: newUser._id,
-        expires: tokenExpiry,
-      });
-
-      console.log('Verification token created for user:', newUser._id);
-
-      // Send verification email using your existing function
-      const emailResult = await sendVerificationEmail(newUser.email, verificationToken);
-      
-      if (emailResult.success) {
-        emailSent = true;
-        console.log('Verification email sent to:', newUser.email);
-      } else {
-        console.log('Failed to send verification email to:', newUser.email);
-        console.log('Email error:', emailResult.error);
-      }
-    } catch (emailError) {
-      console.error('Error sending verification email:', emailError);
-      // Don't fail registration if email fails
-    }
+    // Email verification is no longer required - users proceed directly to login and activation
 
     // 6. Create Referral, Downline entries and build network structure if applicable
     if (referrerProfile) {
@@ -213,7 +182,6 @@ export async function POST(request: NextRequest) {
         message: 'Registration successful! You can now log in and proceed to activation.', 
         user_id: newUser._id,
         referral_id: newUserReferralId,
-        email_sent: emailSent,
         requires_approval: false,
         requires_activation_payment: true,
         next_steps: [
