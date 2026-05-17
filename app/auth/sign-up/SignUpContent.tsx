@@ -184,9 +184,9 @@ export default function SignUpContent() {
       setEmailSent(data.email_sent);
       
       if (data.email_sent) {
-        setSuccess('Registration successful! Please check your email to verify your account.');
+        setSuccess('Registration successful! You can now log in and proceed to activation.');
       } else {
-        setSuccess('Registration successful! However, we could not send the verification email. Please contact support.');
+        setSuccess('Registration successful! You can now log in and proceed to activation.');
       }
 
       console.log('Sign up successful! User ID:', data.user_id);
@@ -275,7 +275,7 @@ export default function SignUpContent() {
                   <div>
                     <h3 className="font-semibold text-yellow-800">Email Verification Required</h3>
                     <p className="mt-1 text-sm text-yellow-700">
-                      We couldn't send the verification email automatically. Please contact support to verify your email address.
+                      Your account has been created. You can now log in and proceed to activation.
                     </p>
                   </div>
                 </div>
@@ -506,13 +506,13 @@ export default function SignUpContent() {
                 required
                 value={formData.phone}
                 onChange={handlePhoneChange}
-                placeholder="791406285 or 0791406285"
+                placeholder="0123456789"
                 maxLength={13}
                 className="flex-1 block w-full px-4 py-2 border border-gray-300 rounded-r-xl focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
               />
             </div>
             <p className="mt-1 text-xs text-gray-500">
-              Enter your phone: 791406285, 0791406285, 254791406285, or +254791406285
+              Enter your phone: 0123456789 or +254123456789
             </p>
           </div>
 

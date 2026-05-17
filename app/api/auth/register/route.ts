@@ -207,28 +207,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 7. Success Response
+    // 7. Success Response - No email verification required, proceed directly to login/activation
     return NextResponse.json(
       {
-        message: 'Registration successful! Your profile is pending approval.', 
+        message: 'Registration successful! You can now log in and proceed to activation.', 
         user_id: newUser._id,
         referral_id: newUserReferralId,
         email_sent: emailSent,
-        requires_approval: true,
+        requires_approval: false,
         requires_activation_payment: true,
-        next_steps: emailSent 
-          ? [
-              'Check your email to verify your account',
-              'Wait for admin approval',
-              'Pay KES 90 activation fee to activate your account',
-              'Start earning from referrals once approved'
-            ]
-          : [
-              'Please contact support to verify your email',
-              'Wait for admin approval',
-              'Pay KES 90 activation fee to activate your account',
-              'Start earning from referrals once approved'
-            ]
+        next_steps: [
+          'Log in to your account',
+          'Pay KES 90 activation fee to activate your account',
+          'Start earning from referrals'
+        ]
       },
       { status: 201 }
     );
