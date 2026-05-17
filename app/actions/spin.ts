@@ -1651,112 +1651,18 @@ async function getAvailablePrizesForUser(userId: string): Promise<SpinPrizeLean[
  * Select prize based on probabilities
  */
 async function selectPrizeWithProbability(availablePrizes: SpinPrizeLean[], userTier: string): Promise<SpinPrizeLean> {
-  if (availablePrizes.length === 0) {
-    const defaultPrize: SpinPrizeLean = {
-      _id: "default-try-again",
-      type: "TRY_AGAIN",
-      display_name: "Try Again",
-      value_cents: 0,
-      credit_type: "balance", // Changed from 'none' to 'balance'
-      base_probability: 100,
-    }
-    console.log(`🎉 No prizes available, returning default: ${defaultPrize.display_name} (${defaultPrize.type})`)
-    return defaultPrize
-  }
-
-  const spinSettings = (await (SpinSettings as any).findOne({}).lean()) as SpinSettingsLean | null
-  const probabilityMultipliers = spinSettings?.probability_multipliers || {
-    starter: 1.0,
-    bronze: 1.0,
-    silver: 1.1,
-    gold: 1.2,
-    diamond: 1.5,
-  }
-
-  const normalizedTier = normalizeRank(userTier)
-  const tierMultiplier = probabilityMultipliers[normalizedTier as keyof typeof probabilityMultipliers] || 1.0
-
-  console.log("🎲 Prize selection:", {
-    availablePrizesCount: availablePrizes.length,
-    userTier,
-    normalizedTier,
-    tierMultiplier,
-  })
-
-  const adjustedPrizes = availablePrizes.map((prize) => ({
-    ...prize,
-    adjustedProbability: prize.base_probability * tierMultiplier,
-  }))
-
-  const totalProbability = adjustedPrizes.reduce((sum, prize) => sum + prize.adjustedProbability, 0)
-
-  if (totalProbability === 0) {
-    console.warn("⚠️ Total probability is 0, using equal distribution")
-    const equalProbability = 100 / availablePrizes.length
-    const normalizedPrizes = adjustedPrizes.map((prize) => ({
-      ...prize,
-      adjustedProbability: equalProbability,
-    }))
-
-    const random = Math.random() * 100
-    let cumulativeProbability = 0
-
-    for (const prize of normalizedPrizes) {
-      cumulativeProbability += prize.adjustedProbability
-      if (random <= cumulativeProbability) {
-        console.log(`🎉 Selected prize (equal distribution): ${prize.display_name} (${prize.type})`)
-        return prize
-      }
-    }
-
-    const fallbackPrize = normalizedPrizes[0]
-    if (fallbackPrize) {
-      console.log(`🎉 Returning first prize as fallback: ${fallbackPrize.display_name}`)
-      return fallbackPrize
-    }
-  }
-
-  const normalizedPrizes = adjustedPrizes.map((prize) => ({
-    ...prize,
-    adjustedProbability: (prize.adjustedProbability / totalProbability) * 100,
-  }))
-
-  console.log(
-    "📊 Prize probabilities:",
-    normalizedPrizes.map((p) => ({
-      name: p.display_name,
-      baseProb: p.base_probability,
-      adjustedProb: p.adjustedProbability.toFixed(2),
-    })),
-  )
-
-  const random = Math.random() * 100
-  let cumulativeProbability = 0
-
-  for (const prize of normalizedPrizes) {
-    cumulativeProbability += prize.adjustedProbability
-    if (random <= cumulativeProbability) {
-      console.log(`🎉 Selected prize: ${prize.display_name} (${prize.type})`)
-      return prize
-    }
-  }
-
-  const lastPrize = normalizedPrizes[normalizedPrizes.length - 1]
-  if (lastPrize) {
-    console.log(`🎉 Selected last prize as fallback: ${lastPrize.display_name} (${lastPrize.type})`)
-    return lastPrize
-  }
-
-  const ultimateFallback: SpinPrizeLean = {
-    _id: "ultimate-fallback",
-    type: "TRY_AGAIN",
+  // Always return "Try Again" - no prizes are won
+  const tryAgainPrize: SpinPrizeLean = {
+    _id: "try-again-zero",
+    type: "ZERO",
     display_name: "Try Again",
     value_cents: 0,
     credit_type: "balance",
     base_probability: 100,
   }
-  console.log(`🎉 Returning ultimate fallback: ${ultimateFallback.display_name}`)
-  return ultimateFallback
+  
+  console.log(`🎡 Spin wheel landed on: ${tryAgainPrize.display_name} - KES 30 deducted`)
+  return tryAgainPrize
 }
 
 /**
@@ -2056,12 +1962,12 @@ async function logSpin(data: {
     if (data.won) {
       const auditLogData: any = {
         actor_id: data.userId,
-        action: "SPIN_WIN",
+        action: "SPIN_ATTEMPT",
         target_type: "SpinLog",
         target_id: spinLog._id.toString(),
         resource_type: "spin",
         resource_id: spinLog._id.toString(),
-        action_type: "spin_win",
+        action_type: "spin_attempt",
         ip_address: "server-action",
         user_agent: "server-action",
       }
