@@ -715,16 +715,15 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
               ) : (
                 <>
                   <button
-                    onClick={handleDeposit}
-                    disabled={depositBusy || phone.replace(/\D/g, '').length < 9}
-                    className="flex-1 py-2.5 rounded-xl bg-white text-gray-950 font-bold text-sm hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    disabled={true}
+                    className="flex-1 py-2.5 rounded-xl bg-gray-700 text-gray-400 font-bold text-sm cursor-not-allowed transition-colors"
+                    title="M-Pesa deposit temporarily unavailable"
                   >
-                    {depositBusy ? 'Processing…' : 'Request M-Pesa STK'}
+                    M-Pesa Temporarily Unavailable
                   </button>
                   <button
                     onClick={closeDeposit}
-                    disabled={depositBusy}
-                    className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 disabled:opacity-40 transition-colors"
+                    className="flex-1 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 transition-colors"
                   >
                     Cancel
                   </button>
