@@ -81,14 +81,12 @@ export default function UserLayoutClient({ user, children }: UserLayoutClientPro
         }
       }
 
-      // Check email verification (common to both auth methods)
-      if (!user.isVerified) {
-        console.log('📧 Email not verified, redirecting to verify-email');
-        router.push('/auth/verify-email');
-        return;
-      }
-
       const authMethod = user.authMethod || 'credentials';
+
+      // For credentials users, email verification is not required before activation
+      // They proceed directly to activation payment
+      // For Google OAuth users, email is already verified by Google
+      // So we skip email verification check entirely and go straight to profile/activation checks
 
       // For Google OAuth Users
       if (authMethod === 'google') {

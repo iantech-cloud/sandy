@@ -292,14 +292,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    if (!userToCheck.isVerified) {
-      await signOut({ redirect: false });
-      console.log('Redirecting to /auth/login (unverified)');
-      setTimeout(() => {
-        router.push(`/auth/login?status=unverified_email&email=${encodeURIComponent(userToCheck.email || '')}`);
-      }, 0);
-      return;
-    }
+    // Note: For credentials users, email verification is not a blocker for activation
+    // They proceed directly to activation payment. Skip this check.
+    // For Google OAuth users, email is verified by Google by default.
 
     if (!userToCheck.isActive) {
       console.log('Redirecting to /activate');

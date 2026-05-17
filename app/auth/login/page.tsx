@@ -71,12 +71,9 @@ async function LoginPageInner() {
     // ONLY redirect if user has incomplete status that needs attention
     // Don't redirect just because they're logged in
 
-    // Check if email is not verified - BUT skip for Google OAuth users
-    // Google users have verified emails by default
-    if (!user.is_verified && authMethod !== 'google') {
-      console.log('Credentials user - Email not verified, redirecting to verify-email');
-      redirect('/auth/verify-email');
-    }
+    // NOTE: Email verification is NOT a blocker for credentials users
+    // They proceed directly to activation payment
+    // Google users have verified emails by default anyway
 
     // For Google OAuth Users - check for incomplete profile
     if (authMethod === 'google' && !user.profile_completed) {
