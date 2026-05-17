@@ -20,7 +20,8 @@ const PRIZES = [
 
 type PrizeType = typeof PRIZES[number]['type']
 
-const SPIN_COST_CENTS = 3000
+const MIN_SPIN_COST_CENTS = 3000  // KES 30 minimum
+const MAX_SPIN_COST_CENTS = 7000000  // KES 70,000 maximum
 const SEGMENT_ANGLE   = 360 / PRIZES.length
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -164,6 +165,7 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
   const [showDeposit, setShowDeposit] = useState(false)
   const [phone,       setPhone]       = useState('')
   const [deposit,     setDeposit]     = useState<DepositState>({ phase: 'idle', message: '' })
+  const [spinAmount,  setSpinAmount]  = useState('30')  // Default to KES 30
 
   // ── Load all data in parallel ────────────────────────────────────────────
   const loadAll = useCallback(async () => {
@@ -190,25 +192,35 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
   // ── Spin ─────────────────────────────────────────────────────────────────
   const handleSpin = async () => {
     if (spinning || !wallet) return
-    if (wallet.balance_cents < SPIN_COST_CENTS) { setShowDeposit(true); return }
+    
+    const spinCostCents = Math.round(parseFloat(spinAmount || '30') * 100)
+    if (spinCostCents < MIN_SPIN_COST_CENTS || spinCostCents > MAX_SPIN_COST_CENTS) {
+      setSpinError(`Spin amount must be between KES 30 and KES 70,000`)
+      return
+    }
+
+    if (wallet.balance_cents < spinCostCents) { 
+      setShowDeposit(true)
+      return 
+    }
 
     setSpinning(true)
     setSpinError('')
     setResult(null)
 
     // Optimistic deduction — rolled back on error
-    setWallet(w => w ? { ...w, balance_cents: w.balance_cents - SPIN_COST_CENTS } : w)
+    setWallet(w => w ? { ...w, balance_cents: w.balance_cents - spinCostCents } : w)
 
     try {
       const res  = await fetch('/api/spin/perform', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ userId }),
+        body:    JSON.stringify({ userId, spinAmount: spinCostCents / 100 }),
       })
       const data: SpinResult = await res.json()
 
       if (!data.success) {
-        setWallet(w => w ? { ...w, balance_cents: w.balance_cents + SPIN_COST_CENTS } : w)
+        setWallet(w => w ? { ...w, balance_cents: w.balance_cents + spinCostCents } : w)
         setSpinError(data.message ?? 'Spin failed. Please try again.')
         setSpinning(false)
         return
@@ -252,12 +264,18 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
       return
     }
 
+    const depositAmount = parseFloat(spinAmount || '30')
+    if (depositAmount < 30 || depositAmount > 70000) {
+      setDeposit({ phase: 'failed', message: 'Deposit amount must be between KES 30 and KES 70,000.' })
+      return
+    }
+
     setDeposit({ phase: 'sending', message: 'Sending M-Pesa prompt…' })
 
     try {
       // Call the server action directly
       const data = await depositSpinWalletViaMpesa({
-        amount: SPIN_COST_CENTS / 100,  // Convert cents to KES
+        amount: depositAmount,  // KES amount
         phoneNumber: phone
       })
 
@@ -289,7 +307,8 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
           console.log('[SpinWheel] Poll result:', statusData)
 
           if (statusData.data?.status === 'completed') {
-            setDeposit({ phase: 'success', message: 'KES 30 added to your spin wallet!' })
+            const depositAmount = parseFloat(spinAmount || '30')
+            setDeposit({ phase: 'success', message: `KES ${depositAmount.toFixed(2)} added to your spin wallet!` })
             await loadAll()
             return
           }
@@ -325,9 +344,10 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
   }
 
   // ── Derived state ────────────────────────────────────────────────────────
+  const spinCostCents = Math.round(parseFloat(spinAmount || '30') * 100)
   const balanceCents = wallet?.balance_cents ?? 0
-  const spinsLeft    = Math.floor(balanceCents / SPIN_COST_CENTS)
-  const canSpin      = wheelActive && balanceCents >= SPIN_COST_CENTS && !spinning
+  const spinsLeft    = Math.floor(balanceCents / spinCostCents)
+  const canSpin      = wheelActive && balanceCents >= spinCostCents && !spinning
   const depositBusy  = deposit.phase === 'sending' || deposit.phase === 'polling'
 
   // ── Loading ──────────────────────────────────────────────────────────────
@@ -406,12 +426,31 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
           >
             {spinning
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Spinning…</>
-              : <><RotateCcw className="w-4 h-4" /> Spin — KES 30</>
+              : <><RotateCcw className="w-4 h-4" /> Spin — KES {spinAmount}</>
             }
           </button>
 
+          {/* Spin amount input */}
+          <div className="space-y-2 w-full max-w-xs">
+            <label htmlFor="spin-amount" className="block text-xs font-medium text-gray-400">
+              Spin amount (KES)
+            </label>
+            <input
+              id="spin-amount"
+              type="number"
+              value={spinAmount}
+              onChange={e => setSpinAmount(e.target.value)}
+              min="30"
+              max="70000"
+              step="10"
+              disabled={spinning}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent disabled:opacity-50"
+            />
+            <p className="text-xs text-gray-600">Minimum KES 30, Maximum KES 70,000</p>
+          </div>
+
           {/* Insufficient balance nudge */}
-          {!spinning && balanceCents < SPIN_COST_CENTS && (
+          {!spinning && balanceCents < spinCostCents && (
             <div className="text-center">
               <p className="text-sm text-orange-400 mb-2">Insufficient balance to spin</p>
               <button
@@ -517,10 +556,30 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
               )}
             </div>
 
-            {/* Amount */}
+            {/* Amount input in modal */}
+            {(deposit.phase === 'idle' || deposit.phase === 'failed') && (
+              <div className="space-y-1.5">
+                <label htmlFor="modal-amount" className="block text-sm font-medium text-gray-300">
+                  Deposit amount (KES)
+                </label>
+                <input
+                  id="modal-amount"
+                  type="number"
+                  value={spinAmount}
+                  onChange={e => setSpinAmount(e.target.value)}
+                  min="30"
+                  max="70000"
+                  step="10"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-600">Minimum KES 30, Maximum KES 70,000</p>
+              </div>
+            )}
+
+            {/* Amount display */}
             <div className="bg-gray-800 rounded-xl p-4 flex items-center justify-between">
-              <span className="text-sm text-gray-400">Deposit amount</span>
-              <span className="text-xl font-bold text-yellow-400">KES 30</span>
+              <span className="text-sm text-gray-400">You will deposit</span>
+              <span className="text-xl font-bold text-yellow-400">KES {spinAmount}</span>
             </div>
 
             {/* Current balance */}
