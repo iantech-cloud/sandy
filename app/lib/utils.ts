@@ -85,3 +85,29 @@ export function slugify(text: string): string {
     .replace(/-+$/, '');           // Trim - from end of text
 }
 
+/**
+ * Normalizes a phone number to the format 254XXXXXXXXX (Kenya format).
+ * Handles various input formats: +254..., 0..., 254..., 7..., etc.
+ */
+export function formatPhoneNumber(phone: string): string {
+  if (!phone) return phone;
+  
+  // Remove all non-digit characters
+  let cleaned = phone.replace(/\D/g, '');
+  
+  // Handle different formats
+  if (cleaned.startsWith('254')) {
+    // Already in 254 format
+    return cleaned;
+  } else if (cleaned.startsWith('0')) {
+    // Replace leading 0 with 254
+    return '254' + cleaned.substring(1);
+  } else if (cleaned.startsWith('7') || cleaned.startsWith('1')) {
+    // Starts with 7 or 1 (Safaricom/Airtel), prepend 254
+    return '254' + cleaned;
+  }
+  
+  // Return as-is if we can't determine the format
+  return cleaned;
+}
+
