@@ -232,8 +232,8 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
         return
       }
 
-      // Rotate wheel to winning segment
-      const prizeIdx    = PRIZES.findIndex(p => p.type === data.prizeType)
+      // Rotate wheel to winning segment (always "Try Again")
+      const prizeIdx    = PRIZES.findIndex(p => p.type === 'ZERO')
       const idx         = prizeIdx === -1 ? 0 : prizeIdx
       const midAngle    = (idx + 0.5) * SEGMENT_ANGLE
       const currentMod  = rotationRef.current % 360
@@ -245,6 +245,7 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
 
       await sleep(3400)
 
+      // Show result but DON'T close the modal - let user close it manually
       setResult(data)
       setSpinning(false)
       onSpinComplete?.(data)
