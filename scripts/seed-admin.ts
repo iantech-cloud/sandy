@@ -19,11 +19,11 @@ dotenv.config({ path: '.env' });
 
 // Admin configuration - CHANGE THESE VALUES BEFORE RUNNING
 const ADMIN_CONFIG = {
-  username: 'admin',
-  email: 'admin@sandy.com',
-  phone_number: '254700000000', // Change to a real admin phone number
-  password: 'Admin@123456', // IMPORTANT: Change this to a strong password
-  referral_id: 'ADMIN001', // The referral code others will use to join
+  username: 'Scholine',
+  email: 'Scholinesandra1@gmail.com',
+  phone_number: '254707871154',
+  password: 'Admin@123456',
+  referral_id: 'SANDY001', // The referral code others will use to join
 };
 
 // MongoDB connection
