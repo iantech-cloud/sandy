@@ -1923,28 +1923,32 @@ async function logSpin(data: {
       user_id: data.userId,
       spin_cost_cents: data.spinCost,
       spins_used: data.spinCost / 100,
-      prize_id: data.prize._id,
       prize_type: data.prize.type,
       prize_name: data.prize.display_name,
       prize_value_cents: data.prize.value_cents || 0,
-      status: data.won ? "won" : "lost",
-      won: data.won,
+      status: "lost", // Always lost since we always land on Try Again
+      won: false,     // Never won
       user_rank: data.userRank,
       user_tier: data.userRank,
       user_level: data.userLevel,
       user_referral_count: data.referralCount,
       user_balance_before: userProfile?.balance_cents || 0,
       user_spins_before: userProfile?.available_spins || 0,
-      calculated_probability: data.prize.base_probability || 0,
+      calculated_probability: 0, // No prize selection
       available_prizes_count: availablePrizes.length,
       probability_multiplier: probabilityMultiplier,
       cost_impact_cents: data.spinCost,
-      revenue_impact_cents: data.won ? -(data.prize.value_cents || 0) : data.spinCost,
-      net_impact_cents: data.won ? data.spinCost - (data.prize.value_cents || 0) : data.spinCost,
-      credited: data.won,
+      revenue_impact_cents: data.spinCost, // All revenue, no payout
+      net_impact_cents: data.spinCost,     // All cost to user
+      credited: false,
       spin_session_id: `session_${data.userId}_${Date.now()}`,
       user_agent: "server-action",
       ip_address: "server-action",
+    }
+
+    // Only set prize_id if it's a valid MongoDB ObjectId
+    if (data.prize._id && typeof data.prize._id === 'object' && data.prize._id.toString) {
+      spinLogData.prize_id = data.prize._id;
     }
 
     if (data.won) {
@@ -1959,29 +1963,7 @@ async function logSpin(data: {
     const spinLog = new (SpinLog as any)(spinLogData)
     await spinLog.save()
 
-    if (data.won) {
-      const auditLogData: any = {
-        actor_id: data.userId,
-        action: "SPIN_ATTEMPT",
-        target_type: "SpinLog",
-        target_id: spinLog._id.toString(),
-        resource_type: "spin",
-        resource_id: spinLog._id.toString(),
-        action_type: "spin_attempt",
-        ip_address: "server-action",
-        user_agent: "server-action",
-      }
-
-      if (data.prize.type) {
-        auditLogData.spin_related = {
-          prize_type: data.prize.type,
-        }
-      }
-
-      await (AdminAuditLog as any).create(auditLogData)
-    }
-
-    console.log("✅ Spin logged successfully")
+    console.log("✅ Spin logged successfully - Try Again (KES 30 deducted)")
   } catch (error) {
     console.error("Error logging spin:", error)
   }
