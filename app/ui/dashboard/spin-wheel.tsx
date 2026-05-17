@@ -256,7 +256,7 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
 
     } catch (err) {
       console.error('[SpinWheel] spin error:', err)
-      setWallet(w => w ? { ...w, balance_cents: w.balance_cents + SPIN_COST_CENTS } : w)
+      setWallet(w => w ? { ...w, balance_cents: w.balance_cents + spinCostCents } : w)
       setSpinError('Network error. Please try again.')
       setSpinning(false)
     }
@@ -537,7 +537,7 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
         </div>
 
         {/* Top-up shortcut */}
-        {balanceCents >= SPIN_COST_CENTS && (
+        {balanceCents >= spinCostCents && (
           <div className="flex justify-end">
             <button
               onClick={() => setShowDeposit(true)}

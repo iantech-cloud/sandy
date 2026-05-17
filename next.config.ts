@@ -36,9 +36,39 @@ const nextConfig: NextConfig = {
 
   async headers() {
     return [
+      // API routes - short cache with SWR
       {
         source: '/api/:path*',
-        headers: [{ key: 'Cache-Control', value: 'public, s-maxage=10, stale-while-revalidate=60' }],
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+          { key: 'Pragma', value: 'no-cache' },
+          { key: 'Expires', value: '0' },
+        ],
+      },
+      // HTML pages - no-cache
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate, max-age=0' },
+          { key: 'Pragma', value: 'no-cache' },
+          { key: 'Expires', value: '0' },
+          // Prevent persistent cookies
+          { key: 'Set-Cookie', value: 'Path=/; SameSite=Lax; HttpOnly; Max-Age=0' },
+        ],
+      },
+      // Static assets - can be cached longer
+      {
+        source: '/static/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      // Images - cache for a reasonable time
+      {
+        source: '/images/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=3600, must-revalidate' },
+        ],
       },
     ];
   },
