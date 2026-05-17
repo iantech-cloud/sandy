@@ -376,21 +376,25 @@ export async function processWithdrawal(withdrawalData: {
 		}
 
 		await connectToDatabase();
-		const currentUser: any = await Profile.findOne({ email: session.user.email }).lean(); 
+		const currentUser: any = await Profile.findOne({ email: session.user.email }).lean(); 
 
 		if (!currentUser) {
 			return { success: false, message: 'User not found' };
 		}
 
-		const today = new Date();
-		const isFriday = today.getDay() === 5;
-		if (!isFriday) {
-			return { success: false, message: 'Withdrawals are only allowed on Fridays' };
+		const amountCents = Math.round(withdrawalData.amount * 100);
+		
+		// Check minimum withdrawal amount (KSh 200 = 20000 cents)
+		if (amountCents < 20000) {
+			return { success: false, message: 'Minimum withdrawal amount is KSh 200' };
 		}
 
-		const amountCents = Math.round(withdrawalData.amount * 100);
-		if (currentUser.balance_cents < amountCents) {
-			return { success: false, message: 'Insufficient balance' };
+		// Calculate 2% processing fee
+		const processingFeeCents = Math.round(amountCents * 0.02);
+		const totalDeductionCents = amountCents + processingFeeCents;
+		
+		if (currentUser.balance_cents < totalDeductionCents) {
+			return { success: false, message: 'Insufficient balance (including 2% processing fee)' };
 		}
 
 		if (!withdrawalData.mpesaNumber.match(/^254[0-9]{9}$/)) {
@@ -401,7 +405,11 @@ export async function processWithdrawal(withdrawalData: {
 			user_id: currentUser._id,
 			amount_cents: amountCents,
 			mpesa_number: withdrawalData.mpesaNumber,
-			status: 'pending'
+			processing_fee_cents: processingFeeCents,
+			status: 'pending',
+			metadata: {
+				processingFeePercent: 2
+			}
 		});
 
 		// FIXED: Add target_type and target_id
@@ -411,17 +419,19 @@ export async function processWithdrawal(withdrawalData: {
 			user_id: currentUser._id,
 			amount_cents: amountCents,
 			type: 'WITHDRAWAL',
-			description: `Withdrawal request to ${withdrawalData.mpesaNumber}`,
+			description: `Withdrawal request to ${withdrawalData.mpesaNumber} (2% fee: KSh ${(processingFeeCents / 100).toFixed(2)})`,
 			status: 'pending',
 			source: 'wallet',
 			metadata: {
 				withdrawalId: withdrawal._id.toString(),
-				mpesaNumber: withdrawalData.mpesaNumber
+				mpesaNumber: withdrawalData.mpesaNumber,
+				processingFeeCents: processingFeeCents,
+				totalDeductionCents: totalDeductionCents
 			}
 		});
 
 		await Profile.findByIdAndUpdate(currentUser._id, {
-			$inc: { balance_cents: -amountCents }
+			$inc: { balance_cents: -totalDeductionCents }
 		});
 
 		revalidatePath('/dashboard/wallet');
@@ -437,11 +447,12 @@ export async function processWithdrawal(withdrawalData: {
 			success: true,
 			data: {
 				transactionCode: `WDL${withdrawal._id.toString().slice(-8).toUpperCase()}`,
-				newBalance: (currentUser.balance_cents - amountCents) / 100,
+				newBalance: (currentUser.balance_cents - totalDeductionCents) / 100,
 				withdrawal: transformedWithdrawal,
-				transaction: transformedTransaction
+				transaction: transformedTransaction,
+				processingFee: (processingFeeCents / 100).toFixed(2)
 			},
-			message: 'Withdrawal request submitted successfully'
+			message: 'Withdrawal request submitted successfully. 2% processing fee will be deducted.'
 		};
 
 	} catch (error) {
