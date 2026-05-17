@@ -229,7 +229,6 @@ export default function SignUpContent() {
     return (
       <div className="min-h-screen bg-indigo-50 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 border border-indigo-100">
-          
           <div className="text-center mb-8">
             <div className="text-2xl font-extrabold text-indigo-600 mb-4">
               HH HustleHub Africa
@@ -284,12 +283,21 @@ export default function SignUpContent() {
               </ol>
             </div>
           </div>
+
+          <div className="mt-6">
+            <button
+              onClick={handleBackToSignUp}
+              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              Back to Sign Up
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Default login form when not showing success
+  // Default sign up form
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -312,191 +320,117 @@ export default function SignUpContent() {
               <div className="w-full border-t border-gray-300"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">Or register with email</span>
+              <span className="px-2 bg-white text-gray-500">Or sign up with email</span>
             </div>
           </div>
 
+          {/* Error Message */}
           {error && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-xl text-sm font-medium" role="alert">
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
               {error}
             </div>
           )}
-          
+
+          {/* Referrer Info */}
+          {referrerUsername && (
+            <div className="mb-4 p-3 bg-indigo-100 border border-indigo-400 text-indigo-700 rounded-lg text-sm">
+              Referred by: <span className="font-semibold">{referrerUsername}</span>
+            </div>
+          )}
+
+          {/* Sign Up Form */}
           <form className="space-y-4" onSubmit={handleSignUp}>
-          
-          <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-              Username *
-            </label>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              required
-              value={formData.username}
-              onChange={handleChange}
-              placeholder="e.g. JohnHustle"
-              pattern="[a-zA-Z0-9_-]+"
-              title="Only letters, numbers, underscores, and hyphens are allowed"
-              maxLength={50}
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Letters, numbers, underscores, and hyphens only (max 50 characters)
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email Address *
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="you@email.com"
-              maxLength={255}
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-              Phone Number (M-Pesa registered) *
-            </label>
-            <div className="mt-1 flex rounded-xl shadow-sm">
-              <span className="inline-flex items-center px-3 border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm rounded-l-xl">
-                +254
-              </span>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Username
+              </label>
               <input
-                id="phone"
-                name="phone"
-                type="tel"
+                type="text"
+                name="username"
+                value={formData.username}
+                onChange={handleChange}
+                placeholder="Choose your username"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="your@email.com"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone Number (9 digits)
+              </label>
+              <input
+                type="tel"
+                name="phone"
                 value={formData.phone}
                 onChange={handlePhoneChange}
-                placeholder="0123456789"
-                maxLength={13}
-                className="flex-1 block w-full px-4 py-2 border border-gray-300 rounded-r-xl focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-              />
-            </div>
-            <p className="mt-1 text-xs text-gray-500">
-              Enter your phone: 0123456789 or +254123456789
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password *
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="At least 6 characters"
-              minLength={6}
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-              Confirm Password *
-            </label>
-            <input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              required
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              placeholder="Confirm your password"
-              minLength={6}
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-            />
-          </div>
-          
-
-
-          <div className="flex items-start">
-            <div className="flex items-center h-5">
-              <input
-                id="terms"
-                name="terms"
-                type="checkbox"
+                placeholder="254XXXXXXXXX without country code"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
-                className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded"
               />
             </div>
-            <div className="ml-3 text-sm">
-              <label htmlFor="terms" className="font-medium text-gray-700">
-                I agree to the 
-                <Link href="/terms" className="font-semibold text-indigo-600 hover:text-indigo-500 ml-1">
-                  Terms and Conditions
-                </Link>
-              </label>
-            </div>
-          </div>
 
-          <div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Password
+              </label>
+              <input
+                type="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Minimum 6 characters"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                placeholder="Confirm your password"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                required
+              />
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-bold text-white transition-all duration-200 
-                ${isLoading 
-                    ? 'bg-indigo-400 cursor-not-allowed' 
-                    : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transform hover:scale-[1.01]'
-                }`}
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Creating Account...
-                </>
-              ) : (
-                'Sign Up & Start Earning'
-              )}
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </button>
-          </div>
-        </form>
+          </form>
 
-        <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
-          <h3 className="text-sm font-semibold text-blue-800 mb-2">Registration Process:</h3>
-          <ol className="text-xs text-blue-700 space-y-1">
-            <li className="flex items-start">
-              <span className="bg-blue-100 text-blue-800 rounded-full w-4 h-4 flex items-center justify-center text-xs mr-2 mt-0.5 flex-shrink-0">1</span>
-              Sign up and verify your email
-            </li>
-            <li className="flex items-start">
-              <span className="bg-blue-100 text-blue-800 rounded-full w-4 h-4 flex items-center justify-center text-xs mr-2 mt-0.5 flex-shrink-0">2</span>
-              Pay KES 90 activation fee
-            </li>
-            <li className="flex items-start">
-              <span className="bg-blue-100 text-blue-800 rounded-full w-4 h-4 flex items-center justify-center text-xs mr-2 mt-0.5 flex-shrink-0">3</span>
-              Wait for admin approval (24-48 hours)
-            </li>
-            <li className="flex items-start">
-              <span className="bg-blue-100 text-blue-800 rounded-full w-4 h-4 flex items-center justify-center text-xs mr-2 mt-0.5 flex-shrink-0">4</span>
-              Start earning on the platform!
-            </li>
-          </ol>
+          <p className="mt-4 text-center text-sm text-gray-600">
+            Already have an account?{' '}
+            <Link href="/auth/sign-in" className="text-indigo-600 font-semibold hover:text-indigo-700">
+              Sign in
+            </Link>
+          </p>
         </div>
-
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Already have an account? 
-          <Link href="/auth/login" className="font-medium text-indigo-600 hover:text-indigo-500 ml-1">
-            Log in here
-          </Link>
-        </p>
       </div>
     </div>
   );
