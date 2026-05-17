@@ -674,12 +674,16 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
 
     try {
       // Check if user is switching accounts (different email than current session)
-      if (hasExistingSession && sessionData?.user?.email !== email) {
-        console.log('[v0] Account switch detected - logging out current session');
-        // Log out the current session first before signing in with new account
-        await signOut({ redirect: false });
-        // Small delay to ensure logout completes
-        await new Promise(resolve => setTimeout(resolve, 500));
+      if (hasExistingSession) {
+        const currentSession = await getSession();
+        if (currentSession?.user?.email && currentSession.user.email !== email) {
+          console.log('[v0] Account switch detected - logging out current session');
+          console.log('[v0] Current user:', currentSession.user.email, 'Attempting login as:', email);
+          // Log out the current session first before signing in with new account
+          await signOut({ redirect: false });
+          // Small delay to ensure logout completes
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
 
       console.log('Attempting login for:', email);
@@ -738,12 +742,16 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
 
     try {
       // Check if user is switching accounts (different email than current session)
-      if (hasExistingSession && sessionData?.user?.email !== email) {
-        console.log('[v0] Account switch detected in 2FA flow - logging out current session');
-        // Log out the current session first before signing in with new account
-        await signOut({ redirect: false });
-        // Small delay to ensure logout completes
-        await new Promise(resolve => setTimeout(resolve, 500));
+      if (hasExistingSession) {
+        const currentSession = await getSession();
+        if (currentSession?.user?.email && currentSession.user.email !== email) {
+          console.log('[v0] Account switch detected in 2FA flow - logging out current session');
+          console.log('[v0] Current user:', currentSession.user.email, 'Attempting login as:', email);
+          // Log out the current session first before signing in with new account
+          await signOut({ redirect: false });
+          // Small delay to ensure logout completes
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
 
       console.log('Submitting 2FA verification for:', email);
