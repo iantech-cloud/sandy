@@ -407,32 +407,54 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setLoadingApp(false);
       setHasAttemptedFetch(false);
       
-      // Then call logout APIs
+      // Call the logout endpoint directly with a simple fetch
+      // This endpoint handles session cleanup and returns a redirect
+      console.log('[v0] Calling /api/auth/logout');
       try {
-        await authenticatedApiFetch('/api/auth/logout', 'POST'); 
-      } catch(e) {
-        console.warn("Custom logout API call failed, proceeding with NextAuth signOut.", e);
+        const response = await fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include', // Important for cookie-based auth
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        console.log('[v0] Logout API response status:', response.status);
+        
+        // The logout endpoint returns a redirect (307), which fetch follows automatically
+        // If we got here, the logout was successful
+        if (response.ok) {
+          console.log('[v0] Logout API call successful');
+        } else {
+          console.warn('[v0] Logout API returned status:', response.status);
+        }
+      } catch (fetchError) {
+        // Network error or other fetch error - log but continue with client-side logout
+        console.warn('[v0] Logout API fetch error (proceeding with client-side logout):', fetchError);
       }
       
+      // Also call NextAuth signOut to ensure session is cleared on the client
+      console.log('[v0] Calling NextAuth signOut');
       await signOut({ redirect: false });
-      console.log('Logging out, redirecting to /auth/login');
       
-      // Use setTimeout to avoid React state updates during render
+      console.log('[v0] Logout complete, redirecting to login');
+      // Use setTimeout to ensure state updates are complete before redirect
       setTimeout(() => {
-        router.push('/auth/login');
-      }, 0);
+        router.push('/auth/login?message=logged_out');
+      }, 300);
+      
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('[v0] Logout error:', error);
       // Even if there's an error, still redirect to login
       setTimeout(() => {
         router.push('/auth/login');
-      }, 0);
+      }, 500);
     } finally {
       if (isMounted) {
         setIsLoggingOut(false);
       }
     }
-  }, [authenticatedApiFetch, router, isLoggingOut, isMounted]);
+  }, [router, isLoggingOut, isMounted]);
 
   const isOverallLoading = 
     status === 'loading' || 
