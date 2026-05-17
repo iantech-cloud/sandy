@@ -120,6 +120,8 @@ export async function POST(request: NextRequest) {
       phone_number: formattedPhone,
       password: hashedPassword, 
       referral_id: newUserReferralId,
+      // CRITICAL FIX: Set referred_by to link the referrer
+      referred_by: referrerProfile ? referrerProfile._id : null,
       // Set initial status as pending approval
       approval_status: 'pending',
       status: 'pending',
@@ -132,7 +134,9 @@ export async function POST(request: NextRequest) {
       email: newProfileData.email,
       username: newProfileData.username,
       referral_id: newUserReferralId,
-      hasReferrer: !!referrerProfile
+      hasReferrer: !!referrerProfile,
+      referrerId: referrerProfile?._id,
+      referrerUsername: referrerProfile?.username
     });
 
     const newUser = await Profile.create(newProfileData);
@@ -142,7 +146,9 @@ export async function POST(request: NextRequest) {
     console.log('User created successfully:', {
       id: createdUser._id,
       username: createdUser.username,
-      referral_id: createdUser.referral_id
+      referral_id: createdUser.referral_id,
+      referred_by: createdUser.referred_by,
+      referrer_id: referrerProfile?._id
     });
 
     // 5. Generate verification token and send email

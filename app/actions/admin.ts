@@ -1021,3 +1021,130 @@ export async function fixReferralBonuses(): Promise<{ success: boolean; message:
     return { success: false, message: 'Failed to fix referral bonuses' };
   }
 }
+
+/**
+ * Fix missing referred_by field for a specific user
+ * This restores the link between a referred user and their referrer
+ */
+export async function fixUserReferredBy(userId: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const session = await auth();
+    
+    if (!session?.user?.email) {
+      return { success: false, message: 'Not authenticated' };
+    }
+
+    await connectToDatabase();
+    const adminUser = await (Profile as any).findOne({ email: session.user.email });
+    
+    if (adminUser?.role !== 'admin') {
+      return { success: false, message: 'Admin access required' };
+    }
+
+    console.log(`[v0] Admin fixing referred_by for user: ${userId}`);
+
+    // Get the user
+    const user = await (Profile as any).findById(userId);
+    if (!user) {
+      return { success: false, message: 'User not found' };
+    }
+
+    // Find referral record for this user
+    const referralRecord = await (Referral as any).findOne({ referred_id: userId });
+    if (!referralRecord) {
+      return { success: false, message: `No referral record found for ${user.username}` };
+    }
+
+    // Check referrer exists
+    const referrer = await (Profile as any).findById(referralRecord.referrer_id);
+    if (!referrer) {
+      return { success: false, message: 'Referrer not found' };
+    }
+
+    console.log(`[v0] Fixing ${user.username} - Setting referred_by to ${referrer.username}`);
+
+    // Update user's referred_by field
+    await (Profile as any).findByIdAndUpdate(userId, {
+      referred_by: referrer._id
+    });
+
+    // If user is active and bonus not paid, award it now
+    if (user.is_active && user.approval_status === 'approved' && !referralRecord.referral_bonus_paid) {
+      console.log(`[v0] User is active but bonus not paid - awarding KES 70...`);
+
+      const BONUS_CENTS = 7000;
+      const Earning = require('@/app/lib/models').Earning;
+
+      // Create transaction
+      const transaction = new (Transaction as any)({
+        target_type: 'user',
+        target_id: referrer._id.toString(),
+        user_id: referrer._id,
+        amount_cents: BONUS_CENTS,
+        type: 'REFERRAL',
+        description: `Referral bonus for ${user.username}'s activation [Admin Fixed]`,
+        status: 'completed',
+        source: 'admin_fix',
+        balance_before_cents: referrer.balance_cents,
+        balance_after_cents: referrer.balance_cents + BONUS_CENTS,
+        metadata: {
+          referred_user_id: user._id.toString(),
+          referred_username: user.username,
+          level: 1,
+          fixed_by_admin: adminUser._id.toString()
+        }
+      });
+      await transaction.save();
+
+      // Create earning record
+      const earning = new (Earning as any)({
+        user_id: referrer._id,
+        amount_cents: BONUS_CENTS,
+        type: 'REFERRAL',
+        description: `Referral bonus for ${user.username} [Admin Fixed]`,
+        source_id: referralRecord._id,
+        source_type: 'referral',
+        transaction_id: transaction._id,
+        processed: true,
+        processed_at: new Date(),
+        metadata: {
+          level: 1,
+          referred_user_id: user._id.toString(),
+          fixed_by_admin: adminUser._id.toString()
+        }
+      });
+      await earning.save();
+
+      // Update referrer balance
+      referrer.balance_cents += BONUS_CENTS;
+      referrer.total_earnings_cents += BONUS_CENTS;
+      await referrer.save();
+
+      // Update referral record
+      referralRecord.referral_bonus_paid = true;
+      referralRecord.referral_bonus_amount_cents = BONUS_CENTS;
+      referralRecord.bonus_paid_at = new Date();
+      referralRecord.status = 'bonus_paid';
+      referralRecord.referred_user_activated = true;
+      referralRecord.referred_user_activated_at = new Date();
+      referralRecord.metadata = {
+        level: 1,
+        bonus_amount: BONUS_CENTS,
+        activated_via: 'admin_fix',
+        admin_id: adminUser._id.toString()
+      };
+      await referralRecord.save();
+
+      console.log(`[v0] Bonus awarded: ${referrer.username} earned KES 70`);
+    }
+
+    revalidatePath('/admin/users');
+    revalidatePath('/dashboard');
+
+    return { success: true, message: `Fixed ${user.username} - referred_by restored to ${referrer.username}` };
+
+  } catch (error) {
+    console.error('Fix user referred_by error:', error);
+    return { success: false, message: 'Failed to fix user' };
+  }
+}
