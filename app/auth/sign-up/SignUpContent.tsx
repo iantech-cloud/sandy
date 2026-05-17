@@ -284,10 +284,16 @@ export default function SignUpContent() {
             </div>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-6 space-y-3">
+            <button
+              onClick={() => router.push('/auth/login')}
+              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              Go to Login
+            </button>
             <button
               onClick={handleBackToSignUp}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+              className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
             >
               Back to Sign Up
             </button>
