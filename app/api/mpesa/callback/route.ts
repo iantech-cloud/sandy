@@ -432,7 +432,8 @@ export async function POST(request: NextRequest) {
         }
       } else if (['failed', 'cancelled', 'timeout'].includes(safeStatus)) {
         if (existingDeposit) {
-          existingDeposit.status = 'failed';
+          // Mark with the actual status (cancelled, failed, or timeout), not just 'failed'
+          existingDeposit.status = safeStatus === 'cancelled' ? 'cancelled' : safeStatus === 'timeout' ? 'timeout' : 'failed';
           existingDeposit.mpesa_status = safeStatus;
         } else {
           spinWallet.deposits.push({
@@ -440,12 +441,12 @@ export async function POST(request: NextRequest) {
             mpesa_checkout_request_id: checkoutRequestID,
             mpesa_merchant_request_id: mpesaTransaction.merchant_request_id,
             mpesa_status: safeStatus,
-            status: 'failed',
+            status: safeStatus === 'cancelled' ? 'cancelled' : safeStatus === 'timeout' ? 'timeout' : 'failed',
             phone_number: mpesaTransaction.phone_number,
             created_at: new Date(),
           });
         }
-        console.log(`❌ SpinWallet deposit marked as failed (${failureType})`);
+        console.log(`❌ SpinWallet deposit marked as ${safeStatus} (${failureType})`);
       }
 
       await spinWallet.save({ session });

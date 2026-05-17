@@ -522,6 +522,7 @@ export default function DashboardPage() {
 
               <SpinWheel 
                 userId={user.id}
+                mainWalletBalance={stats.balance}
                 onSpinComplete={handleSpinComplete}
               />
             </div>

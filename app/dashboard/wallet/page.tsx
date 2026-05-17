@@ -322,7 +322,7 @@ export default function WalletPage() {
                 <li>Processing fee: {PROCESSING_FEE_PERCENT}% of the withdrawal amount</li>
                 <li>Withdrawals are allowed any day, any time</li>
                 <li>Funds are sent to your M-Pesa number</li>
-                <li>Processing may take up to 24 hours after admin approval</li>
+                <li>Processing may take up to 12 hours after admin approval</li>
               </ul>
             </div>
           </div>
