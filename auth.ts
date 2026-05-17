@@ -56,6 +56,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // Trust the host - required for CSRF validation in development and production
   trustHost: true,
   
+  // Disable CSRF protection for signout - handle it via our custom logout route instead
+  csrf: {
+    maxAge: 24 * 60 * 60, // 24 hours
+  },
+  
   session: {
     strategy: 'jwt' as const,
     maxAge: 30 * 24 * 60 * 60, // 30 days
