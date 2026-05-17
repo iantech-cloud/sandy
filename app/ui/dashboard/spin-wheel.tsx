@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Zap, Plus, RotateCcw, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { Zap, Plus, RotateCcw, X, CheckCircle, AlertCircle, Loader2, ArrowRight } from 'lucide-react'
 import { depositSpinWalletViaMpesa, checkSpinDepositMpesaStatus } from '@/app/actions/spin'
+import { transferMainToSpinWallet } from '@/app/actions/spin-wallet'
 
 // ─── Prize configuration ───────────────────────────────────────────────────
 const PRIZES = [
@@ -20,7 +21,8 @@ const PRIZES = [
 
 type PrizeType = typeof PRIZES[number]['type']
 
-const SPIN_COST_CENTS = 3000
+const MIN_SPIN_COST_CENTS = 3000  // KES 30 minimum
+const MAX_SPIN_COST_CENTS = 7000000  // KES 70,000 maximum
 const SEGMENT_ANGLE   = 360 / PRIZES.length
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -70,6 +72,7 @@ interface DepositState {
 
 interface SpinWheelProps {
   userId:          string
+  mainWalletBalance?: number
   onSpinComplete?: (result: SpinResult) => void
 }
 
@@ -152,18 +155,23 @@ function WheelSVG({ rotation, spinning }: { rotation: number; spinning: boolean 
 }
 
 // ─── Main component ────────────────────────────────────────────────────────
-export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
-  const [wallet,      setWallet]      = useState<SpinWalletData | null>(null)
-  const [wheelActive, setWheelActive] = useState(false)
-  const [loading,     setLoading]     = useState(true)
-  const [spinning,    setSpinning]    = useState(false)
-  const [rotation,    setRotation]    = useState(0)
-  const rotationRef                   = useRef(0)
-  const [result,      setResult]      = useState<SpinResult | null>(null)
-  const [spinError,   setSpinError]   = useState('')
-  const [showDeposit, setShowDeposit] = useState(false)
-  const [phone,       setPhone]       = useState('')
-  const [deposit,     setDeposit]     = useState<DepositState>({ phase: 'idle', message: '' })
+export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplete }: SpinWheelProps) {
+  const [wallet,           setWallet]           = useState<SpinWalletData | null>(null)
+  const [mainBalance,      setMainBalance]      = useState(mainWalletBalance)
+  const [wheelActive,      setWheelActive]      = useState(false)
+  const [loading,          setLoading]          = useState(true)
+  const [spinning,         setSpinning]         = useState(false)
+  const [rotation,         setRotation]         = useState(0)
+  const rotationRef                            = useRef(0)
+  const [result,           setResult]           = useState<SpinResult | null>(null)
+  const [spinError,        setSpinError]        = useState('')
+  const [showDeposit,      setShowDeposit]      = useState(false)
+  const [showTransfer,     setShowTransfer]     = useState(false)
+  const [phone,            setPhone]            = useState('')
+  const [deposit,          setDeposit]          = useState<DepositState>({ phase: 'idle', message: '' })
+  const [spinAmount,       setSpinAmount]       = useState('30')  // Default to KES 30
+  const [transferAmount,   setTransferAmount]   = useState('30')  // Amount to transfer
+  const [transferring,     setTransferring]     = useState(false)
 
   // ── Load all data in parallel ────────────────────────────────────────────
   const loadAll = useCallback(async () => {
@@ -190,25 +198,35 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
   // ── Spin ─────────────────────────────────────────────────────────────────
   const handleSpin = async () => {
     if (spinning || !wallet) return
-    if (wallet.balance_cents < SPIN_COST_CENTS) { setShowDeposit(true); return }
+    
+    const spinCostCents = Math.round(parseFloat(spinAmount || '30') * 100)
+    if (spinCostCents < MIN_SPIN_COST_CENTS || spinCostCents > MAX_SPIN_COST_CENTS) {
+      setSpinError(`Spin amount must be between KES 30 and KES 70,000`)
+      return
+    }
+
+    if (wallet.balance_cents < spinCostCents) { 
+      setShowDeposit(true)
+      return 
+    }
 
     setSpinning(true)
     setSpinError('')
     setResult(null)
 
     // Optimistic deduction — rolled back on error
-    setWallet(w => w ? { ...w, balance_cents: w.balance_cents - SPIN_COST_CENTS } : w)
+    setWallet(w => w ? { ...w, balance_cents: w.balance_cents - spinCostCents } : w)
 
     try {
       const res  = await fetch('/api/spin/perform', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ userId }),
+        body:    JSON.stringify({ userId, spinAmount: spinCostCents / 100 }),
       })
       const data: SpinResult = await res.json()
 
       if (!data.success) {
-        setWallet(w => w ? { ...w, balance_cents: w.balance_cents + SPIN_COST_CENTS } : w)
+        setWallet(w => w ? { ...w, balance_cents: w.balance_cents + spinCostCents } : w)
         setSpinError(data.message ?? 'Spin failed. Please try again.')
         setSpinning(false)
         return
@@ -244,6 +262,43 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
     }
   }
 
+  // ── Transfer from main to spin wallet ────────────────────────────────────
+  const handleTransfer = async () => {
+    const transferKes = parseFloat(transferAmount || '30')
+    if (transferKes < 30 || transferKes > 70000) {
+      setDeposit({ phase: 'failed', message: 'Transfer amount must be between KES 30 and KES 70,000' })
+      return
+    }
+
+    if (mainBalance < transferKes) {
+      setDeposit({ phase: 'failed', message: `Insufficient main wallet balance. You have KES ${mainBalance.toFixed(2)}` })
+      return
+    }
+
+    setTransferring(true)
+    setDeposit({ phase: 'sending', message: 'Transferring to spin wallet...' })
+
+    try {
+      const result = await transferMainToSpinWallet(transferKes)
+
+      if (result.success) {
+        setDeposit({ phase: 'success', message: `Successfully transferred KES ${transferKes.toFixed(2)} to spin wallet` })
+        setMainBalance(result.main_balance / 100)
+        setWallet(w => w ? { ...w, balance_cents: result.spin_balance } : w)
+        setShowTransfer(false)
+        setTransferAmount('30')
+        setTimeout(() => setDeposit({ phase: 'idle', message: '' }), 3000)
+      } else {
+        setDeposit({ phase: 'failed', message: result.message || 'Transfer failed' })
+      }
+    } catch (error) {
+      console.error('Transfer error:', error)
+      setDeposit({ phase: 'failed', message: 'An error occurred during transfer' })
+    } finally {
+      setTransferring(false)
+    }
+  }
+
   // ── Deposit + poll with exponential backoff ───────────────────────────────
   const handleDeposit = async () => {
     const clean = phone.replace(/\D/g, '')
@@ -252,12 +307,18 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
       return
     }
 
+    const depositAmount = parseFloat(spinAmount || '30')
+    if (depositAmount < 30 || depositAmount > 70000) {
+      setDeposit({ phase: 'failed', message: 'Deposit amount must be between KES 30 and KES 70,000.' })
+      return
+    }
+
     setDeposit({ phase: 'sending', message: 'Sending M-Pesa prompt…' })
 
     try {
       // Call the server action directly
       const data = await depositSpinWalletViaMpesa({
-        amount: SPIN_COST_CENTS / 100,  // Convert cents to KES
+        amount: depositAmount,  // KES amount
         phoneNumber: phone
       })
 
@@ -289,7 +350,8 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
           console.log('[SpinWheel] Poll result:', statusData)
 
           if (statusData.data?.status === 'completed') {
-            setDeposit({ phase: 'success', message: 'KES 30 added to your spin wallet!' })
+            const depositAmount = parseFloat(spinAmount || '30')
+            setDeposit({ phase: 'success', message: `KES ${depositAmount.toFixed(2)} added to your spin wallet!` })
             await loadAll()
             return
           }
@@ -325,9 +387,10 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
   }
 
   // ── Derived state ────────────────────────────────────────────────────────
+  const spinCostCents = Math.round(parseFloat(spinAmount || '30') * 100)
   const balanceCents = wallet?.balance_cents ?? 0
-  const spinsLeft    = Math.floor(balanceCents / SPIN_COST_CENTS)
-  const canSpin      = wheelActive && balanceCents >= SPIN_COST_CENTS && !spinning
+  const spinsLeft    = Math.floor(balanceCents / spinCostCents)
+  const canSpin      = wheelActive && balanceCents >= spinCostCents && !spinning
   const depositBusy  = deposit.phase === 'sending' || deposit.phase === 'polling'
 
   // ── Loading ──────────────────────────────────────────────────────────────
@@ -406,12 +469,53 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
           >
             {spinning
               ? <><Loader2 className="w-4 h-4 animate-spin" /> Spinning…</>
-              : <><RotateCcw className="w-4 h-4" /> Spin — KES 30</>
+              : <><RotateCcw className="w-4 h-4" /> Spin — KES {spinAmount}</>
             }
           </button>
 
+          {/* Main and Spin wallet display */}
+          <div className="flex gap-3 w-full max-w-xs text-sm">
+            <div className="flex-1 bg-gray-800 rounded-lg p-3 border border-gray-700">
+              <p className="text-xs text-gray-400 mb-1">Main Wallet</p>
+              <p className="font-bold text-white">KES {mainBalance.toFixed(2)}</p>
+            </div>
+            <div className="flex-1 bg-gray-800 rounded-lg p-3 border border-gray-700">
+              <p className="text-xs text-gray-400 mb-1">Spin Wallet</p>
+              <p className="font-bold text-yellow-400">KES {(wallet?.balance_cents ? wallet.balance_cents / 100 : 0).toFixed(2)}</p>
+            </div>
+          </div>
+
+          {/* Transfer button */}
+          <button
+            onClick={() => setShowTransfer(true)}
+            disabled={spinning || transferring || mainBalance < 30}
+            className="w-full max-w-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <ArrowRight className="w-4 h-4" />
+            Transfer to Spin Wallet
+          </button>
+
+          {/* Spin amount input */}
+          <div className="space-y-2 w-full max-w-xs">
+            <label htmlFor="spin-amount" className="block text-xs font-medium text-gray-400">
+              Spin amount (KES)
+            </label>
+            <input
+              id="spin-amount"
+              type="number"
+              value={spinAmount}
+              onChange={e => setSpinAmount(e.target.value)}
+              min="30"
+              max="70000"
+              step="10"
+              disabled={spinning}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent disabled:opacity-50"
+            />
+            <p className="text-xs text-gray-600">Minimum KES 30, Maximum KES 70,000</p>
+          </div>
+
           {/* Insufficient balance nudge */}
-          {!spinning && balanceCents < SPIN_COST_CENTS && (
+          {!spinning && balanceCents < spinCostCents && (
             <div className="text-center">
               <p className="text-sm text-orange-400 mb-2">Insufficient balance to spin</p>
               <button
@@ -517,10 +621,30 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
               )}
             </div>
 
-            {/* Amount */}
+            {/* Amount input in modal */}
+            {(deposit.phase === 'idle' || deposit.phase === 'failed') && (
+              <div className="space-y-1.5">
+                <label htmlFor="modal-amount" className="block text-sm font-medium text-gray-300">
+                  Deposit amount (KES)
+                </label>
+                <input
+                  id="modal-amount"
+                  type="number"
+                  value={spinAmount}
+                  onChange={e => setSpinAmount(e.target.value)}
+                  min="30"
+                  max="70000"
+                  step="10"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-600">Minimum KES 30, Maximum KES 70,000</p>
+              </div>
+            )}
+
+            {/* Amount display */}
             <div className="bg-gray-800 rounded-xl p-4 flex items-center justify-between">
-              <span className="text-sm text-gray-400">Deposit amount</span>
-              <span className="text-xl font-bold text-yellow-400">KES 30</span>
+              <span className="text-sm text-gray-400">You will deposit</span>
+              <span className="text-xl font-bold text-yellow-400">KES {spinAmount}</span>
             </div>
 
             {/* Current balance */}
@@ -612,6 +736,100 @@ export default function SpinWheel({ userId, onSpinComplete }: SpinWheelProps) {
                 You'll receive an M-Pesa prompt to confirm with your PIN
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Modal */}
+      {showTransfer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-gray-900 rounded-3xl shadow-2xl p-6 sm:p-8 w-full max-w-sm border border-gray-800 space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Transfer to Spin Wallet</h2>
+                <p className="text-xs text-gray-500 mt-1">Move funds from main wallet to spin wallet</p>
+              </div>
+              <button
+                onClick={() => setShowTransfer(false)}
+                disabled={transferring}
+                className="text-gray-400 hover:text-white disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Balance display */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-800 rounded-xl p-3 border border-gray-700">
+                <p className="text-xs text-gray-400 mb-1">Available</p>
+                <p className="text-lg font-bold text-white">KES {mainBalance.toFixed(2)}</p>
+              </div>
+              <div className="bg-gray-800 rounded-xl p-3 border border-gray-700">
+                <p className="text-xs text-gray-400 mb-1">After transfer</p>
+                <p className="text-lg font-bold text-white">
+                  KES {Math.max(0, mainBalance - (parseFloat(transferAmount || '30'))).toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            {/* Transfer amount input */}
+            <div className="space-y-2">
+              <label htmlFor="transfer-amount" className="block text-sm font-medium text-gray-300">
+                Transfer amount (KES)
+              </label>
+              <input
+                id="transfer-amount"
+                type="number"
+                value={transferAmount}
+                onChange={e => setTransferAmount(e.target.value)}
+                min="30"
+                max="70000"
+                step="10"
+                disabled={transferring}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:opacity-50"
+              />
+              <p className="text-xs text-gray-600">Minimum KES 30, Maximum KES 70,000</p>
+            </div>
+
+            {/* Message display */}
+            {deposit.message && (
+              <div className={`rounded-lg p-3 text-sm ${
+                deposit.phase === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                deposit.phase === 'failed' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+              }`}>
+                {deposit.message}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleTransfer}
+                disabled={transferring || parseFloat(transferAmount || '0') < 30}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {transferring ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Transferring…
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight className="w-4 h-4" />
+                    Transfer Now
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setShowTransfer(false)}
+                disabled={transferring}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 font-bold py-3 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -546,7 +546,7 @@ async function ensureSpinPrizes(): Promise<void> {
       const totalProbability = defaultPrizes.reduce((sum, p) => sum + p.base_probability, 0)
       
       console.log(`✅ Created ${defaultPrizes.length} spin prizes`)
-      console.log(`����� Total probability: ${totalProbability}%`)
+      console.log(`������� Total probability: ${totalProbability}%`)
     }
   } catch (error) {
     console.error('Error ensuring spin prizes:', error)
@@ -1197,9 +1197,19 @@ export async function checkSpinActivation(): Promise<{ active: boolean; message:
 /**
  * Main spin function - handles complete spin logic
  */
-export async function performSpin(): Promise<SpinResponse> {
+export async function performSpin(spinAmountKes: number = 30): Promise<SpinResponse> {
   try {
-    console.log("[v0] Starting performSpin...")
+    console.log("[v0] Starting performSpin with amount:", spinAmountKes, "KES")
+
+    // Validate spin amount
+    const MIN_SPIN = 30;
+    const MAX_SPIN = 70000;
+    if (spinAmountKes < MIN_SPIN || spinAmountKes > MAX_SPIN) {
+      return {
+        success: false,
+        message: `Spin amount must be between KES ${MIN_SPIN} and KES ${MAX_SPIN}`,
+      }
+    }
 
     const session = await auth()
     if (!isValidSession(session)) {
@@ -1223,7 +1233,7 @@ export async function performSpin(): Promise<SpinResponse> {
       tier: userTier,
     })
 
-    // NEW: Check spin wallet balance (KES 30 = 3000 cents)
+    // NEW: Check spin wallet balance
     let spinWallet = await (SpinWallet as any).findOne({ user_id: userId })
     if (!spinWallet) {
       spinWallet = await (SpinWallet as any).create({
@@ -1235,11 +1245,11 @@ export async function performSpin(): Promise<SpinResponse> {
       })
     }
 
-    const SPIN_COST_CENTS = 3000; // KES 30
+    const SPIN_COST_CENTS = Math.round(spinAmountKes * 100); // Convert KES to cents
     if (spinWallet.balance_cents < SPIN_COST_CENTS) {
       return {
         success: false,
-        message: `Insufficient spin wallet balance. You need KES 30 but have KES ${(spinWallet.balance_cents / 100).toFixed(2)}. Please deposit via M-Pesa.`,
+        message: `Insufficient spin wallet balance. You need KES ${spinAmountKes.toFixed(2)} but have KES ${(spinWallet.balance_cents / 100).toFixed(2)}. Please deposit via M-Pesa.`,
       }
     }
 
