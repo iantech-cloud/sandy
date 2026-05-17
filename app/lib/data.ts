@@ -100,10 +100,15 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
       Referral.countDocuments({ referrer_id: userId }),
       // C. Downline count
       DownlineUser.countDocuments({ main_user_id: userId }),
-      // D. Direct Referral Earnings (lifetime)
+      // D. Direct Referral Earnings (lifetime) - from Earning collection
       Earning.aggregate([
         { $match: { user_id: userId, type: 'REFERRAL' } },
         { $group: { _id: null, direct_referral_earnings_cents: { $sum: '$amount_cents' } } }
+      ]),
+      // D2. Direct Referral Earnings from Transaction collection (MPESA activation bonus)
+      Transaction.aggregate([
+        { $match: { user_id: userId, type: 'REFERRAL', status: 'completed' } },
+        { $group: { _id: null, transaction_referral_earnings_cents: { $sum: '$amount_cents' } } }
       ]),
       // E. Downline Earnings (lifetime)
       Earning.aggregate([
@@ -179,6 +184,7 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
       referralCount,
       downlineCount,
       directReferralEarningsAgg,
+      transactionReferralEarningsAgg,
       downlineEarningsAgg,
       spinEarningsAgg,
       surveyEarningsAgg,
@@ -222,11 +228,22 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     });
 
     // Aggregate stats into a single object
+    // CRITICAL FIX: Combine referral earnings from BOTH Earning and Transaction collections
+    const earningCollectionReferralCents = directReferralEarningsAgg[0]?.direct_referral_earnings_cents || 0;
+    const transactionCollectionReferralCents = transactionReferralEarningsAgg[0]?.transaction_referral_earnings_cents || 0;
+    const totalDirectReferralEarnings = earningCollectionReferralCents + transactionCollectionReferralCents;
+    
+    console.log('[v0] Direct referral earnings breakdown:', {
+      from_earning_collection: earningCollectionReferralCents / 100,
+      from_transaction_collection: transactionCollectionReferralCents / 100,
+      total: totalDirectReferralEarnings / 100
+    });
+
     const statsCalcData = {
       pending_withdrawals_cents: pendingWithdrawalsAgg[0]?.pending_withdrawals_cents || 0,
       referral_count: referralCount,
       downline_count: downlineCount,
-      direct_referral_earnings_cents: directReferralEarningsAgg[0]?.direct_referral_earnings_cents || 0,
+      direct_referral_earnings_cents: totalDirectReferralEarnings,
       downline_earnings_cents: downlineEarningsAgg[0]?.downline_earnings_cents || 0,
       spin_earnings_cents: spinEarningsAgg[0]?.spin_earnings_cents || 0,
       survey_earnings_cents: surveyEarningsAgg[0]?.survey_earnings_cents || 0,
