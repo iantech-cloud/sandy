@@ -1195,21 +1195,33 @@ export async function checkMpesaPaymentStatus(checkoutRequestId: string): Promis
 
 /**
  * ✅ FIXED: Complete activation after successful payment - Update correct schema fields
+ * NOTE: This is called from MPESA callback (server-to-server), so no session required
  */
 export async function completeActivationAfterPayment(activationPaymentId: string): Promise<ApiResponse<ActivationCompletionData>> {
   try {
     await connectToDatabase();
 
-    const session = await auth();
-    if (!session?.user?.email) {
-      return { success: false, message: 'User not authenticated' };
+    // Get activation payment first - this will tell us which user to activate
+    const activationPayment = await (ActivationPayment as any).findById(activationPaymentId);
+    
+    if (!activationPayment) {
+      console.error(`[v0] Activation payment not found: ${activationPaymentId}`);
+      return { success: false, message: 'Activation payment not found' };
     }
 
-    const userProfile = await (Profile as any).findOne({ email: session.user.email });
-    const activationPayment = await (ActivationPayment as any).findById(activationPaymentId);
+    console.log(`[v0] Processing activation for payment:`, {
+      activationPaymentId,
+      userId: activationPayment.user_id,
+      status: activationPayment.status,
+      amount: activationPayment.amount_cents / 100
+    });
 
-    if (!userProfile || !activationPayment) {
-      return { success: false, message: 'User or activation payment not found' };
+    // Get user profile using the user_id from the activation payment (not from session)
+    const userProfile = await (Profile as any).findById(activationPayment.user_id);
+
+    if (!userProfile) {
+      console.error(`[v0] User profile not found for ID: ${activationPayment.user_id}`);
+      return { success: false, message: 'User profile not found' };
     }
 
     // ✅ FIXED: Check if already activated using correct fields
@@ -1263,13 +1275,33 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     let referralBonus = null;
 
     if (userProfile.referred_by) {
+      console.log(`[v0] User has referrer:`, {
+        userId: userProfile._id,
+        username: userProfile.username,
+        referred_by: userProfile.referred_by,
+        type: typeof userProfile.referred_by
+      });
+
       try {
         const referrer = await (Profile as any).findById(userProfile.referred_by);
+        
+        console.log(`[v0] Referrer lookup:`, {
+          referrer_id: userProfile.referred_by,
+          found: !!referrer,
+          referrer_username: referrer?.username
+        });
         
         if (referrer) {
           const referralRecord = await (Referral as any).findOne({
             referrer_id: referrer._id,
             referred_id: userProfile._id
+          });
+
+          console.log(`[v0] Referral record lookup:`, {
+            referrer_id: referrer._id,
+            referred_id: userProfile._id,
+            found: !!referralRecord,
+            already_paid: referralRecord?.referral_bonus_paid
           });
 
           if (referralRecord && !referralRecord.referral_bonus_paid) {
@@ -1359,15 +1391,28 @@ export async function completeActivationAfterPayment(activationPaymentId: string
               level: referralLevel
             };
 
-            console.log(`✅ Direct referral bonus awarded: ${referrer.username} earned KES 70`);
+            console.log(`✅ BONUS PAID: ${referrer.username} earned KES 70`, {
+              referrer: referrer.username,
+              referrerId: referrer._id,
+              newUser: userProfile.username,
+              bonusAmount: REFERRAL_BONUS_CENTS / 100,
+              transactionId: referralTransaction._id,
+              newBalance: referrer.balance_cents / 100
+            });
 
           } else if (referralRecord && referralRecord.referral_bonus_paid) {
             console.log(`[v0] Referral bonus already paid for ${userProfile.username}`);
+          } else {
+            console.log(`[v0] No referral record found for this user pair`);
           }
+        } else {
+          console.log(`[v0] Referrer not found by ID: ${userProfile.referred_by}`);
         }
       } catch (referralError) {
         console.error('⚠️ Error processing referral bonus:', referralError);
       }
+    } else {
+      console.log(`[v0] User has no referrer - no bonus to award`);
     }
 
     // =============================================================================

@@ -78,6 +78,8 @@ export async function registerUser(userData: {
       phone_number: phone,
       password: hashedPassword,
       referral_id: newUserReferralId,
+      // CRITICAL FIX: Set referred_by to link the referrer
+      referred_by: referrerProfile ? referrerProfile._id : null,
       approval_status: 'pending',
       status: isOAuthUser ? 'inactive' : 'pending',
       is_approved: false,
@@ -90,9 +92,18 @@ export async function registerUser(userData: {
       google_profile_picture: googleProfilePicture || null,
     });
 
+    console.log(`[v0] User registered:`, {
+      username,
+      userId: newUser._id,
+      hasReferrer: !!referrerProfile,
+      referrerId: referrerProfile?._id,
+      referred_by: newUser.referred_by
+    });
+
     // Handle referral creation
     if (referrerProfile) {
       await createReferralStructure(referrerProfile._id, newUserId);
+      console.log(`[v0] Referral structure created for ${referrerProfile.username} → ${username}`);
     }
 
     // Generate verification token and send email for non-OAuth users
