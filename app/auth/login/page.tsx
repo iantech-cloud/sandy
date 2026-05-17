@@ -51,67 +51,23 @@ function getDashboardRoute(role: string): string {
 async function LoginPageInner() {
   const session = await auth();
 
-  // If user is already logged in, check if they have incomplete status
-  if (session && session.user) {
-    const user = session.user;
-    const authMethod = user.authMethod || 'credentials';
-
-    console.log('User already logged in, checking status:', {
-      email: user.email,
-      authMethod,
-      is_verified: user.is_verified,
-      profile_completed: user.profile_completed,
-      isActivationPaid: user.isActivationPaid,
-      is_approved: user.is_approved,
-      approval_status: user.approval_status,
-      is_active: user.is_active,
-      status: user.status,
-    });
-
-    // ONLY redirect if user has incomplete status that needs attention
-    // Don't redirect just because they're logged in
-
-    // NOTE: Email verification is NOT a blocker for credentials users
-    // They proceed directly to activation payment
-    // Google users have verified emails by default anyway
-
-    // For Google OAuth Users - check for incomplete profile
-    if (authMethod === 'google' && !user.profile_completed) {
-      console.log('OAuth user - Profile not completed, redirecting to complete-profile');
-      redirect('/auth/complete-profile');
-    }
-
-    // Check activation payment for both user types
-    if (!user.isActivationPaid) {
-      console.log('User - Activation not paid, redirecting to activate');
-      redirect('/auth/activate');
-    }
-
-    // Check if not approved
-    if (!user.is_approved || user.approval_status === 'pending') {
-      console.log('User - Not approved, redirecting to pending-approval');
-      redirect('/auth/pending-approval');
-    }
-
-    // Check if not active
-    if (!user.is_active || user.status !== 'active') {
-      console.log('User - Not active, redirecting to pending-approval');
-      redirect('/auth/pending-approval');
-    }
-
-    // If user is fully verified, approved, and active, we DON'T automatically redirect
-    // This allows users to manually choose to go to login page even when logged in
-    console.log('User is fully authenticated but staying on login page by choice');
-    
-    // We'll show a message in the LoginContent component instead of redirecting
-    // This gives users the choice to stay on login or go to dashboard
-  }
-
-  // Always show the login form, even if user is logged in
-  // This allows users to:
+  // NOTE: We intentionally do NOT check user activation status on the login page
+  // Users should be able to visit the login page freely to:
   // 1. Login with a different account
   // 2. See the login page even when already logged in
   // 3. Manually choose to go to their dashboard
+  //
+  // Activation status checking happens AFTER they login in LoginContent.tsx
+  // via the checkUserStatusAndRedirect() function
+  
+  if (session && session.user) {
+    console.log('[v0] User already logged in on login page:', {
+      email: session.user.email,
+      authMethod: session.user.authMethod,
+    });
+  }
+
+  // Always show the login form, even if user is logged in
   return <LoginContent hasExistingSession={!!session} />;
 }
 
