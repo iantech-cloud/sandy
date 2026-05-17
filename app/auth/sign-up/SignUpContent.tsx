@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
+import { formatPhoneNumber } from '@/app/lib/utils/phoneFormatter';
 
 // Google Sign In Button Component
 const GoogleSignInButton: React.FC = () => {
@@ -127,10 +128,18 @@ export default function SignUpContent() {
       setError('Please enter a valid email address.');
       return false;
     }
-    // Phone validation (Kenyan format - 9 digits)
-    const phoneRegex = /^[0-9]{9}$/;
-    if (!phoneRegex.test(formData.phone.replace(/\s/g, ''))) {
-      setError('Please enter a valid Kenyan phone number (9 digits without +254).');
+    // Phone validation (Kenyan format - accepts multiple formats)
+    // Accepts: 0712345678 (10 digits with 0), 712345678 (9 digits), 254712345678 (12 digits), or +254712345678
+    const cleanPhone = formData.phone.replace(/[\s\-\+]/g, '');
+    
+    // Check if it matches any valid Kenyan phone format
+    const isValidFormat = 
+      /^0[0-9]{9}$/.test(cleanPhone) ||  // 0712345678 (10 digits starting with 0)
+      /^[0-9]{9}$/.test(cleanPhone) ||   // 712345678 (9 digits)
+      /^254[0-9]{9}$/.test(cleanPhone);  // 254712345678 (12 digits with country code)
+    
+    if (!isValidFormat) {
+      setError('Please enter a valid Kenyan phone number (e.g., 0712345678, 712345678, or 254712345678).');
       return false;
     }
     return true;
@@ -146,8 +155,9 @@ export default function SignUpContent() {
     try {
       console.log('Attempting sign up with:', formData);
 
-      // Format phone number to include country code for storage
-      const formattedPhone = `+254${formData.phone.replace(/\s/g, '')}`;
+      // Format phone number using the proper formatter utility
+      // This handles: 0712345678, 712345678, 254712345678, +254712345678
+      const formattedPhone = formatPhoneNumber(formData.phone);
 
       const response = await fetch('/api/auth/register', {
         method: 'POST',
@@ -378,17 +388,20 @@ export default function SignUpContent() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Phone Number (9 digits)
+                Phone Number
               </label>
               <input
                 type="tel"
                 name="phone"
                 value={formData.phone}
                 onChange={handlePhoneChange}
-                placeholder="254XXXXXXXXX without country code"
+                placeholder="e.g., 0712345678"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Enter 10 digits starting with 0 (e.g., 0712345678)
+              </p>
             </div>
 
             <div>
