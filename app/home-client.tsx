@@ -189,7 +189,7 @@ const Footer: React.FC = () => (
               support@hustlehubafrica.com
             </a>
           </li>
-          <li>+254 748 264 231</li>
+          <li>+254 707 871154</li>
           <li>Nairobi, Kenya</li>
         </ul>
       </div>

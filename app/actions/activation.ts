@@ -504,7 +504,7 @@ async function sendActivationConfirmationInvoice(
       business: {
         name: 'HustleHub Africa',
         address: 'Nairobi, Kenya',
-        phone: '+254 748 264 231',
+        phone: '+254 707 871154',
         email: 'support@hustlehub.africa'
       },
       activationDate: new Date().toLocaleDateString()

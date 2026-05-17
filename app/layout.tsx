@@ -143,7 +143,7 @@ export default async function RootLayout({
     },
     contactPoint: {
       '@type': 'ContactPoint',
-      telephone: '+254-748-264-231',
+      telephone: '+254-707-871154',
       contactType: 'Customer Service',
       areaServed: 'KE',
       availableLanguage: ['English', 'Swahili'],
