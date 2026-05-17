@@ -729,18 +729,31 @@ async function syncSpinDepositTransactionWithMpesaStatus(
     if (status === 'completed' && mpesaReceiptNumber) {
       updateData.metadata.mpesa_receipt_number = mpesaReceiptNumber;
       updateData.metadata.completed_at = new Date().toISOString();
+      // Mark balance_updated for completed spin deposits to prevent retries
+      updateData.balance_updated = true;
     }
 
     if (['failed', 'cancelled', 'timeout'].includes(status)) {
       updateData.metadata.failed_at = new Date().toISOString();
+      // For failed deposits, also mark balance_updated to prevent retries
+      updateData.balance_updated = true;
     }
 
-    await (Transaction as any).findOneAndUpdate(
+    const result = await (Transaction as any).findOneAndUpdate(
       { mpesa_transaction_id: mpesaTransactionId },
-      updateData
+      { $set: updateData },
+      { new: true }
     );
 
-    console.log(`🔄 Successfully synced spin deposit transaction status to: ${status}`);
+    if (!result) {
+      console.warn(`⚠️ No Transaction found to sync for M-Pesa ID: ${mpesaTransactionId}`);
+    } else {
+      console.log(`🔄 Successfully synced spin deposit transaction status to: ${status}`, {
+        transactionId: result._id,
+        status: result.status,
+        balance_updated: result.balance_updated
+      });
+    }
   } catch (error) {
     console.error('❌ Failed to sync spin deposit transaction status:', error);
     throw error;
@@ -2450,5 +2463,84 @@ export async function getSpinAnalytics(
   } catch (error) {
     console.error("Error getting spin analytics:", error)
     return { success: false, message: "Failed to fetch spin analytics" }
+  }
+}
+
+/**
+ * Reconcile spin deposit transaction status with M-Pesa status
+ * This function ensures that Transaction records match their corresponding MpesaTransaction status
+ */
+export async function reconcileSpinDepositStatus(mpesaTransactionId: string) {
+  try {
+    await connectToDatabase()
+
+    // Find the M-Pesa transaction
+    const mpesaTransaction = await (MpesaTransaction as any).findById(mpesaTransactionId).lean()
+    
+    if (!mpesaTransaction) {
+      return {
+        success: false,
+        message: 'M-Pesa transaction not found'
+      }
+    }
+
+    // Find the associated Transaction record
+    const transaction = await (Transaction as any).findOne({
+      $or: [
+        { mpesa_transaction_id: mpesaTransaction._id },
+        { 'metadata.checkoutRequestID': mpesaTransaction.metadata?.checkoutRequestID }
+      ]
+    })
+
+    if (!transaction) {
+      console.warn('⚠️ No Transaction record found for M-Pesa:', mpesaTransactionId)
+      return {
+        success: false,
+        message: 'No matching Transaction record found'
+      }
+    }
+
+    // If M-Pesa transaction has a terminal status but Transaction doesn't, update it
+    if (mpesaTransaction.status && transaction.status !== mpesaTransaction.status) {
+      console.log('🔄 Reconciling status mismatch:', {
+        mpesaId: mpesaTransaction._id,
+        oldStatus: transaction.status,
+        newStatus: mpesaTransaction.status
+      })
+
+      transaction.status = mpesaTransaction.status
+      transaction.balance_updated = true // Mark as processed
+      
+      // Update metadata with M-Pesa details
+      transaction.metadata = {
+        ...transaction.metadata,
+        mpesa_receipt_number: mpesaTransaction.mpesa_receipt_number,
+        result_code: mpesaTransaction.result_code,
+        result_desc: mpesaTransaction.result_desc,
+        reconciled_at: new Date().toISOString()
+      }
+
+      await transaction.save()
+
+      console.log('✅ Successfully reconciled transaction status to:', mpesaTransaction.status)
+    } else {
+      console.log('✓ Transaction status already matches M-Pesa status')
+    }
+
+    return {
+      success: true,
+      data: {
+        transactionId: transaction._id,
+        status: transaction.status,
+        balance_updated: transaction.balance_updated
+      },
+      message: 'Reconciliation completed successfully'
+    }
+  } catch (error) {
+    console.error('❌ Reconciliation error:', error)
+    return {
+      success: false,
+      message: 'Failed to reconcile transaction status'
+    }
   }
 }

@@ -9,6 +9,7 @@ import Alert from '@/app/ui/Alert';
 import { useDashboard } from '../../dashboard/DashboardContext';
 import { processWithdrawal } from '@/app/actions/transactions';
 import { getDepositHistory, getUserBalance } from '@/app/actions/deposit';
+import { reconcileSpinDepositStatus } from '@/app/actions/spin';
 import { formatPhoneNumber, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
 
 // Match the Transaction interface from TransactionHistory
@@ -115,6 +116,26 @@ export default function WalletPage() {
         const transformed = historyResult.data
           .map(transformTransaction)
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        // Reconcile any pending spin deposits to ensure their status is correct
+        const pendingSpinDeposits = transformed.filter(
+          tx => tx.status === 'pending' && tx.type === 'DEPOSIT' && tx.description?.includes('Spin')
+        );
+        
+        if (pendingSpinDeposits.length > 0) {
+          console.log('[v0] Found pending spin deposits, triggering reconciliation...');
+          // Trigger reconciliation for pending spin deposits without blocking the UI
+          pendingSpinDeposits.forEach(async (tx) => {
+            try {
+              if (tx.id) {
+                await reconcileSpinDepositStatus(tx.id);
+              }
+            } catch (error) {
+              console.error('[v0] Reconciliation error for transaction:', tx.id, error);
+            }
+          });
+        }
+        
         setTransactions(transformed);
       } else {
         setTransactions([]);
