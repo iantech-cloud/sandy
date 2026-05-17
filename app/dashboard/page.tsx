@@ -15,20 +15,15 @@ import {
   Clock,
   X,
   ArrowRight,
-  BarChart3,
   Sparkles,
   Trophy,
   Target,
   Copy
 } from 'lucide-react';
 
-import TransactionHistory from '@/app/ui/dashboard/TransactionHistory';
-import WalletPay from '@/app/ui/dashboard/WalletPay';
 import SpinWheel from '@/app/ui/dashboard/spin-wheel';
-import UserReports from '@/app/ui/dashboard/userReports';
 import { fetchDashboardData } from '@/app/lib/data';
 import { useDashboard } from './DashboardContext';
-import TransactionTrendsChart from '@/app/ui/dashboard/chart';
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -431,9 +426,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Wallet Pay Card */}
-        <div className="group relative bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-blue-400 hover:shadow-xl transition-all duration-300 overflow-hidden">
-          {/* Accent bar */}
+        {/* Wallet Pay Card - Temporarily Disabled */}
+        {/* <div className="group relative bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-blue-400 hover:shadow-xl transition-all duration-300 overflow-hidden">
           <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-600"></div>
           <div className="relative z-10">
             <WalletPay 
@@ -444,7 +438,7 @@ export default function DashboardPage() {
               }} 
             />
           </div>
-        </div>
+        </div> */}
 
         {/* Referral Card */}
         <div className="group relative bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-cyan-400 hover:shadow-xl transition-all duration-300 overflow-hidden">
@@ -493,15 +487,6 @@ export default function DashboardPage() {
         <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
       </div>
 
-      {/* Financial Reports Section */}
-      <div className="mb-8">
-        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-          <BarChart3 className="w-5 h-5 mr-2 text-cyan-600" />
-          Financial Reports
-        </h2>
-        <UserReports className="mt-6" />
-      </div>
-
       {/* Spin Wheel Modal with Enhanced Design */}
       {showSpinWheel && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
@@ -530,64 +515,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Transaction Trends */}
-      <div className="mb-8">
-        <TransactionTrendsChart timeRange="30days" />
-      </div>
 
-      {/* Approved Withdrawals with Modern Design */}
-      <div className="bg-white/70 backdrop-blur-xl p-6 rounded-3xl shadow-lg border border-white/50 mb-8">
-        <div className="flex items-center space-x-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-600 to-green-500 flex items-center justify-center shadow-lg shadow-green-500/30">
-            <CheckCircle className="w-5 h-5 text-white" />
-          </div>
-          <h3 className="text-2xl font-bold text-slate-900">Approved Withdrawals</h3>
-        </div>
-        {receipts && receipts.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-              <DollarSign className="w-8 h-8 text-slate-400" />
-            </div>
-            <p className="text-slate-500">No approved withdrawals found.</p>
-          </div>
-        ) : (
-          <ul className="divide-y divide-slate-200">
-            {receipts?.map((receipt) => (
-              <li key={receipt.id} className="flex justify-between items-center py-4 px-4 hover:bg-white/50 transition-all duration-250 rounded-xl group">
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-250">
-                    <CheckCircle className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-slate-900">Transaction ID: {receipt.transactionCode}</p>
-                    <p className="text-sm text-slate-500">
-                      {new Date(receipt.date).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
-                    KES {receipt.amount.toFixed(2)}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Transaction History */}
-      <div className="mb-8">
-        <TransactionHistory 
-          transactions={transactions as any || []} 
-          title="Recent Activity" 
-          limit={10} 
-        />
-      </div>
     </div>
   );
 }
