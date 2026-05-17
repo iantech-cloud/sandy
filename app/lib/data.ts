@@ -228,14 +228,12 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     });
 
     // Aggregate stats into a single object
-    // CRITICAL FIX: Combine referral earnings from BOTH Earning and Transaction collections
-    const earningCollectionReferralCents = directReferralEarningsAgg[0]?.direct_referral_earnings_cents || 0;
-    const transactionCollectionReferralCents = transactionReferralEarningsAgg[0]?.transaction_referral_earnings_cents || 0;
-    const totalDirectReferralEarnings = earningCollectionReferralCents + transactionCollectionReferralCents;
+    // FIX: Use only Transaction collection to avoid double-counting
+    // The Transaction collection contains the authoritative referral earnings data
+    const totalDirectReferralEarnings = transactionReferralEarningsAgg[0]?.transaction_referral_earnings_cents || 0;
     
-    console.log('[v0] Direct referral earnings breakdown:', {
-      from_earning_collection: earningCollectionReferralCents / 100,
-      from_transaction_collection: transactionCollectionReferralCents / 100,
+    console.log('[v0] Direct referral earnings:', {
+      from_transaction_collection: totalDirectReferralEarnings / 100,
       total: totalDirectReferralEarnings / 100
     });
 
