@@ -45,7 +45,7 @@ async function connectToDatabase() {
   console.log('✅ Connected to MongoDB');
 }
 
-// Define Profile Schema (minimal version for seeding)
+// Define Profile Schema inline to avoid circular dependencies
 const ProfileSchema = new mongoose.Schema({
   _id: { type: String, required: true },
   username: { type: String, required: true, maxlength: 50 },
@@ -149,11 +149,19 @@ const ProfileSchema = new mongoose.Schema({
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
 });
 
-const Profile = mongoose.models.Profile || mongoose.model('Profile', ProfileSchema);
+// Get or create the Profile model
+const getProfileModel = () => {
+  if (mongoose.models.Profile) {
+    return mongoose.models.Profile;
+  }
+  return mongoose.model('Profile', ProfileSchema);
+};
 
 async function seedAdmin() {
   try {
     await connectToDatabase();
+    
+    const Profile = getProfileModel();
     
     console.log('\n📋 Admin Configuration:');
     console.log(`   Username: ${ADMIN_CONFIG.username}`);
@@ -163,13 +171,13 @@ async function seedAdmin() {
     console.log('');
 
     // Check if admin already exists
-    const existingAdmin = await Profile.findOne({
+    const existingAdmin = await (Profile as any).findOne({
       $or: [
         { email: ADMIN_CONFIG.email },
         { username: ADMIN_CONFIG.username },
         { referral_id: ADMIN_CONFIG.referral_id }
       ]
-    });
+    }).lean();
 
     if (existingAdmin) {
       console.log('⚠️  Admin user already exists!');
@@ -192,7 +200,7 @@ async function seedAdmin() {
     const now = new Date();
 
     // Create the admin user with full activation
-    const adminUser = await Profile.create({
+    const adminUser = await (Profile as any).create({
       _id: adminId,
       username: ADMIN_CONFIG.username,
       email: ADMIN_CONFIG.email,
