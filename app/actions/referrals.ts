@@ -211,26 +211,53 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
       return { success: false, message: 'User not found' };
     }
 
+    console.log('[v0] Fetching referral commission stats for:', currentUser.username);
+
     // Get direct referral commissions (KES 70 each)
     // Look for REFERRAL transactions with level 1 or no level specified (for backward compatibility)
     const directReferralTransactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
+      status: 'completed',
       $or: [
         { 'metadata.level': 1 },
-        { 'metadata.level': { $exists: false } }
+        { 'metadata.level': { $exists: false } },
+        { 'metadata.level': null }
       ]
     }).lean();
 
+    console.log('[v0] Found referral transactions:', {
+      count: directReferralTransactions.length,
+      transactions: directReferralTransactions.map((tx: any) => ({
+        amount: tx.amount_cents / 100,
+        level: tx.metadata?.level,
+        description: tx.description
+      }))
+    });
+
     const level1Earnings = directReferralTransactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
+
+    // Get count of referrals where bonus was actually paid
+    const paidReferrals = await (Referral as any).countDocuments({
+      referrer_id: currentUser._id,
+      referral_bonus_paid: true,
+      status: 'bonus_paid'
+    });
 
     const stats: CommissionStats = {
       level1: {
         totalEarnings: level1Earnings,
-        count: directReferralTransactions.length
+        count: directReferralTransactions.length,
+        paidReferrals: paidReferrals
       },
       total: level1Earnings
     };
+
+    console.log('[v0] Commission stats:', {
+      totalEarnings: level1Earnings / 100,
+      count: directReferralTransactions.length,
+      paidReferrals: paidReferrals
+    });
 
     return {
       success: true,

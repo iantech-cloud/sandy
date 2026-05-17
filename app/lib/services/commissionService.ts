@@ -1,9 +1,13 @@
 import { connectToDatabase, Profile, Referral, DownlineUser, Transaction, ActivationPayment } from '@/app/lib/models';
 
-// Updated commission configuration - Direct referrals only (single level)
+// Commission configuration - Fixed to proper values
+// KES amounts are converted to cents (multiply by 100)
 export const COMMISSION_CONFIG = {
-  level1: 7000,  // KES 70 for direct referrals
-  activationFee: 9000 // KES 90 activation fee
+  level1: 7000,              // KES 70 for direct referrals (7000 cents)
+  activationFee: 9000,       // KES 90 activation fee (9000 cents)
+  companyFee: 2000,          // KES 20 company fee per activation (2000 cents)
+  unclaimedReferral: 7000,  // KES 70 unclaimed referral bonus (7000 cents)
+  level2: 1000               // KES 10 for level 2 (if ever implemented)
 };
 
 export class CommissionService {

@@ -753,3 +753,171 @@ export async function rejectUser(userId: string, rejectionReason: string): Promi
     return { success: false, message: 'Failed to reject user' };
   }
 }
+
+/**
+ * Fix referral bonuses - Corrects KES amounts and ensures proper accounting
+ * Fixes: Referrer gets KES 70 (7,000 cents), Company gets KES 20 (2,000 cents)
+ */
+export async function fixReferralBonuses(): Promise<{ success: boolean; message: string; data?: { fixed: number; skipped: number; created: number } }> {
+  try {
+    const session = await auth();
+    
+    if (!session?.user?.email) {
+      return { success: false, message: 'Not authenticated' };
+    }
+
+    await connectToDatabase();
+    const adminUser = await (Profile as any).findOne({ email: session.user.email });
+    
+    if (adminUser?.role !== 'admin') {
+      return { success: false, message: 'Admin access required' };
+    }
+
+    console.log(`[v0] Starting referral bonus fix from admin: ${adminUser.username}`);
+
+    // Get all referrals with bonuses paid but incorrect amounts
+    const incorrectBonuses = await (Referral as any).find({
+      referral_bonus_paid: true,
+      referral_bonus_amount_cents: { $ne: 7000 } // Not KES 70
+    }).lean();
+
+    let fixedCount = 0;
+    let createdCount = 0;
+    let skippedCount = 0;
+
+    console.log(`[v0] Found ${incorrectBonuses.length} referrals with incorrect bonus amounts`);
+
+    for (const referral of incorrectBonuses) {
+      try {
+        const referrer = await (Profile as any).findById(referral.referrer_id);
+        const referred = await (Profile as any).findById(referral.referred_id);
+
+        if (!referrer || !referred) {
+          console.log(`[v0] Skipping referral - users not found`);
+          skippedCount++;
+          continue;
+        }
+
+        const oldAmount = referral.referral_bonus_amount_cents || 0;
+        const newAmount = 7000; // KES 70
+        const difference = newAmount - oldAmount;
+
+        console.log(`[v0] Fixing: ${referrer.username} ← ${referred.username}, diff: KES ${difference / 100}`);
+
+        // Update referral record
+        await (Referral as any).findByIdAndUpdate(referral._id, {
+          referral_bonus_amount_cents: newAmount,
+          metadata: {
+            ...referral.metadata,
+            corrected_at: new Date().toISOString(),
+            original_amount: oldAmount,
+            correction_admin: adminUser._id.toString()
+          }
+        });
+
+        // Find or create transaction
+        const existingTransaction = await (Transaction as any).findOne({
+          user_id: referrer._id,
+          type: 'REFERRAL',
+          'metadata.referral_id': referral._id.toString()
+        });
+
+        if (existingTransaction && difference !== 0) {
+          // Update existing transaction
+          existingTransaction.amount_cents = newAmount;
+          existingTransaction.balance_after_cents = existingTransaction.balance_before_cents + newAmount;
+          existingTransaction.metadata = {
+            ...existingTransaction.metadata,
+            corrected_at: new Date().toISOString(),
+            original_amount: oldAmount
+          };
+          await existingTransaction.save();
+
+          // Adjust referrer balance
+          await (Profile as any).findByIdAndUpdate(referrer._id, {
+            $inc: {
+              balance_cents: difference,
+              total_earnings_cents: difference
+            }
+          });
+
+          fixedCount++;
+        } else if (!existingTransaction) {
+          // Create missing transaction
+          await (Transaction as any).create({
+            target_type: 'user',
+            target_id: referrer._id.toString(),
+            user_id: referrer._id,
+            amount_cents: newAmount,
+            type: 'REFERRAL',
+            description: `Referral bonus for ${referred.username}'s activation [CORRECTED]`,
+            status: 'completed',
+            source: 'activation',
+            balance_before_cents: referrer.balance_cents,
+            balance_after_cents: referrer.balance_cents + newAmount,
+            metadata: {
+              referred_user_id: referred._id.toString(),
+              referred_username: referred.username,
+              referral_id: referral._id.toString(),
+              level: 1,
+              corrected: true,
+              correction_admin: adminUser._id.toString()
+            }
+          });
+
+          // Update referrer balance
+          await (Profile as any).findByIdAndUpdate(referrer._id, {
+            $inc: {
+              balance_cents: newAmount,
+              total_earnings_cents: newAmount
+            }
+          });
+
+          createdCount++;
+        }
+
+      } catch (error) {
+        console.error(`[v0] Error fixing referral:`, error);
+        skippedCount++;
+      }
+    }
+
+    // Create audit log
+    await (AdminAuditLog as any).create({
+      actor_id: adminUser._id.toString(),
+      action: 'FIX_REFERRAL_BONUSES',
+      action_type: 'update',
+      target_type: 'referral',
+      resource_type: 'referral',
+      changes: {
+        fixed_count: fixedCount,
+        created_count: createdCount,
+        skipped_count: skippedCount,
+        correct_amount: 7000
+      },
+      metadata: {
+        bonus_amount_ksh: 70,
+        company_fee_ksh: 20
+      },
+      ip_address: 'server-action',
+      user_agent: 'server-action'
+    });
+
+    revalidatePath('/admin/referrals');
+    revalidatePath('/admin/users');
+
+    return {
+      success: true,
+      message: `Fixed ${fixedCount} bonuses, created ${createdCount} transactions, skipped ${skippedCount}`,
+      data: {
+        fixed: fixedCount,
+        skipped: skippedCount,
+        created: createdCount
+      }
+    };
+
+  } catch (error) {
+    console.error('Fix referral bonuses error:', error);
+    return { success: false, message: 'Failed to fix referral bonuses' };
+  }
+}
