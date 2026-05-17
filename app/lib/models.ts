@@ -29,7 +29,8 @@ const TransactionTypes = [
   'SPIN_COST',
   'SPIN_PRIZE',
   'ADMIN_CREDIT',
-  'ADMIN_DEBIT'
+  'ADMIN_DEBIT',
+  'UNCLAIMED_REFERRAL'
 ] as const;
 const BlogPostStatuses = ['draft', 'published', 'archived'] as const;
 const UserContentTypes = ['blog_post', 'social_media', 'product_review', 'video', 'other'] as const;

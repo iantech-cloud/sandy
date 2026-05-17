@@ -16,7 +16,7 @@ import {
   StatsCalcDB,
   TransactionDB,
 } from './definitions';
-import { formatCurrency } from './utils';
+import { formatCurrency, formatPhoneNumber } from './utils';
 
 // Import Mongoose models and connection utility
 import {
