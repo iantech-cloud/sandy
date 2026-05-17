@@ -611,6 +611,13 @@ export async function POST(request: NextRequest) {
           // reconciliation jobs don't try to credit again.
           transaction.balance_updated = true;
         }
+
+        // CRITICAL: Ensure balance_updated is ALWAYS set for completed transactions
+        // This prevents reconciliation jobs from retrying spin wallet deposits
+        if (!transaction.balance_updated) {
+          transaction.balance_updated = true;
+          console.log('🔒 Ensured balance_updated flag is set to prevent retries');
+        }
       } else if (['failed', 'cancelled', 'timeout'].includes(safeStatus)) {
         // Payment failed/cancelled/timeout — preserve the exact status so the
         // transaction history can distinguish between cancellations and failures.
@@ -628,6 +635,27 @@ export async function POST(request: NextRequest) {
       }
 
       await transaction.save({ session: session || undefined });
+    } else {
+      // No associated Transaction found - this is a fallback that shouldn't happen
+      // but we log it for debugging purposes
+      console.warn('⚠️ No associated Transaction found for M-Pesa callback', {
+        mpesaTransactionId: mpesaTransaction._id,
+        checkoutRequestID,
+        depositType,
+        safeStatus
+      });
+
+      // For spin wallet deposits without a Transaction record, still ensure 
+      // the spin wallet gets credited if the payment succeeded
+      if (depositType === 'spin' && safeStatus === 'completed') {
+        console.log('🔄 Fallback: Ensuring spin wallet is credited for completed payment...');
+        try {
+          const spinWalletResult = await updateSpinWallet(user_id, amount_cents);
+          console.log('✅ Fallback spin wallet credit successful:', spinWalletResult);
+        } catch (fallbackError) {
+          console.error('❌ Fallback spin wallet credit failed:', fallbackError);
+        }
+      }
     }
 
     // Commit the transaction if not already committed
