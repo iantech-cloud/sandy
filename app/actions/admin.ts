@@ -640,6 +640,15 @@ export async function approveUser(userId: string, approvalNotes?: string): Promi
       return { success: false, message: 'Admin access required' };
     }
 
+    console.log(`[v0] Admin approval starting for user: ${userId}`);
+
+    // Get the user first
+    const userProfile = await (Profile as any).findById(userId);
+    if (!userProfile) {
+      return { success: false, message: 'User not found' };
+    }
+
+    // Update user status
     const user = await (Profile as any).findByIdAndUpdate(
       userId,
       {
@@ -655,6 +664,97 @@ export async function approveUser(userId: string, approvalNotes?: string): Promi
 
     if (!user) {
       return { success: false, message: 'User not found' };
+    }
+
+    console.log(`[v0] User profile updated: ${user.username}, now processing referral bonus...`);
+
+    // CRITICAL FIX: Process referral bonus if user has a referrer
+    if (userProfile.referred_by) {
+      try {
+        console.log(`[v0] User has referrer: ${userProfile.referred_by}`);
+        
+        const referrer = await (Profile as any).findById(userProfile.referred_by);
+        
+        if (referrer) {
+          const referralRecord = await (Referral as any).findOne({
+            referrer_id: referrer._id,
+            referred_id: userProfile._id
+          });
+
+          console.log(`[v0] Referral record found: ${!!referralRecord}, bonus_paid: ${referralRecord?.referral_bonus_paid}`);
+
+          if (referralRecord && !referralRecord.referral_bonus_paid) {
+            // Award KES 70 referral bonus
+            const REFERRAL_BONUS_CENTS = 7000; // KES 70
+
+            // Create transaction
+            const referralTransaction = new (Transaction as any)({
+              target_type: 'user',
+              target_id: referrer._id.toString(),
+              user_id: referrer._id,
+              amount_cents: REFERRAL_BONUS_CENTS,
+              type: 'REFERRAL',
+              description: `Referral bonus for ${userProfile.username}'s activation (Admin Approved)`,
+              status: 'completed',
+              source: 'admin_approval',
+              balance_before_cents: referrer.balance_cents,
+              balance_after_cents: referrer.balance_cents + REFERRAL_BONUS_CENTS,
+              metadata: {
+                referred_user_id: userProfile._id.toString(),
+                referred_username: userProfile.username,
+                level: 1,
+                approved_by_admin: adminUser._id.toString()
+              }
+            });
+            await referralTransaction.save();
+
+            // Create earning record
+            const earning = new (Earning as any)({
+              user_id: referrer._id,
+              amount_cents: REFERRAL_BONUS_CENTS,
+              type: 'REFERRAL',
+              description: `Referral bonus for ${userProfile.username}'s activation (Admin Approved)`,
+              source_id: referralRecord._id,
+              source_type: 'referral',
+              transaction_id: referralTransaction._id,
+              processed: true,
+              processed_at: new Date(),
+              metadata: {
+                level: 1,
+                referred_user_id: userProfile._id.toString(),
+                bonus_amount: REFERRAL_BONUS_CENTS,
+                approved_by_admin: adminUser._id.toString()
+              }
+            });
+            await earning.save();
+
+            // Update referrer balance
+            referrer.balance_cents += REFERRAL_BONUS_CENTS;
+            referrer.total_earnings_cents += REFERRAL_BONUS_CENTS;
+            await referrer.save();
+
+            // Update referral record
+            referralRecord.referral_bonus_paid = true;
+            referralRecord.referral_bonus_amount_cents = REFERRAL_BONUS_CENTS;
+            referralRecord.bonus_paid_at = new Date();
+            referralRecord.status = 'bonus_paid';
+            referralRecord.referred_user_activated = true;
+            referralRecord.referred_user_activated_at = new Date();
+            referralRecord.metadata = {
+              level: 1,
+              bonus_amount: REFERRAL_BONUS_CENTS,
+              activated_via: 'admin_approval',
+              admin_id: adminUser._id.toString()
+            };
+            await referralRecord.save();
+
+            console.log(`✅ Referral bonus awarded: ${referrer.username} earned KES 70`);
+          }
+        }
+      } catch (referralError) {
+        console.error('⚠️ Error processing referral bonus during admin approval:', referralError);
+        // Don't fail the whole approval if referral bonus fails
+      }
     }
 
     await (AdminAuditLog as any).create({
