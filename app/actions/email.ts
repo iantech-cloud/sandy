@@ -244,7 +244,7 @@ export async function sendSupportEmail(formData: {
                         </p>
                         <p style="margin: 0; color: #047857; font-size: 14px; line-height: 1.5;">
                             For urgent matters, you can also reach us at:<br>
-                            <strong>Phone:</strong> +254 748 264 231<br>
+                            <strong>Phone:</strong> +254 707 871154<br>
                             <strong>Live Chat:</strong> Available in your dashboard
                         </p>
                     </div>
