@@ -1339,15 +1339,22 @@ export async function getAvailablePrizes(): Promise<{
     await connectToDatabase()
     await ensureSpinPrizes() // ADDED: Ensure prizes exist
 
-    const prizes = (await (SpinPrize as any)
-      .find({ is_active: true })
-      .sort({ wheel_order: 1 })
-      .lean()) as SpinPrizeLean[]
+    // Only show ZERO (Try Again) prize on the wheel - users always land on "Try Again"
+    const zeroPrize = (await (SpinPrize as any)
+      .findOne({ type: 'ZERO', is_active: true })
+      .lean()) as SpinPrizeLean | null
+
+    if (!zeroPrize) {
+      return {
+        success: false,
+        message: "Try Again prize not configured",
+      }
+    }
 
     return {
       success: true,
-      data: prizes.map((prize) => sanitizeMongoObject(prize)),
-      message: "Prizes fetched successfully",
+      data: [sanitizeMongoObject(zeroPrize)],
+      message: "Wheel ready - Try Again prize available",
     }
   } catch (error) {
     console.error("Error getting prizes:", error)
