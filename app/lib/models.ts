@@ -28,6 +28,7 @@ const TransactionTypes = [
   'ACCOUNT_ACTIVATION',
   'SPIN_COST',
   'SPIN_PRIZE',
+  'SPIN_WALLET_DEPOSIT',
   'ADMIN_CREDIT',
   'ADMIN_DEBIT',
   'UNCLAIMED_REFERRAL'
@@ -79,15 +80,15 @@ const AuditActions = [
 
 // Spin to Win Enums - 10 rewards total
 const SpinPrizeTypes = [
-  'BONUS_CREDIT',      // KES 50-200
-  'EXTRA_SPIN',        // 1 free spin
-  'AIRTIME',          // KES 50 airtime
-  'SURVEY_BOOST',     // 5 priority surveys
-  'REFERRAL_BONUS',   // KES 100 bonus
-  'MYSTERY_REWARD',   // Random reward
-  'COURSE_ACCESS',    // Free training
-  'COMMISSION_BOOST', // 10% boost for week
-  'BADGE_UNLOCK',     // Achievement badge
+  'KES_10000',        // KES 10,000 bonus
+  'KES_5000',         // KES 5,000 bonus
+  'KES_2500',         // KES 2,500 bonus
+  'KES_1000',         // KES 1,000 bonus
+  'KES_500',          // KES 500 bonus
+  'KES_200',          // KES 200 bonus
+  'KES_100',          // KES 100 bonus
+  'KES_50',           // KES 50 bonus
+  'FREE_SPIN',        // 1 free spin
   'ZERO'              // Try again (0 value)
 ] as const;
 

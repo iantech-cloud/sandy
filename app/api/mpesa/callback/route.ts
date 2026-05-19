@@ -545,11 +545,19 @@ export async function POST(request: NextRequest) {
     }).session(session || undefined);
 
     if (transaction) {
+      // For spin wallet deposits, update the transaction type and target_type for proper revenue tracking
+      if (depositType === 'spin_wallet') {
+        transaction.type = 'SPIN_WALLET_DEPOSIT';
+        transaction.target_type = 'company';
+        transaction.target_id = 'company';
+      }
+
       console.log('🔗 Found Associated Transaction:', {
         transactionId: transaction._id,
         type: transaction.type,
         amount: transaction.amount_cents / 100,
-        previousStatus: transaction.status
+        previousStatus: transaction.status,
+        targetType: transaction.target_type
       });
 
       const transactionFlow = getTransactionFlow(transaction.type);

@@ -344,7 +344,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'KES 10,000',
           description: 'Win KES 10,000 bonus credit',
           icon: '🎁',
-          base_probability: 0,
+          base_probability: 1,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -364,7 +364,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'KES 5,000',
           description: 'Win KES 5,000 bonus credit',
           icon: '💵',
-          base_probability: 0,
+          base_probability: 2,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -384,7 +384,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'KES 2,500',
           description: 'Win KES 2,500 bonus credit',
           icon: '💴',
-          base_probability: 0,
+          base_probability: 3,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -404,7 +404,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'KES 1,000',
           description: 'Win KES 1,000 bonus credit',
           icon: '💶',
-          base_probability: 0,
+          base_probability: 5,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -424,7 +424,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'KES 500',
           description: 'Win KES 500 bonus credit',
           icon: '💷',
-          base_probability: 0,
+          base_probability: 8,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -444,7 +444,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'KES 200',
           description: 'Win KES 200 bonus credit',
           icon: '💸',
-          base_probability: 0,
+          base_probability: 10,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -464,7 +464,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'KES 100',
           description: 'Win KES 100 bonus credit',
           icon: '🏷️',
-          base_probability: 0,
+          base_probability: 12,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -484,7 +484,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'KES 50',
           description: 'Win KES 50 bonus credit',
           icon: '🔖',
-          base_probability: 0,
+          base_probability: 14,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -504,7 +504,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'Free Spin',
           description: 'Get one free spin to try again',
           icon: '🎟️',
-          base_probability: 0,
+          base_probability: 15,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -524,7 +524,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'Try Again',
           description: 'Better luck next time!',
           icon: '⭕',
-          base_probability: 100,
+          base_probability: 30,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -906,21 +906,17 @@ export async function depositSpinWalletViaMpesa(depositData: {
       const transaction = await (Transaction as any).create({
         user_id: currentUser._id,
         amount_cents: amountCents,
-        // Use 'DEPOSIT' (valid enum value). The target_type distinguishes
-        // this from a main-wallet deposit, and the callback router will
-        // credit the SpinWallet (not Profile.balance_cents) based on
-        // MpesaTransaction.metadata.deposit_type === 'spin_wallet'.
-        type: 'DEPOSIT',
+        // Use 'SPIN_WALLET_DEPOSIT' to properly track spin wallet deposits as company revenue
+        type: 'SPIN_WALLET_DEPOSIT',
         description: `M-Pesa spin wallet deposit from ${formattedPhone}`,
         status: 'pending',
         mpesa_transaction_id: mpesaTransaction._id,
 
-        // Required fields for transaction tracking.
-        // target_type must be 'user' (schema enum: ['user','company']).
-        // The callback router differentiates spin vs main-wallet deposits
-        // via MpesaTransaction.metadata.deposit_type === 'spin_wallet'.
-        target_type: 'user',
-        target_id: currentUser._id.toString(),
+        // Set target_type to 'company' to track as company revenue/income
+        // This ensures spin wallet deposits are recorded in the admin transactions 
+        // page as income for proper financial tracking and reporting.
+        target_type: 'company',
+        target_id: 'company',
         
         metadata: {
           phoneNumber: formattedPhone,
