@@ -109,7 +109,16 @@ export async function GET(request: NextRequest) {
       .filter(t => t.type === 'UNCLAIMED_REFERRAL')
       .reduce((sum, t) => sum + (t.amount_cents / 100), 0);
     
-    const totalRevenue = companyRevenue + unclaimedReferralRevenue;
+    // Spin wallet deposits are company revenue
+    const spinWalletDeposits = await Transaction.find({
+      type: 'DEPOSIT',
+      'metadata.deposit_type': 'spin',
+      created_at: { $gte: start, $lte: end },
+      status: 'completed'
+    }).lean();
+    const spinDepositsRevenue = spinWalletDeposits.reduce((sum, t) => sum + (t.amount_cents / 100), 0);
+    
+    const totalRevenue = companyRevenue + unclaimedReferralRevenue + spinDepositsRevenue;
     
     // EXPENSES (Money going OUT from the company)
     // 1. Referral bonuses paid
@@ -270,6 +279,7 @@ export async function GET(request: NextRequest) {
           activationFees: companyRevenue,
           companyRevenue: companyRevenue,
           unclaimedReferrals: unclaimedReferralRevenue,
+          spinDeposits: spinDepositsRevenue,
           referralBonuses: referralExpense,
           bonuses: bonusExpense,
           taskPayments: taskPaymentExpense,

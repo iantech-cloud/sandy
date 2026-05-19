@@ -29,6 +29,7 @@ interface FinancialReport {
       activationFees: number;
       companyRevenue: number;
       unclaimedReferrals: number;
+      spinDeposits: number;
       withdrawals: number;
       bonuses: number;
       taskPayments: number;

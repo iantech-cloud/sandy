@@ -204,7 +204,11 @@ export default function TransactionsPage() {
     return 'text-gray-600';
   };
 
-  const getTypeIcon = (type: string, targetType: string) => {
+  const getTypeIcon = (type: string, targetType: string, metadata?: any) => {
+    // Spin wallet deposits are company revenue
+    if (type === 'DEPOSIT' && metadata?.deposit_type === 'spin') {
+      return '+';
+    }
     if (targetType === 'company' && ['COMPANY_REVENUE', 'UNCLAIMED_REFERRAL'].includes(type)) {
       return '+';
     }
