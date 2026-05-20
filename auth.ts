@@ -94,7 +94,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const userId = user._id?.toString();
           if (!userId) throw new Error('User account data is invalid. Please contact support.');
 
-          if (!user.password) {
+          if (!user.password || user.password.trim() === '') {
              throw new Error('This account was registered with Google Sign-In. Please use Google to sign in instead.');
           }
           
