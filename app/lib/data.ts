@@ -83,8 +83,14 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     // 1. Fetch Profile and Balance/Earnings. Use .lean<Type>() for safety and performance
     const profilePromise = Profile.findById(userId).lean<ProfileLean>();
 
-    // Compute start of today (server local time) and start of tomorrow for date range queries
-    const startOfToday = new Date();
+    // Compute start of today (EAT timezone - UTC+3) and start of tomorrow for date range queries
+    // EAT is UTC+3, so we need to calculate midnight EAT time
+    const now = new Date();
+    const eatOffset = 3 * 60 * 60 * 1000; // EAT is UTC+3
+    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
+    const eatTime = new Date(utcTime + eatOffset);
+    
+    const startOfToday = new Date(eatTime);
     startOfToday.setHours(0, 0, 0, 0);
     const startOfTomorrow = new Date(startOfToday);
     startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
