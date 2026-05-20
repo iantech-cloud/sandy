@@ -85,7 +85,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             throw new Error('Email and password are required.');
           }
 
-          const user = await Profile.findOne({ email: credentials.email }).select('+password');
+          // Normalize email to lowercase and trim whitespace for case-insensitive matching
+          const email = (credentials.email as string).trim().toLowerCase();
+
+          const user = await Profile.findOne({ email }).select('+password');
           if (!user) throw new Error('Email address not found. Please check and try again or register a new account.');
 
           const userId = user._id?.toString();
