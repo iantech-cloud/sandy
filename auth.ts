@@ -90,46 +90,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           await connectToDatabase();
           
           if (!credentials?.email || !credentials?.password) {
-            console.warn('[Auth] Missing credentials');
-            return null; // Let Auth.js handle invalid credentials gracefully
+            throw new AuthError('Email and password are required.');
           }
 
-          // Normalize email: lowercase and trim to ensure consistent matching
-          const normalizedEmail = credentials.email.toLowerCase().trim();
-          
-          const user = await Profile.findOne({ email: normalizedEmail }).select('+password');
-          if (!user) {
-            console.warn(`[Auth] User not found for email: ${normalizedEmail}`);
-            return null; // Let Auth.js handle invalid credentials gracefully
-          }
+          const user = await Profile.findOne({ email: credentials.email }).select('+password');
+          if (!user) throw new AuthError('Email address not found. Please check and try again or register a new account.');
 
           const userId = user._id?.toString();
-          if (!userId) {
-            console.error('[Auth] User ID extraction failed');
-            return null;
-          }
+          if (!userId) throw new AuthError('User account data is invalid. Please contact support.');
 
           if (!user.password) {
-            console.warn(`[Auth] OAuth user attempted password login: ${normalizedEmail}`);
-            // For OAuth users, still return null to let frontend handle the error via callback
-            return null;
+             throw new AuthError('This account was registered with Google Sign-In. Please use Google to sign in instead.');
           }
           
           const isPasswordValid = await bcrypt.compare(credentials.password as string, user.password);
-          if (!isPasswordValid) {
-            console.warn(`[Auth] Invalid password for user: ${normalizedEmail}`);
-            return null; // Let Auth.js handle invalid credentials gracefully
-          }
+          if (!isPasswordValid) throw new AuthError('Password is incorrect. Please check and try again or use "Forgot Password" to reset it.');
 
           // Check 2FA if enabled
           if (user.twoFAEnabled && user.twoFASecret) {
             if (!credentials.token2FA) {
-              // Store a marker so we can identify 2FA is needed
-              return {
-                id: 'pending_2fa',
-                email: user.email,
-                twoFARequired: true,
-              } as any;
+              throw new AuthError('2FA code is required. Please check your email for the verification code.', 'TwoFactorRequired');
             }
 
             const verified = speakeasy.totp.verify({
@@ -140,15 +120,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             });
 
             if (!verified) {
-              console.warn(`[Auth] Invalid 2FA code for user: ${normalizedEmail}`);
-              return null;
+              throw new AuthError('Invalid 2FA code. Please check the code and try again.', 'InvalidTwoFactorCode');
             }
           }
           
           await Profile.updateOne({ _id: user._id }, { last_login: new Date() });
 
-          console.log(`[Auth] Successful login for user: ${normalizedEmail}`);
-          
           return {
             id: userId,
             email: user.email,
@@ -167,10 +144,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           };
           
         } catch (error: any) {
-          console.error('[Auth] Authorize callback error:', error);
-          // Return null instead of throwing to avoid CallbackRouteError spam
-          // The frontend will receive CredentialsSignin error code from Auth.js
-          return null;
+          console.error('Authorize error:', error);
+          // Pass the error message as the error itself so Auth.js will include it in the response
+          // Auth.js will convert this to the error param on the frontend
+          const errorMessage = error?.message || 'Authentication failed';
+          throw new Error(errorMessage); 
         }
       },
     }),
@@ -191,12 +169,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   
   callbacks: {
-    // ==================== REDIRECT CALLBACK ====================
-    // Intercept redirects to handle and preserve error messages
-    async redirect({ url, baseUrl }) {
-      return url.startsWith(baseUrl) ? url : baseUrl;
-    },
-
     // ==================== SIGN IN CALLBACK ====================
     async signIn({ user, account, profile }) {
       try {

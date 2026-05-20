@@ -733,29 +733,31 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
       console.log('Attempting login for:', email);
       
       const result = await signIn('credentials', {
-        email: email.toLowerCase(),
-        password: password,
-        token2FA: token2FA || undefined,
-        redirect: false
+        email,
+        password,
+        token2FA: requires2FA ? token2FA : undefined,
+        redirect: false,
       });
 
-      console.log('[v0] Sign in result:', {
-        ok: result?.ok,
-        error: result?.error,
-        status: result?.status,
-        url: result?.url
-      });
+      console.log('SignIn result:', result);
 
-      // If there's an error, display the error message on the current page
       if (result?.error) {
-        // Use the error handler to decode and display the proper error message
+        if (result.error.includes('TwoFactorRequired')) {
+          console.log('2FA required, showing 2FA form');
+          setRequires2FA(true);
+          setMessage('Please enter your 6-digit verification code from Google Authenticator.');
+          setMessageType('info');
+          setLoading(false);
+          return;
+        }
+
         const errorInfo = handleNextAuthError(result.error);
         setMessage(errorInfo.message);
         setMessageType('error');
         setLoading(false);
         return;
-      }
-
+      } 
+      
       if (result?.ok) {
         console.log('Login successful! Checking user status...');
         setMessage('Login successful! Checking account status...');
