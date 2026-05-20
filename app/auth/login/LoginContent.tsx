@@ -152,23 +152,58 @@ const MagicLinkForm: React.FC = () => {
 
 /**
  * Utility to map NextAuth error codes to user-friendly messages
+ * Now properly handles custom error messages from the authorize callback
  */
 const handleNextAuthError = (errorParam: string | null): { message: string } => {
   if (!errorParam) return { message: '' };
   
-  if (errorParam.includes('Banned:')) {
-    return { message: errorParam.replace('Banned:', 'Your account has been banned:') };
-  }
-  
-  if (errorParam.includes('Suspended:')) {
-    return { message: errorParam.replace('Suspended:', 'Your account is suspended:') };
+  // Try to decode the error message first (Auth.js URL-encodes errors)
+  let decodedError = '';
+  try {
+    decodedError = decodeURIComponent(errorParam);
+  } catch {
+    decodedError = errorParam;
   }
 
-  if (errorParam.includes('TwoFactorRequired')) {
+  // Check for custom error messages from authorize callback (these contain the actual message)
+  // These are passed as the error parameter value from our AuthError class
+  if (decodedError.includes('Password is incorrect')) {
+    return { message: decodedError };
+  }
+  
+  if (decodedError.includes('Email address not found')) {
+    return { message: decodedError };
+  }
+
+  if (decodedError.includes('This account was registered with')) {
+    return { message: decodedError };
+  }
+
+  if (decodedError.includes('User account data is invalid')) {
+    return { message: decodedError };
+  }
+
+  if (decodedError.includes('2FA code is required')) {
+    return { message: decodedError };
+  }
+
+  if (decodedError.includes('Invalid 2FA code')) {
+    return { message: decodedError };
+  }
+  
+  if (decodedError.includes('Banned:')) {
+    return { message: decodedError.replace('Banned:', 'Your account has been banned:') };
+  }
+  
+  if (decodedError.includes('Suspended:')) {
+    return { message: decodedError.replace('Suspended:', 'Your account is suspended:') };
+  }
+
+  if (decodedError.includes('TwoFactorRequired')) {
     return { message: 'Please enter your 2FA verification code to continue.' };
   }
 
-  if (errorParam.includes('InvalidTwoFactorCode')) {
+  if (decodedError.includes('InvalidTwoFactorCode')) {
     return { message: 'Invalid 2FA verification code. Please try again.' };
   }
 
@@ -183,8 +218,17 @@ const handleNextAuthError = (errorParam: string | null): { message: string } => 
       return { message: 'Error sending the email magic link.' };
     case 'Configuration':
       return { message: 'Server configuration error. Please contact support.' };
+    case 'TwoFactorRequired':
+      return { message: 'Please enter your 2FA verification code to continue.' };
+    case 'InvalidTwoFactorCode':
+      return { message: 'Invalid 2FA verification code. Please try again.' };
     default:
-      return { message: decodeURIComponent(errorParam).replace(/_+/g, ' ') };
+      // If we have a decoded message that doesn't match known errors, show it
+      // This handles custom error messages from the authorize callback
+      if (decodedError && decodedError !== errorParam) {
+        return { message: decodedError.replace(/_+/g, ' ') };
+      }
+      return { message: 'Invalid email or password. Please try again.' };
   }
 };
 
