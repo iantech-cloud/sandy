@@ -24,8 +24,27 @@ interface Transaction {
   mpesa_receipt_number?: string;
 }
 
-const PROCESSING_FEE_PERCENT = 2;
 const MIN_WITHDRAWAL = 200;
+
+// Band-based processing fee calculation (matches backend in transactions.ts)
+function calculateProcessingFee(amount: number): number {
+  if (amount >= 200 && amount <= 1000) return 10;
+  if (amount > 1000 && amount <= 2000) return 20;
+  if (amount > 2000 && amount <= 5000) return 30;
+  if (amount > 5000 && amount <= 10000) return 50;
+  if (amount > 10000) return 100;
+  return 0;
+}
+
+// Get fee band description
+function getFeeBandDescription(amount: number): string {
+  if (amount >= 200 && amount <= 1000) return 'KSh 200 - 1,000';
+  if (amount > 1000 && amount <= 2000) return 'KSh 1,001 - 2,000';
+  if (amount > 2000 && amount <= 5000) return 'KSh 2,001 - 5,000';
+  if (amount > 5000 && amount <= 10000) return 'KSh 5,001 - 10,000';
+  if (amount > 10000) return 'Above KSh 10,000';
+  return '';
+}
 
 // Helper: format phone for display (0XXXXXXXXX)
 function formatPhoneForDisplay(phone: string): string {
@@ -99,10 +118,11 @@ export default function WalletPage() {
     );
   }
 
-  // Computed fee preview
+  // Computed fee preview using band-based system
   const withdrawAmountNum = parseFloat(withdrawAmount) || 0;
-  const feeCents = Math.round(withdrawAmountNum * PROCESSING_FEE_PERCENT) / 100;
-  const youReceive = Math.max(0, withdrawAmountNum - feeCents);
+  const processingFee = calculateProcessingFee(withdrawAmountNum);
+  const totalDeduction = withdrawAmountNum + processingFee;
+  const feeBand = getFeeBandDescription(withdrawAmountNum);
 
   const fetchWalletData = async () => {
     try {
@@ -177,9 +197,12 @@ export default function WalletPage() {
       setMessageType('error');
       return;
     }
-
-    if (amount > currentBalance) {
-      setMessage(`Insufficient balance. Available: KES ${currentBalance.toFixed(2)}.`);
+    
+    // Check balance including processing fee
+    const fee = calculateProcessingFee(amount);
+    const totalRequired = amount + fee;
+    if (totalRequired > currentBalance) {
+      setMessage(`Insufficient balance. You need KSh ${totalRequired.toFixed(0)} (amount + KSh ${fee} fee). Available: KSh ${currentBalance.toFixed(0)}.`);
       setMessageType('error');
       return;
     }
@@ -284,20 +307,24 @@ export default function WalletPage() {
               />
             </div>
 
-            {/* Fee Preview */}
+            {/* Fee Preview - Band-based system */}
             {withdrawAmountNum >= MIN_WITHDRAWAL && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800 space-y-1">
                 <div className="flex justify-between">
                   <span>Withdrawal amount:</span>
-                  <span className="font-medium">KES {withdrawAmountNum.toFixed(2)}</span>
+                  <span className="font-medium">KSh {withdrawAmountNum.toFixed(0)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Processing fee ({PROCESSING_FEE_PERCENT}%):</span>
-                  <span className="font-medium text-red-600">- KES {feeCents.toFixed(2)}</span>
+                  <span>Processing fee ({feeBand}):</span>
+                  <span className="font-medium text-red-600">KSh {processingFee}</span>
                 </div>
                 <div className="flex justify-between border-t border-orange-300 pt-1 font-semibold">
-                  <span>You receive:</span>
-                  <span className="text-green-700">KES {youReceive.toFixed(2)}</span>
+                  <span>Total deducted from wallet:</span>
+                  <span className="text-red-700">KSh {totalDeduction.toFixed(0)}</span>
+                </div>
+                <div className="flex justify-between font-semibold">
+                  <span>You receive via M-Pesa:</span>
+                  <span className="text-green-700">KSh {withdrawAmountNum.toFixed(0)}</span>
                 </div>
               </div>
             )}
@@ -339,8 +366,15 @@ export default function WalletPage() {
             <div className="p-4 bg-blue-50 rounded-lg text-sm text-blue-700 space-y-1">
               <p className="font-semibold text-blue-800 mb-1">Withdrawal Information:</p>
               <ul className="list-disc list-inside space-y-1">
-                <li>Minimum withdrawal: KES {MIN_WITHDRAWAL}</li>
-                <li>Processing fee: {PROCESSING_FEE_PERCENT}% of the withdrawal amount</li>
+                <li>Minimum withdrawal: KSh {MIN_WITHDRAWAL}</li>
+                <li className="font-medium">Processing fees (band-based):</li>
+                <ul className="ml-4 list-none space-y-0.5 text-xs">
+                  <li>KSh 200 - 1,000: <strong>KSh 10</strong></li>
+                  <li>KSh 1,001 - 2,000: <strong>KSh 20</strong></li>
+                  <li>KSh 2,001 - 5,000: <strong>KSh 30</strong></li>
+                  <li>KSh 5,001 - 10,000: <strong>KSh 50</strong></li>
+                  <li>Above KSh 10,000: <strong>KSh 100</strong></li>
+                </ul>
                 <li>Withdrawals are allowed any day, any time</li>
                 <li>Funds are sent to your M-Pesa number</li>
                 <li>Processing may take up to 12 hours after admin approval</li>

@@ -182,7 +182,9 @@ const handleNextAuthError = (errorParam: string | null): { message: string } => 
     case 'EmailSignin':
       return { message: 'Unable to send magic link. Please check your email address and try again.' };
     case 'Configuration':
-      return { message: 'Unable to sign in at this time. Please try again in a few moments.' };
+    case 'CallbackRouteError':
+      // These generic errors usually wrap specific auth errors - show a helpful message
+      return { message: 'Invalid email or password. Please check your credentials and try again.' };
     default:
       // Return the decoded error message directly for custom auth errors
       return { message: decodeURIComponent(errorParam).replace(/_+/g, ' ') };
