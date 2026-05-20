@@ -7,7 +7,6 @@ import {
   SpinWallet,
   Transaction,
   AdminAuditLog,
-  MpesaTransaction,
 } from '@/app/lib/models'
 import { queryStkPushStatus, initiateStkPush } from '@/app/lib/mpesa'
 
@@ -175,64 +174,42 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
       }
     }
 
-    // ========================================================================
-    // 🔒 IDEMPOTENCY CHECK: Check if M-Pesa callback has already processed this
-    // The callback sets metadata.callback_processed = true when it credits the wallet.
-    // If already processed, just sync the embedded deposit status and return.
-    // ========================================================================
-    const mpesaTransaction = await (MpesaTransaction as any).findOne({
-      checkout_request_id: checkoutRequestId
-    })
+    const status = await queryStkPushStatus(checkoutRequestId)
+    console.log(`[SpinWallet] STK status for ${checkoutRequestId}:`, status)
 
-    if (mpesaTransaction?.metadata?.callback_processed === true) {
-      // Callback already handled this - just sync the embedded deposit status
-      if (mpesaTransaction.status === 'completed' && deposit.status !== 'completed') {
-        deposit.mpesa_status = 'completed'
-        deposit.status = 'completed'
-        deposit.mpesa_receipt_number = mpesaTransaction.mpesa_receipt_number
-        deposit.deposited_at = mpesaTransaction.completed_at || new Date()
-        await spinWallet.save()
-        console.log('[SpinWallet] Synced deposit status from callback-processed transaction')
-      } else if (['failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status) && deposit.status === 'pending') {
-        deposit.mpesa_status = mpesaTransaction.status
-        deposit.status = mpesaTransaction.status === 'cancelled' ? 'cancelled' : mpesaTransaction.status === 'timeout' ? 'timeout' : 'failed'
-        await spinWallet.save()
-      }
-
-      return {
-        success: mpesaTransaction.status === 'completed',
-        status: mpesaTransaction.status,
-        message: mpesaTransaction.status === 'completed'
-          ? `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`
-          : `Payment ${mpesaTransaction.status}.`,
-        balance: spinWallet.balance_cents,
-      }
-    }
-
-    // ========================================================================
-    // Callback hasn't processed yet — query M-Pesa API for status
-    // NOTE: We only READ status here. We do NOT credit the wallet.
-    // The M-Pesa callback is the ONLY source of truth for crediting.
-    // ========================================================================
-    const queryResult = await queryStkPushStatus(checkoutRequestId)
-    console.log(`[SpinWallet] STK status for ${checkoutRequestId}:`, queryResult)
-
-    // Update the embedded deposit status for UI feedback, but DO NOT credit wallet
-    if (queryResult.success && queryResult.status === 'completed') {
-      // Payment completed according to M-Pesa, but callback hasn't processed yet
-      // The callback will handle crediting — we just update UI status
+    if (status.success && status.status === 'completed') {
       deposit.mpesa_status = 'completed'
-      // Keep status as 'pending' until callback confirms and credits
-      // This prevents double-crediting if callback runs after this
+      deposit.status = 'completed'
+      deposit.mpesa_receipt_number = status.mpesaReceiptNumber
+      deposit.deposited_at = new Date()
+
+      spinWallet.balance_cents += deposit.amount_cents
+      spinWallet.total_deposited_cents += deposit.amount_cents
+
       await spinWallet.save()
+
+      await (Transaction as any).create({
+        user_id: session.user.id,
+        type: 'SPIN_DEPOSIT',
+        amount_cents: deposit.amount_cents,
+        status: 'completed',
+        source: 'mpesa',
+        description: `Spin wallet deposit - KES ${deposit.amount_cents / 100}`,
+        metadata: {
+          mpesa_receipt: status.mpesaReceiptNumber,
+          checkout_request_id: checkoutRequestId,
+        },
+      })
+
+      console.log(`[SpinWallet] Deposit completed — user: ${session.user.id}`)
 
       return {
         success: true,
-        status: 'processing',
-        message: 'Payment received! Processing your deposit...',
+        status: 'completed',
+        message: `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`,
         balance: spinWallet.balance_cents,
       }
-    } else if (queryResult.status === 'pending') {
+    } else if (status.status === 'pending') {
       return {
         success: true,
         status: 'pending',
@@ -240,15 +217,14 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
         balance: spinWallet.balance_cents,
       }
     } else {
-      // Handle failed, cancelled, or timeout statuses
-      deposit.mpesa_status = queryResult.status || 'failed'
-      deposit.status = queryResult.status === 'cancelled' ? 'cancelled' : queryResult.status === 'timeout' ? 'timeout' : 'failed'
+      deposit.mpesa_status = status.status || 'failed'
+      deposit.status = 'failed'
       await spinWallet.save()
 
       return {
         success: false,
-        status: queryResult.status || 'failed',
-        message: queryResult.resultDesc || 'Payment failed or was cancelled.',
+        status: 'failed',
+        message: 'Payment failed or was cancelled.',
         balance: spinWallet.balance_cents,
       }
     }
@@ -328,95 +304,6 @@ export async function getSpinWalletHistory(limit: number = 20) {
   } catch (error) {
     console.error('[SpinWallet] Error getting history:', error)
     return { success: false, message: 'An error occurred' }
-  }
-}
-
-export async function transferMainToSpinWallet(amountKes: number) {
-  try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, message: 'Unauthorized' }
-    }
-
-    if (amountKes <= 0) {
-      return { success: false, message: 'Amount must be greater than zero' }
-    }
-
-    const MIN_TRANSFER = 30
-    const MAX_TRANSFER = 70000
-    if (amountKes < MIN_TRANSFER || amountKes > MAX_TRANSFER) {
-      return { success: false, message: `Transfer amount must be between KES ${MIN_TRANSFER} and KES ${MAX_TRANSFER}` }
-    }
-
-    await connectToDatabase()
-
-    // Get user's main wallet balance
-    const user = await (Profile as any).findById(session.user.id).lean()
-    if (!user) {
-      return { success: false, message: 'User not found' }
-    }
-
-    const amountCents = Math.round(amountKes * 100)
-    if ((user as any).balance_cents < amountCents) {
-      return {
-        success: false,
-        message: `Insufficient main wallet balance. You have KES ${((user as any).balance_cents / 100).toFixed(2)} but need KES ${amountKes.toFixed(2)}`,
-      }
-    }
-
-    // Get or create spin wallet
-    let spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id })
-    if (!spinWallet) {
-      spinWallet = await (SpinWallet as any).create({
-        user_id: session.user.id,
-        balance_cents: 0,
-        total_deposited_cents: 0,
-        total_used_cents: 0,
-        total_spins: 0,
-      })
-    }
-
-    // Deduct from main wallet
-    await (Profile as any).findByIdAndUpdate(session.user.id, {
-      $inc: { balance_cents: -amountCents },
-    })
-
-    // Add to spin wallet
-    spinWallet.balance_cents += amountCents
-    spinWallet.total_deposited_cents += amountCents
-    spinWallet.deposits.push({
-      amount_cents: amountCents,
-      status: 'completed',
-      mpesa_status: 'main_wallet_transfer',
-      deposited_at: new Date(),
-      created_at: new Date(),
-    })
-    await spinWallet.save()
-
-    // Create transaction record
-    await (Transaction as any).create({
-      user_id: session.user.id,
-      type: 'SPIN_DEPOSIT',
-      amount_cents: amountCents,
-      status: 'completed',
-      source: 'main_wallet_transfer',
-      description: `Transfer to spin wallet - KES ${amountKes.toFixed(2)}`,
-      metadata: {
-        transfer_type: 'main_to_spin',
-      },
-    })
-
-    console.log(`[SpinWallet] Transfer completed — user: ${session.user.id}, amount: KES ${amountKes}`)
-
-    return {
-      success: true,
-      message: `Successfully transferred KES ${amountKes.toFixed(2)} to your spin wallet`,
-      spin_balance: spinWallet.balance_cents,
-      main_balance: (user as any).balance_cents - amountCents,
-    }
-  } catch (error) {
-    console.error('[SpinWallet] Error transferring to spin wallet:', error)
-    return { success: false, message: 'An error occurred during transfer' }
   }
 }
 

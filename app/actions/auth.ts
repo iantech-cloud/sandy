@@ -27,14 +27,11 @@ export async function registerUser(userData: {
 
     const { username, email, phone, password, referralId, isOAuthUser, oauthProvider, oauthId, googleProfilePicture } = userData;
 
-    // Normalize email: lowercase and trim
-    const normalizedEmail = email.toLowerCase().trim();
-
     // Check for existing users
     const existingUser = await (Profile as any).findOne({ 
       $or: [
         { username }, 
-        { email: normalizedEmail }, 
+        { email }, 
         { oauth_id: oauthId },
         { phone_number: phone }
       ].filter(Boolean) // Remove null/undefined conditions
@@ -44,7 +41,7 @@ export async function registerUser(userData: {
       if (existingUser.username === username) {
         return { success: false, message: 'Username already taken' };
       }
-      if (existingUser.email === normalizedEmail) {
+      if (existingUser.email === email) {
         return { success: false, message: 'Email already registered' };
       }
       if (oauthId && existingUser.oauth_id === oauthId) {
@@ -77,12 +74,10 @@ export async function registerUser(userData: {
     const newUser = await (Profile as any).create({
       _id: newUserId,
       username,
-      email: normalizedEmail,
+      email,
       phone_number: phone,
       password: hashedPassword,
       referral_id: newUserReferralId,
-      // CRITICAL FIX: Set referred_by to link the referrer
-      referred_by: referrerProfile ? referrerProfile._id : null,
       approval_status: 'pending',
       status: isOAuthUser ? 'inactive' : 'pending',
       is_approved: false,
@@ -95,18 +90,9 @@ export async function registerUser(userData: {
       google_profile_picture: googleProfilePicture || null,
     });
 
-    console.log(`[v0] User registered:`, {
-      username,
-      userId: newUser._id,
-      hasReferrer: !!referrerProfile,
-      referrerId: referrerProfile?._id,
-      referred_by: newUser.referred_by
-    });
-
     // Handle referral creation
     if (referrerProfile) {
       await createReferralStructure(referrerProfile._id, newUserId);
-      console.log(`[v0] Referral structure created for ${referrerProfile.username} → ${username}`);
     }
 
     // Generate verification token and send email for non-OAuth users
@@ -238,10 +224,7 @@ export async function resendVerificationEmail(email: string): Promise<{
   try {
     await connectToDatabase();
 
-    // Normalize email: lowercase and trim
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    const user = await (Profile as any).findOne({ email: normalizedEmail });
+    const user = await (Profile as any).findOne({ email });
     if (!user) {
       return { success: false, message: 'User not found' };
     }
@@ -422,10 +405,7 @@ export async function getUserByEmail(email: string): Promise<{
   try {
     await connectToDatabase();
 
-    // Normalize email: lowercase and trim
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    const user = await (Profile as any).findOne({ email: normalizedEmail }).select('+password');
+    const user = await (Profile as any).findOne({ email }).select('+password');
     if (!user) {
       return { success: false, message: 'User not found' };
     }
@@ -589,10 +569,7 @@ export async function requestPasswordReset(email: string): Promise<{
   try {
     await connectToDatabase();
 
-    // Normalize email: lowercase and trim
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    const user = await (Profile as any).findOne({ email: normalizedEmail });
+    const user = await (Profile as any).findOne({ email });
     if (!user) {
       // Don't reveal if email exists or not
       return { 

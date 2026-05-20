@@ -26,6 +26,10 @@ interface CommissionStats {
     totalEarnings: number;
     count: number;
   };
+  level2: {
+    totalEarnings: number;
+    count: number;
+  };
   total: number;
 }
 
@@ -166,7 +170,7 @@ export default function ReferralsPage() {
         </div>
 
         <p className="text-gray-600 mt-4 text-sm">
-          Share your referral code or link with friends. You&apos;ll earn <strong>KES 70</strong> for each direct referral when they activate their accounts!
+          Share your referral code or link with friends. You'll earn <strong>KES 70</strong> for each direct referral and <strong>KES 10</strong> for each indirect referral when they activate their accounts!
         </p>
       </div>
 
@@ -187,42 +191,60 @@ export default function ReferralsPage() {
           </div>
         ) : commissionStats ? (
           <div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               {/* Total Commissions */}
               <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <div className="text-2xl font-bold text-blue-600">
                   KES {(commissionStats.total / 100).toFixed(2)}
                 </div>
                 <div className="text-sm text-gray-600 mt-1">Total Earnings</div>
-                <div className="text-xs text-blue-500 mt-1">From Direct Referrals</div>
+                <div className="text-xs text-blue-500 mt-1">All Levels Combined</div>
               </div>
 
-              {/* Direct Referrals */}
+              {/* Level 1 - Direct Referrals */}
               <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
                 <div className="text-2xl font-bold text-green-600">
                   KES {(commissionStats.level1.totalEarnings / 100).toFixed(2)}
                 </div>
-                <div className="text-sm text-gray-600 mt-1">Direct Referral Earnings</div>
+                <div className="text-sm text-gray-600 mt-1">Level 1 Earnings</div>
                 <div className="text-xs text-green-500 mt-1">
                   {commissionStats.level1.count} users × KES 70
+                </div>
+              </div>
+
+              {/* Level 2 - Indirect Referrals */}
+              <div className="text-center p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <div className="text-2xl font-bold text-purple-600">
+                  KES {(commissionStats.level2.totalEarnings / 100).toFixed(2)}
+                </div>
+                <div className="text-sm text-gray-600 mt-1">Level 2 Earnings</div>
+                <div className="text-xs text-purple-500 mt-1">
+                  {commissionStats.level2.count} users × KES 10
                 </div>
               </div>
             </div>
 
             {/* Commission Structure Info */}
             <div className="p-4 bg-gray-50 rounded-lg border">
-              <h4 className="font-semibold text-gray-800 mb-3">Commission Structure</h4>
-              <div className="text-sm">
+              <h4 className="font-semibold text-gray-800 mb-3">Commission Structure (2-Level System)</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div className="flex items-start gap-3">
                   <div className="w-3 h-3 bg-green-500 rounded-full mt-1 flex-shrink-0"></div>
                   <div>
-                    <p><strong>Direct Referrals:</strong> KES 70 per referral</p>
-                    <p className="text-xs text-gray-500 mt-1">Earned when someone you directly refer activates their account</p>
+                    <p><strong>Level 1 (Direct):</strong> KES 70 per referral</p>
+                    <p className="text-xs text-gray-500 mt-1">Earned when someone you refer activates their account</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-3 h-3 bg-purple-500 rounded-full mt-1 flex-shrink-0"></div>
+                  <div>
+                    <p><strong>Level 2 (Indirect):</strong> KES 10 per referral</p>
+                    <p className="text-xs text-gray-500 mt-1">Earned when someone your referral refers activates</p>
                   </div>
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-4">
-                * Commissions are paid when referred users pay KES 90 activation fee and get approved.
+                * Commissions are paid when referred users pay KES 100 activation fee and get approved. Only 2 levels of commissions are supported.
               </p>
             </div>
           </div>

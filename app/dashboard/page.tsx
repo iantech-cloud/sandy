@@ -6,24 +6,39 @@ import {
   DollarSign, 
   TrendingUp, 
   CheckCircle, 
+  RotateCw, 
   Users, 
   Loader2, 
   AlertTriangle, 
   Gift, 
   Share2, 
   ClipboardCheck,
+  FileText,
+  Plus,
+  BookOpen,
   Clock,
+  AlertCircle,
+  CheckSquare,
   X,
   ArrowRight,
+  BarChart3,
   Sparkles,
   Trophy,
   Target,
-  Copy
+  Zap
 } from 'lucide-react';
+import Link from 'next/link';
 
+import Card from '@/app/ui/dashboard/Card';
+import TransactionHistory from '@/app/ui/dashboard/TransactionHistory';
+import WalletPay from '@/app/ui/dashboard/WalletPay';
 import SpinWheel from '@/app/ui/dashboard/spin-wheel';
+import UserReports from '@/app/ui/dashboard/userReports';
 import { fetchDashboardData } from '@/app/lib/data';
 import { useDashboard } from './DashboardContext';
+import { getUserContentStats, getRecentSubmissions } from '@/app/actions/dashboard/content';
+import { getUserSpinStats } from '@/app/actions/spin';
+import TransactionTrendsChart from '@/app/ui/dashboard/chart';
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -98,21 +113,57 @@ interface DashboardData {
   transactions: Transaction[];
 }
 
+interface ContentStats {
+  totalSubmissions: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  revisionRequested: number;
+  totalEarned: number;
+  averageEarnings: number;
+}
 
+interface RecentSubmission {
+  _id: string;
+  title: string;
+  content_type: string;
+  status: 'pending' | 'approved' | 'rejected' | 'revision_requested';
+  payment_status: 'pending' | 'paid' | 'rejected';
+  payment_amount: number;
+  submission_date: string;
+  task_category: string;
+}
+
+interface SpinStats {
+  totalSpins: number;
+  totalWins: number;
+  winRate: number;
+  totalPrizeValue: number;
+  currentStreak: number;
+  bestStreak: number;
+  availableSpins: number;
+  totalSpinsUsed: number;
+}
 
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
 export default function DashboardPage() {
-  const { user } = useDashboard();
+  const { user, spinMutation } = useDashboard();
   const [spinMessage, setSpinMessage] = useState<string | null>(null);
   const [referralMessage, setReferralMessage] = useState<string | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [contentStats, setContentStats] = useState<ContentStats | null>(null);
+  const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmission[]>([]);
+  const [spinStats, setSpinStats] = useState<SpinStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [contentLoading, setContentLoading] = useState(true);
+  const [spinStatsLoading, setSpinStatsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const [showSpinWheel, setShowSpinWheel] = useState(false);
+  const [spinResult, setSpinResult] = useState<any>(null);
   const [refreshingStats, setRefreshingStats] = useState(false);
 
   useEffect(() => {
@@ -135,18 +186,96 @@ export default function DashboardPage() {
     loadDashboardData();
   }, [user]);
 
-  
+  useEffect(() => {
+    if (!user) return;
+
+    const loadContentData = async () => {
+      try {
+        setContentLoading(true);
+        const [statsResult, submissionsResult] = await Promise.allSettled([
+          getUserContentStats(),
+          getRecentSubmissions(5)
+        ]);
+
+        if (statsResult.status === 'fulfilled' && (statsResult.value as any).success) {
+          setContentStats((statsResult.value as any).data);
+        } else {
+          console.error('Failed to load content stats:', statsResult.status === 'rejected' ? statsResult.reason : (statsResult.value as any).message);
+        }
+
+        if (submissionsResult.status === 'fulfilled' && (submissionsResult.value as any).success) {
+          setRecentSubmissions((submissionsResult.value as any).data || []);
+        } else {
+          console.error('Failed to load recent submissions:', submissionsResult.status === 'rejected' ? submissionsResult.reason : (submissionsResult.value as any).message);
+        }
+      } catch (err) {
+        console.error('Failed to load content data:', err);
+      } finally {
+        setContentLoading(false);
+      }
+    };
+
+    loadContentData();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const loadSpinStats = async () => {
+      try {
+        setSpinStatsLoading(true);
+        console.log('🔄 Loading spin stats for user:', user.id);
+        
+        const result = await getUserSpinStats(user.id);
+        
+        if (result.success && result.data) {
+          console.log('✅ Spin stats loaded:', result.data);
+          setSpinStats(result.data);
+        } else {
+          console.error('❌ Failed to load spin stats:', result.message);
+          setSpinStats({
+            totalSpins: 0,
+            totalWins: 0,
+            winRate: 0,
+            totalPrizeValue: 0,
+            currentStreak: 0,
+            bestStreak: 0,
+            availableSpins: dashboardData?.stats.availableSpins || 0,
+            totalSpinsUsed: 0
+          });
+        }
+      } catch (err) {
+        console.error('❌ Error loading spin stats:', err);
+        setSpinStats({
+          totalSpins: 0,
+          totalWins: 0,
+          winRate: 0,
+          totalPrizeValue: 0,
+          currentStreak: 0,
+          bestStreak: 0,
+          availableSpins: dashboardData?.stats.availableSpins || 0,
+          totalSpinsUsed: 0
+        });
+      } finally {
+        setSpinStatsLoading(false);
+      }
+    };
+
+    loadSpinStats();
+  }, [user, dashboardData?.stats.availableSpins]);
 
   const handleSpinClick = () => {
     setShowSpinWheel(true);
     setSpinMessage('');
+    setSpinResult(null);
   };
 
   const handleSpinComplete = async (result: any) => {
-    console.log('Spin completed with result:', result);
+    console.log('🎯 Spin completed with result:', result);
+    setSpinResult(result);
     
     if (result.success) {
-      setSpinMessage(`Congratulations! You won: ${result.prizeName}`);
+      setSpinMessage(`🎉 Congratulations! You won: ${result.prizeName}`);
     } else {
       setSpinMessage(result.message || 'Spin completed. Better luck next time!');
     }
@@ -154,8 +283,23 @@ export default function DashboardPage() {
     if (user) {
       try {
         setRefreshingStats(true);
-        const updatedDashboardData = await fetchDashboardData(user.id);
-        setDashboardData(updatedDashboardData);
+        console.log('🔄 Force refreshing dashboard data and spin stats after spin...');
+        
+        const [updatedDashboardData, updatedSpinStats] = await Promise.allSettled([
+          fetchDashboardData(user.id),
+          getUserSpinStats(user.id)
+        ]);
+
+        if (updatedDashboardData.status === 'fulfilled') {
+          setDashboardData(updatedDashboardData.value);
+          console.log('✅ Dashboard data refreshed');
+        }
+
+        if (updatedSpinStats.status === 'fulfilled' && updatedSpinStats.value.success) {
+          setSpinStats(updatedSpinStats.value.data);
+          console.log('✅ Spin stats refreshed:', updatedSpinStats.value.data);
+        }
+
       } catch (err) {
         console.error('Failed to refresh data after spin:', err);
       } finally {
@@ -168,19 +312,56 @@ export default function DashboardPage() {
     }, 3000);
   };
 
-  const handleCopyReferralLink = async (referralId: string) => {
+  const handleCopyReferralCode = async (referralId: string) => {
     try {
-      const referralLink = `${window.location.origin}/auth/sign-up?ref=${referralId}`;
-      await navigator.clipboard.writeText(referralLink);
-      setReferralMessage('Referral link copied to clipboard!');
+      await navigator.clipboard.writeText(referralId);
+      setReferralMessage('Referral code copied to clipboard!');
       setTimeout(() => setReferralMessage(null), 3000);
     } catch (err) {
-      setReferralMessage('Failed to copy referral link.');
+      setReferralMessage('Failed to copy referral code.');
       setTimeout(() => setReferralMessage(null), 3000);
     }
   };
 
-  
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved': return 'bg-green-100 text-green-800 border border-green-200';
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+      case 'rejected': return 'bg-red-100 text-red-800 border border-red-200';
+      case 'revision_requested': return 'bg-orange-100 text-orange-800 border border-orange-200';
+      default: return 'bg-gray-100 text-gray-800 border border-gray-200';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'approved': return <CheckSquare className="w-4 h-4" />;
+      case 'pending': return <Clock className="w-4 h-4" />;
+      case 'rejected': return <AlertCircle className="w-4 h-4" />;
+      case 'revision_requested': return <RotateCw className="w-4 h-4" />;
+      default: return <Clock className="w-4 h-4" />;
+    }
+  };
+
+  const formatPayment = (amount: number) => {
+    return `KES ${amount.toFixed(2)}`;
+  };
+
+  useEffect(() => {
+    if (dashboardData?.stats) {
+      console.log('📊 Current Dashboard Stats:', {
+        totalSpins: dashboardData.stats.totalSpins,
+        totalWins: dashboardData.stats.totalWins,
+        winRate: dashboardData.stats.winRate,
+        currentStreak: dashboardData.stats.currentStreak,
+        availableSpins: dashboardData.stats.availableSpins
+      });
+    }
+    
+    if (spinStats) {
+      console.log('🎯 Current Spin Stats:', spinStats);
+    }
+  }, [dashboardData, spinStats]);
 
   if (!user) {
     return (
@@ -237,131 +418,105 @@ export default function DashboardPage() {
 
   const { profile, stats, receipts, transactions } = dashboardData || {};
 
+  const displayStats = {
+    ...stats,
+    totalSpins: spinStats?.totalSpins ?? stats?.totalSpins ?? 0,
+    totalWins: spinStats?.totalWins ?? stats?.totalWins ?? 0,
+    winRate: spinStats?.winRate ?? stats?.winRate ?? 0,
+    currentStreak: spinStats?.currentStreak ?? stats?.currentStreak ?? 0,
+    bestStreak: spinStats?.bestStreak ?? stats?.bestStreak ?? 0,
+    availableSpins: spinStats?.availableSpins ?? stats?.availableSpins ?? 0,
+    totalSpinsUsed: spinStats?.totalSpinsUsed ?? stats?.totalSpinsUsed ?? 0,
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 md:p-8 min-h-screen relative">
       {/* Animated background elements */}
       <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-bl from-purple-400/10 to-transparent rounded-full blur-3xl animate-pulse pointer-events-none"></div>
       <div className="absolute bottom-0 left-0 w-72 h-72 bg-gradient-to-tr from-orange-400/10 to-transparent rounded-full blur-3xl animate-pulse delay-1000 pointer-events-none"></div>
 
-      {/* Welcome Header */}
-      <div className="relative mb-4 bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-purple-400 overflow-hidden">
+      {/* Welcome Header with Bold Design */}
+      <div className="relative mb-6 bg-white rounded-2xl p-4 sm:p-6 lg:p-8 shadow-xl border-2 border-purple-500 overflow-hidden group hover:shadow-2xl hover:scale-105 hover:-translate-y-1 transition-all duration-300">
         {/* Accent bar */}
-        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-purple-600"></div>
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-purple-600"></div>
         
-        <div className="relative z-10 flex items-center justify-between gap-3">
-          <div className="flex items-center space-x-2 flex-1 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center shadow-md flex-shrink-0">
-              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center space-x-3 flex-1 min-w-0">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/50 group-hover:shadow-purple-500/70 transition-all duration-300 group-hover:scale-110 flex-shrink-0">
+              <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 truncate">
                 Welcome back, {profile?.username || 'User'}!
               </h2>
+              <p className="text-slate-600 mt-1 text-xs sm:text-sm hidden sm:block">Here's what's happening with your account today</p>
             </div>
           </div>
-          <div className="flex items-center space-x-1.5 bg-purple-50 px-2.5 py-1.5 rounded-lg border border-purple-200 flex-shrink-0">
-            <Trophy className="w-4 h-4 text-purple-600 flex-shrink-0" />
-            <span className="text-xs sm:text-sm font-bold text-purple-700 whitespace-nowrap">Level {profile?.level}</span>
+          <div className="flex items-center space-x-2 sm:space-x-3 bg-purple-50 px-3 sm:px-5 py-2 sm:py-3 rounded-xl border border-purple-200 flex-shrink-0">
+            <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600 flex-shrink-0" />
+            <span className="text-sm sm:text-base lg:text-lg font-bold text-purple-700 whitespace-nowrap">Level {profile?.level}</span>
           </div>
         </div>
       </div>
 
-      {/* Earning Summary - Compact Cards */}
-      {stats ? (
+      {/* Wallet Summary - Top 4 Critical Cards */}
+      {displayStats ? (
         <>
           <div className="mb-6 sm:mb-8">
             <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4 flex items-center">
               <Target className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-indigo-600" />
-              Earning Summary
+              Wallet Summary
             </h2>
-            <div className="grid grid-cols-1 gap-3 sm:gap-4">
-              <div className="bg-indigo-600 rounded-lg px-4 py-4 shadow-sm">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <DollarSign className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Available Balance</span>
-                </div>
-                <p className="text-base font-bold text-white">KES {stats.availableBalance.toFixed(0)}</p>
-              </div>
-              <div className="bg-green-600 rounded-lg px-4 py-4 shadow-sm">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <TrendingUp className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Today&apos;s Earnings</span>
-                </div>
-                <p className="text-base font-bold text-white">KES {(stats.todayEarnings || 0).toFixed(0)}</p>
-              </div>
-              <div className="bg-purple-600 rounded-lg px-4 py-4 shadow-sm">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Trophy className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Lifetime Earnings</span>
-                </div>
-                <p className="text-base font-bold text-white">KES {stats.totalEarnings.toFixed(0)}</p>
-              </div>
-              <div className="bg-yellow-500 rounded-lg px-4 py-4 shadow-sm">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Clock className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Pending Withdrawal</span>
-                </div>
-                <p className="text-base font-bold text-white">KES {stats.pendingWithdrawals.toFixed(0)}</p>
-              </div>
-              <div className="bg-orange-500 rounded-lg px-4 py-4 shadow-sm">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <ArrowRight className="w-4 h-4 text-white/80" />
-                  <span className="text-xs text-white/80 font-medium">Today&apos;s Withdrawal</span>
-                </div>
-                <p className="text-base font-bold text-white">KES {(stats.todayWithdrawals || 0).toFixed(0)}</p>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+              <Card title="Available Balance" value={`KES ${displayStats.availableBalance.toFixed(2)}`} icon={DollarSign} color="indigo" />
+              <Card title="Today's Earnings" value={`KES ${(displayStats.todayEarnings || 0).toFixed(2)}`} icon={TrendingUp} color="green" />
+              <Card title="Lifetime Earnings" value={`KES ${displayStats.totalEarnings.toFixed(2)}`} icon={Trophy} color="purple" />
+              <Card title="Today's Withdrawals" value={`KES ${(displayStats.todayWithdrawals || 0).toFixed(2)}`} icon={ArrowRight} color="yellow" />
             </div>
           </div>
 
-          {/* Earnings by Source - Small Containers */}
+          {/* Earnings by Source - per-source wallets */}
           <div className="mb-6 sm:mb-8">
             <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4 flex items-center">
               <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-green-600" />
               Earnings by Source
             </h2>
-            <div className="grid grid-cols-1 gap-3 sm:gap-4">
-              <div className="flex flex-col justify-center gap-2 bg-blue-100 border border-blue-200 rounded-lg px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <Share2 className="w-5 h-5 text-blue-600" />
-                  <span className="text-sm text-blue-700 font-medium">Direct Referral</span>
-                </div>
-                <span className="text-base font-bold text-blue-800">KES {(stats.directReferralEarnings || 0).toFixed(0)}</span>
-              </div>
-              <div className="flex flex-col justify-center gap-2 bg-green-100 border border-green-200 rounded-lg px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-green-600" />
-                  <span className="text-sm text-green-700 font-medium">Downline Commission</span>
-                </div>
-                <span className="text-base font-bold text-green-800">KES {(stats.downlineEarnings || 0).toFixed(0)}</span>
-              </div>
-              <div className="flex flex-col justify-center gap-2 bg-pink-100 border border-pink-200 rounded-lg px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <Gift className="w-5 h-5 text-pink-600" />
-                  <span className="text-sm text-pink-700 font-medium">Spin Wallet Earnings</span>
-                </div>
-                <span className="text-base font-bold text-pink-800">KES {(stats.spinEarnings || 0).toFixed(0)}</span>
-              </div>
-              <div className="flex flex-col justify-center gap-2 bg-orange-100 border border-orange-200 rounded-lg px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <ClipboardCheck className="w-5 h-5 text-orange-600" />
-                  <span className="text-sm text-orange-700 font-medium">Survey Earnings</span>
-                </div>
-                <span className="text-base font-bold text-orange-800">KES {(stats.surveyEarnings || 0).toFixed(0)}</span>
-              </div>
-              <div className="flex flex-col justify-center gap-2 bg-cyan-100 border border-cyan-200 rounded-lg px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-cyan-600" />
-                  <span className="text-sm text-cyan-700 font-medium">Task Earnings</span>
-                </div>
-                <span className="text-base font-bold text-cyan-800">KES {(stats.taskEarnings || 0).toFixed(0)}</span>
-              </div>
-              <div className="flex flex-col justify-center gap-2 bg-purple-100 border border-purple-200 rounded-lg px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-purple-600" />
-                  <span className="text-sm text-purple-700 font-medium">Bonus Earnings</span>
-                </div>
-                <span className="text-base font-bold text-purple-800">KES {(stats.bonusEarnings || 0).toFixed(0)}</span>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-5">
+              <Card title="Referral Earnings" value={`KES ${(displayStats.directReferralEarnings || 0).toFixed(2)}`} icon={Share2} color="blue" />
+              <Card title="Spin Wallet" value={`KES ${(displayStats.spinEarnings || 0).toFixed(2)}`} icon={Gift} color="pink" />
+              <Card title="Survey Earnings" value={`KES ${(displayStats.surveyEarnings || 0).toFixed(2)}`} icon={ClipboardCheck} color="orange" />
+              <Card title="Task Earnings" value={`KES ${(displayStats.taskEarnings || 0).toFixed(2)}`} icon={CheckSquare} color="cyan" />
+              <Card title="Bonus Earnings" value={`KES ${(displayStats.bonusEarnings || 0).toFixed(2)}`} icon={Sparkles} color="purple" />
+              <Card title="Downline Earnings" value={`KES ${(displayStats.downlineEarnings || 0).toFixed(2)}`} icon={Users} color="green" />
+            </div>
+          </div>
+
+          {/* Quick Stats Cluster */}
+          <div className="mb-6 sm:mb-8">
+            <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4 flex items-center">
+              <Zap className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-orange-600" />
+              Activity Snapshot
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
+              <Card title="Available Spins" value={displayStats.availableSpins.toString()} icon={RotateCw} color="red" />
+              <Card title="Tasks Completed" value={profile?.tasks_completed?.toString() || '0'} icon={CheckCircle} color="cyan" />
+              <Card title="Pending Withdrawals" value={`KES ${displayStats.pendingWithdrawals.toFixed(2)}`} icon={Clock} color="yellow" />
+              <Card title="Level / Rank" value={`Level ${displayStats.level} (${displayStats.rank})`} icon={Trophy} color="purple" />
+            </div>
+          </div>
+
+          {/* Spin Performance Cluster */}
+          <div className="mb-6 sm:mb-8">
+            <h2 className="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4 flex items-center">
+              <RotateCw className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-red-600" />
+              Spin Performance
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-5">
+              <Card title="Total Spins" value={displayStats.totalSpins?.toString() || '0'} icon={RotateCw} color="purple" loading={spinStatsLoading} />
+              <Card title="Total Wins" value={displayStats.totalWins?.toString() || '0'} icon={Gift} color="green" loading={spinStatsLoading} />
+              <Card title="Win Rate" value={`${displayStats.winRate?.toFixed(1) || '0.0'}%`} icon={TrendingUp} color="blue" loading={spinStatsLoading} />
+              <Card title="Current Streak" value={displayStats.currentStreak?.toString() || '0'} icon={CheckCircle} color="orange" loading={spinStatsLoading} />
+              <Card title="Best Streak" value={displayStats.bestStreak?.toString() || '0'} icon={Trophy} color="yellow" loading={spinStatsLoading} />
             </div>
           </div>
         </>
@@ -381,44 +536,57 @@ export default function DashboardPage() {
       {/* Quick Actions Grid with Enhanced Styling */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         {/* Spin-to-Win Card */}
-        <div className="group relative bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-red-400 hover:shadow-xl transition-all duration-300 overflow-hidden">
+        <div className="group relative bg-white rounded-2xl p-4 sm:p-6 shadow-xl border-2 border-red-500 hover:shadow-2xl transition-all duration-300 overflow-hidden hover:scale-105 hover:-translate-y-1">
           {/* Accent bar */}
-          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-600"></div>
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600"></div>
           <div className="relative z-10">
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-600 to-rose-500 flex items-center justify-center shadow-md flex-shrink-0">
-                <Gift className="w-4 h-4 text-white" />
+            <div className="flex items-center space-x-2 sm:space-x-3 mb-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-red-600 to-rose-500 flex items-center justify-center shadow-lg shadow-red-500/40 group-hover:shadow-red-500/60 transition-all duration-300 group-hover:rotate-12 flex-shrink-0">
+                <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900">Spin-to-Win</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900">Spin-to-Win</h3>
             </div>
             
-            <p className="text-slate-600 mb-2 text-[11px] sm:text-xs">Try your luck and win prizes!</p>
+            <div className="bg-gradient-to-r from-red-100 to-pink-100 p-3 sm:p-4 rounded-xl mb-4 border border-red-300">
+              <p className="text-xs sm:text-sm text-slate-600 mb-1">Available Spins</p>
+              <p className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-red-600 to-rose-600 bg-clip-text text-transparent">
+                {displayStats?.availableSpins || profile?.available_spins || 0}
+              </p>
+            </div>
+            
+            <p className="text-xs text-slate-500 mb-4 flex items-center">
+              <Zap className="w-4 h-4 mr-1 text-orange-500" />
+              Cost per spin: <span className="font-semibold ml-1">5 spins</span>
+            </p>
             
             <button
               onClick={handleSpinClick}
-              disabled={refreshingStats}
-              className="w-full py-2 px-3 bg-gradient-to-r from-red-600 to-rose-600 text-white font-semibold text-xs sm:text-sm rounded-lg shadow-md hover:shadow-lg transition-all duration-250 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={refreshingStats || spinStatsLoading}
+              className="w-full py-2.5 sm:py-3 px-4 sm:px-6 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-red-500/40 hover:shadow-xl hover:shadow-red-500/50 transition-all duration-250 flex items-center justify-center transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {refreshingStats ? (
                 <>
-                  <Loader2 className="animate-spin mr-1.5" size={14} />
-                  <span>Loading...</span>
+                  <Loader2 className="animate-spin mr-2" size={16} />
+                  <span className="hidden sm:inline">Refreshing...</span>
+                  <span className="sm:hidden">Loading...</span>
                 </>
               ) : (
                 <>
-                  <Gift className="mr-1.5" size={14} />
-                  <span>Open Spin Wheel</span>
+                  <Gift className="mr-2" size={18} />
+                  <span className="hidden sm:inline">Open Spin Wheel</span>
+                  <span className="sm:hidden">Spin</span>
+                  <ArrowRight className="ml-2 hidden sm:inline" size={16} />
                 </>
               )}
             </button>
             
             {spinMessage && (
-              <div className={`mt-2 p-2 rounded-lg text-center font-medium text-[11px] ${
-                spinMessage.includes('Congratulations')
-                  ? 'bg-green-100 text-green-700 border border-green-200'
+              <div className={`mt-4 p-3 rounded-xl text-center font-medium text-sm backdrop-blur-sm ${
+                spinMessage.includes('Congratulations') || spinMessage.includes('🎉')
+                  ? 'bg-green-100/80 text-green-700 border border-green-300'
                   : spinMessage.includes('Not enough')
-                  ? 'bg-red-100 text-red-700 border border-red-200'
-                  : 'bg-blue-100 text-blue-700 border border-blue-200'
+                  ? 'bg-red-100/80 text-red-700 border border-red-300'
+                  : 'bg-blue-100/80 text-blue-700 border border-blue-300'
               }`}>
                 {spinMessage}
               </div>
@@ -426,9 +594,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Wallet Pay Card - Temporarily Disabled */}
-        {/* <div className="group relative bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-blue-400 hover:shadow-xl transition-all duration-300 overflow-hidden">
-          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-600"></div>
+        {/* Wallet Pay Card */}
+        <div className="group relative bg-white rounded-2xl p-4 sm:p-6 shadow-xl border-2 border-blue-500 hover:shadow-2xl transition-all duration-300 overflow-hidden hover:scale-105 hover:-translate-y-1">
+          {/* Accent bar */}
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600"></div>
           <div className="relative z-10">
             <WalletPay 
               onDepositSuccess={() => {
@@ -438,42 +607,41 @@ export default function DashboardPage() {
               }} 
             />
           </div>
-        </div> */}
+        </div>
 
         {/* Referral Card */}
-        <div className="group relative bg-white rounded-xl p-3 sm:p-4 shadow-lg border border-cyan-400 hover:shadow-xl transition-all duration-300 overflow-hidden">
+        <div className="group relative bg-white rounded-2xl p-4 sm:p-6 shadow-xl border-2 border-cyan-500 hover:shadow-2xl transition-all duration-300 overflow-hidden hover:scale-105 hover:-translate-y-1">
           {/* Accent bar */}
-          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-cyan-600"></div>
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-600"></div>
           <div className="relative z-10">
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-600 to-cyan-500 flex items-center justify-center shadow-md flex-shrink-0">
-                <Share2 className="w-4 h-4 text-white" />
+            <div className="flex items-center space-x-2 sm:space-x-3 mb-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-teal-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-teal-500/40 group-hover:shadow-teal-500/60 transition-all duration-300 flex-shrink-0">
+                <Share2 className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900">Refer & Earn</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900">Refer & Earn</h3>
             </div>
-            <p className="text-slate-600 mb-2 text-[11px] sm:text-xs">Share your referral link to earn bonuses</p>
-            <div className="space-y-2">
+            <p className="text-slate-600 mb-4 text-xs sm:text-sm">Share your referral code to earn bonuses</p>
+            <div className="space-y-3">
               {profile?.referral_id && (
-                <div className="bg-gradient-to-br from-teal-50 to-cyan-50 p-2 sm:p-3 rounded-lg border border-teal-200">
-                  <p className="text-[10px] text-teal-700 mb-1 uppercase tracking-wide font-semibold">Your Referral Link</p>
-                  <p className="text-[10px] sm:text-[11px] font-medium text-teal-600 mb-2 font-mono break-all leading-tight">
-                    {typeof window !== 'undefined' ? `${window.location.origin}/auth/register?ref=${profile.referral_id}` : `/auth/register?ref=${profile.referral_id}`}
+                <div className="bg-gradient-to-br from-teal-100 to-cyan-100 p-3 sm:p-4 rounded-2xl text-center border border-teal-300">
+                  <p className="text-xs text-teal-700 mb-2 uppercase tracking-wide font-semibold">Your Referral Code</p>
+                  <p className="text-lg sm:text-xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent mb-3 font-mono break-all">
+                    {profile.referral_id}
                   </p>
                   <button
-                    onClick={() => handleCopyReferralLink(profile.referral_id!)}
-                    className="w-full py-1.5 px-2 text-[11px] sm:text-xs bg-gradient-to-r from-teal-600 to-cyan-500 text-white font-semibold rounded-lg shadow-sm hover:shadow-md transition-all duration-250 flex items-center justify-center"
+                    onClick={() => handleCopyReferralCode(profile.referral_id!)}
+                    className="w-full py-2 px-3 sm:px-4 text-xs sm:text-sm bg-gradient-to-r from-teal-600 to-cyan-500 text-white font-semibold rounded-xl hover:from-teal-700 hover:to-cyan-600 shadow-lg shadow-teal-500/40 hover:shadow-teal-500/50 transition-all duration-250 transform hover:scale-105"
                   >
-                    <Copy className="w-3 h-3 mr-1.5" />
-                    Copy Link
+                    Copy Code
                   </button>
                 </div>
               )}
             </div>
             {referralMessage && (
-              <div className={`mt-2 p-2 rounded-lg text-center font-medium text-[11px] ${
+              <div className={`mt-4 p-3 rounded-xl text-center font-medium text-sm backdrop-blur-sm ${
                 referralMessage.includes('copied')
-                  ? 'bg-green-100 text-green-700 border border-green-200'
-                  : 'bg-blue-100 text-blue-700 border border-blue-200'
+                  ? 'bg-green-100/80 text-green-700 border border-green-300'
+                  : 'bg-blue-100/80 text-blue-700 border border-blue-300'
               }`}>
                 {referralMessage}
               </div>
@@ -485,6 +653,15 @@ export default function DashboardPage() {
       {/* Section Divider */}
       <div className="my-10">
         <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+      </div>
+
+      {/* Financial Reports Section */}
+      <div className="mb-8">
+        <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+          <BarChart3 className="w-5 h-5 mr-2 text-cyan-600" />
+          Financial Reports
+        </h2>
+        <UserReports className="mt-6" />
       </div>
 
       {/* Spin Wheel Modal with Enhanced Design */}
@@ -507,7 +684,6 @@ export default function DashboardPage() {
 
               <SpinWheel 
                 userId={user.id}
-                mainWalletBalance={stats.balance}
                 onSpinComplete={handleSpinComplete}
               />
             </div>
@@ -515,7 +691,214 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Transaction Trends */}
+      <div className="mb-8">
+        <TransactionTrendsChart timeRange="30days" />
+      </div>
 
+      {/* Approved Withdrawals with Modern Design */}
+      <div className="bg-white/70 backdrop-blur-xl p-6 rounded-3xl shadow-lg border border-white/50 mb-8">
+        <div className="flex items-center space-x-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-600 to-green-500 flex items-center justify-center shadow-lg shadow-green-500/30">
+            <CheckCircle className="w-5 h-5 text-white" />
+          </div>
+          <h3 className="text-2xl font-bold text-slate-900">Approved Withdrawals</h3>
+        </div>
+        {receipts && receipts.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <DollarSign className="w-8 h-8 text-slate-400" />
+            </div>
+            <p className="text-slate-500">No approved withdrawals found.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-200">
+            {receipts?.map((receipt) => (
+              <li key={receipt.id} className="flex justify-between items-center py-4 px-4 hover:bg-white/50 transition-all duration-250 rounded-xl group">
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-250">
+                    <CheckCircle className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">Transaction ID: {receipt.transactionCode}</p>
+                    <p className="text-sm text-slate-500">
+                      {new Date(receipt.date).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
+                    KES {receipt.amount.toFixed(2)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Transaction History */}
+      <div className="mb-8">
+        <TransactionHistory 
+          transactions={transactions as any || []} 
+          title="Recent Activity" 
+          limit={10} 
+        />
+      </div>
+
+      {/* Content Creation Section with Modern Design */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+        <div className="lg:col-span-4 bg-white/70 backdrop-blur-xl p-6 rounded-3xl shadow-lg border border-white/50">
+          <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-purple-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-2xl font-bold text-slate-900">Content Creation Dashboard</h3>
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <Link
+                href="/dashboard/content/create"
+                className="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-250 transform hover:scale-105"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Create Content
+              </Link>
+              <Link
+                href="/dashboard/content"
+                className="inline-flex items-center px-5 py-2.5 border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold rounded-xl hover:bg-white hover:border-blue-300 hover:text-blue-600 transition-all duration-250 shadow-sm hover:shadow-md"
+              >
+                <FileText className="w-5 h-5 mr-2" />
+                View All
+              </Link>
+              <Link
+                href="/dashboard/blog"
+                className="inline-flex items-center px-5 py-2.5 border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold rounded-xl hover:bg-white hover:border-cyan-300 hover:text-cyan-600 transition-all duration-250 shadow-sm hover:shadow-md"
+              >
+                <BookOpen className="w-5 h-5 mr-2" />
+                Read Blogs
+              </Link>
+            </div>
+          </div>
+
+          {contentLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="relative inline-flex">
+                <Loader2 className="animate-spin text-blue-600 w-8 h-8" />
+                <div className="absolute inset-0 animate-ping">
+                  <Loader2 className="text-cyan-400 w-8 h-8 opacity-20" />
+                </div>
+              </div>
+              <p className="ml-3 text-slate-600 font-medium">Loading content stats...</p>
+            </div>
+          ) : contentStats ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-blue-100/50 backdrop-blur-sm rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all duration-250">
+                <div className="text-3xl font-bold text-blue-600 mb-2">{contentStats.totalSubmissions}</div>
+                <div className="text-sm text-blue-800 font-semibold">Total Submissions</div>
+              </div>
+              <div className="text-center p-6 bg-gradient-to-br from-yellow-50 to-yellow-100/50 backdrop-blur-sm rounded-2xl border border-yellow-200 shadow-sm hover:shadow-md transition-all duration-250">
+                <div className="text-3xl font-bold text-yellow-600 mb-2">{contentStats.pending}</div>
+                <div className="text-sm text-yellow-800 font-semibold">Pending Review</div>
+              </div>
+              <div className="text-center p-6 bg-gradient-to-br from-green-50 to-green-100/50 backdrop-blur-sm rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all duration-250">
+                <div className="text-3xl font-bold text-green-600 mb-2">{contentStats.approved}</div>
+                <div className="text-sm text-green-800 font-semibold">Approved</div>
+              </div>
+              <div className="text-center p-6 bg-gradient-to-br from-purple-50 to-purple-100/50 backdrop-blur-sm rounded-2xl border border-purple-200 shadow-sm hover:shadow-md transition-all duration-250">
+                <div className="text-3xl font-bold text-purple-600 mb-2">
+                  KES {contentStats.totalEarned.toFixed(2)}
+                </div>
+                <div className="text-sm text-purple-800 font-semibold">Total Earned</div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-center text-slate-500 py-8">No content statistics available.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Recent Submissions with Modern Design */}
+      <div className="bg-white/70 backdrop-blur-xl p-6 rounded-3xl shadow-lg border border-white/50">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <FileText className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="text-2xl font-bold text-slate-900">Recent Submissions</h3>
+          </div>
+          <Link
+            href="/dashboard/content"
+            className="text-blue-600 hover:text-blue-800 font-semibold text-sm flex items-center group"
+          >
+            View All 
+            <ArrowRight className="ml-1 w-4 h-4 group-hover:translate-x-1 transition-transform duration-250" />
+          </Link>
+        </div>
+
+        {contentLoading ? (
+          <div className="flex justify-center py-12">
+            <div className="relative inline-flex">
+              <Loader2 className="animate-spin text-blue-600 w-6 h-6" />
+              <div className="absolute inset-0 animate-ping">
+                <Loader2 className="text-cyan-400 w-6 h-6 opacity-20" />
+              </div>
+            </div>
+            <p className="ml-2 text-slate-600">Loading submissions...</p>
+          </div>
+        ) : recentSubmissions.length > 0 ? (
+          <div className="space-y-3">
+            {recentSubmissions.map((submission) => (
+              <div
+                key={submission._id}
+                className="flex items-center justify-between p-5 border-2 border-slate-200 bg-white/50 backdrop-blur-sm rounded-2xl hover:bg-white hover:border-blue-300 hover:shadow-md transition-all duration-250 group"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
+                    <h4 className="font-semibold text-slate-900 line-clamp-1 group-hover:text-blue-600 transition-colors duration-250">
+                      {submission.title}
+                    </h4>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(submission.status)}`}>
+                      {getStatusIcon(submission.status)}
+                      <span className="ml-1.5 capitalize">{submission.status.replace('_', ' ')}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-slate-600 flex-wrap">
+                    <span className="capitalize font-medium">{submission.content_type.replace('_', ' ')}</span>
+                    <span className="text-slate-400">•</span>
+                    <span>{submission.task_category}</span>
+                    <span className="text-slate-400">•</span>
+                    <span className="font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">
+                      {formatPayment(submission.payment_amount)}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right text-sm text-slate-500 ml-4">
+                  {new Date(submission.submission_date).toLocaleDateString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <FileText className="w-8 h-8 text-slate-400" />
+            </div>
+            <p className="text-slate-500 mb-4 font-medium">No submissions yet</p>
+            <Link
+              href="/dashboard/content/create"
+              className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-250 transform hover:scale-105"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Create Your First Submission
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

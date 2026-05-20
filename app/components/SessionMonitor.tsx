@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Alert from '@/app/ui/Alert'; // Using your existing Alert component
 
@@ -33,7 +33,8 @@ export default function SessionMonitor() {
         
         // Start countdown for auto logout
         logoutTimer = setTimeout(async () => {
-          await handleLogout();
+          await signOut({ redirect: false });
+          router.push('/auth/login?timeout=true');
         }, 60000); // 1 minute after warning
       }, 9 * 60 * 1000); // 9 minutes
     };
@@ -85,26 +86,8 @@ export default function SessionMonitor() {
 
   const handleLogout = async () => {
     setShowWarning(false);
-    
-    // Use our custom logout route to avoid CSRF issues
-    try {
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        router.push('/auth/login?timeout=true');
-      } else {
-        router.push('/auth/login?error=logout_failed');
-      }
-    } catch (error) {
-      console.error('Logout error:', error);
-      router.push('/auth/login');
-    }
+    await signOut({ redirect: false });
+    router.push('/auth/login?timeout=true');
   };
 
   // Only render for authenticated users

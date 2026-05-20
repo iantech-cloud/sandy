@@ -32,8 +32,8 @@ export default function MpesaWaitingContent() {
   const [isActivatingAccount, setIsActivatingAccount] = useState(false);
 
   // Constants for polling
-  const POLLING_INTERVAL = 4000; // 4 seconds for faster response
-  const MAX_POLLING_ATTEMPTS = 60; // 60 attempts * 4s = 240 seconds (~4 minutes)
+  const POLLING_INTERVAL = 5000; // 5 seconds fixed interval
+  const MAX_POLLING_ATTEMPTS = 48; // 48 attempts * 5s = 240 seconds (~4 minutes)
 
   // Poll for payment status using server action with fixed intervals
   const pollPaymentStatus = useCallback(async () => {
@@ -238,18 +238,10 @@ export default function MpesaWaitingContent() {
         color: 'text-red-600',
         bgColor: 'bg-red-50',
         borderColor: 'border-red-200'
-      },
-      error: {
-        icon: <XCircle className="h-12 w-12 text-red-500" />,
-        title: 'Service Error',
-        description: paymentStatus.resultDesc || 'We could not verify your payment status. Your payment may still be processing. Please check your phone for confirmation.',
-        color: 'text-red-600',
-        bgColor: 'bg-red-50',
-        borderColor: 'border-red-200'
       }
     };
     
-    return baseConfig[status as keyof typeof baseConfig] || baseConfig.processing;
+    return baseConfig[status];
   };
 
   const statusConfig = getStatusConfig(paymentStatus.status);
@@ -394,8 +386,7 @@ export default function MpesaWaitingContent() {
             )}
             
             {(paymentStatus.status === 'success' || paymentStatus.status === 'cancelled' || 
-              paymentStatus.status === 'timeout' || paymentStatus.status === 'failed' || 
-              paymentStatus.status === 'error') && (
+              paymentStatus.status === 'timeout' || paymentStatus.status === 'failed') && (
               <>
                 {paymentStatus.status === 'success' ? (
                   <button
@@ -406,28 +397,18 @@ export default function MpesaWaitingContent() {
                   </button>
                 ) : (
                   <>
-                    {paymentStatus.status === 'error' && (
-                      <button
-                        onClick={pollPaymentStatus}
-                        className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                      >
-                        Retry Status Check
-                      </button>
-                    )}
                     <button
                       onClick={() => router.push('/auth/activate')}
                       className="flex-1 py-3 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                     >
                       Back to Activation
                     </button>
-                    {paymentStatus.status !== 'error' && (
-                      <button
-                        onClick={() => router.push('/auth/activate')}
-                        className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                      >
-                        Try Again
-                      </button>
-                    )}
+                    <button
+                      onClick={() => router.push('/auth/activate')}
+                      className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      Try Again
+                    </button>
                   </>
                 )}
               </>

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Phone, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { checkActivationStatus, initiateActivationPayment } from '@/app/actions/activation';
-import Link from 'next/link';
 
 export default function ActivateComponent() {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -16,13 +15,17 @@ export default function ActivateComponent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // Check if we're returning from a payment attempt
   useEffect(() => {
     const paymentStatus = searchParams.get('paymentStatus');
     const error = searchParams.get('error');
     
     if (paymentStatus === 'failed' || error) {
       setMessageType('error');
-      setMessage(error || 'Payment was not completed. Please try again.');
+      setMessage(
+        error || 
+        'Payment failed. Please check your M-Pesa details and try again.'
+      );
     }
     
     if (paymentStatus === 'cancelled') {
@@ -32,30 +35,32 @@ export default function ActivateComponent() {
   }, [searchParams]);
 
   useEffect(() => {
+    // Check activation status using server action
     async function checkStatus() {
       try {
         const result = await checkActivationStatus();
         if (result.success) {
           setActivationStatus(result.data);
           
+          // Redirect if already activated
           if (result.data.activation_paid) {
             router.push('/dashboard');
           }
         } else {
           setMessageType('error');
-          setMessage(result.message || 'Failed to check status');
+          setMessage(result.message || 'Failed to check activation status');
         }
       } catch (error) {
-        console.error('Error checking status:', error);
+        console.error('Error checking activation status:', error);
         setMessageType('error');
-        setMessage('Failed to check status');
+        setMessage('Failed to check activation status');
       }
     }
 
     checkStatus();
   }, [router]);
 
-  const handlePayment = async (e: React.FormEvent) => {
+  const handleActivation = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
@@ -64,9 +69,10 @@ export default function ActivateComponent() {
       const result = await initiateActivationPayment(phoneNumber);
 
       if (result.success && result.data?.checkoutRequestId) {
+        // Redirect to M-Pesa waiting page
         const params = new URLSearchParams({
           checkoutRequestId: result.data.checkoutRequestId,
-          amount: (result.data.amount / 100).toString(),
+          amount: (result.data.amount / 100).toString(), // Convert cents to whole amount
           phoneNumber: result.data.phoneNumber,
           activation: 'true',
           activationPaymentId: result.data.activationPaymentId
@@ -76,20 +82,22 @@ export default function ActivateComponent() {
         
       } else {
         setMessageType('error');
-        setMessage(result.message || 'Payment could not be initiated. Please try again.');
+        setMessage(result.message || 'Failed to initiate activation payment. Please try again.');
       }
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('Activation error:', error);
       setMessageType('error');
-      setMessage('An error occurred. Please try again.');
+      setMessage('An error occurred during payment processing. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  // Format phone number for display as user types
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
     
+    // Auto-format based on input
     if (value.startsWith('0') && value.length <= 10) {
       value = value;
     } else if (value.startsWith('254') && value.length <= 12) {
@@ -117,30 +125,30 @@ export default function ActivateComponent() {
 
   if (!activationStatus) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-sm p-8 w-full max-w-md text-center border border-gray-200">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
           <Loader2 className="animate-spin w-8 h-8 mx-auto text-indigo-600" />
-          <p className="text-gray-600 mt-4">Loading...</p>
+          <p className="text-gray-600 mt-4">Checking activation status...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-sm p-8 w-full max-w-md border border-gray-200">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Complete Registration</h1>
-          <p className="text-gray-600">Pay the registration fee to access the platform</p>
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">Activate Your Account</h2>
+          <p className="text-gray-600">Complete your registration by paying the activation fee</p>
         </div>
 
         {message && (
           <div className={`p-4 rounded-lg mb-6 flex items-start space-x-3 ${
             messageType === 'success' 
-              ? 'bg-green-50 text-green-700 border border-green-200' 
+              ? 'bg-green-100 text-green-700 border border-green-200' 
               : messageType === 'error'
-              ? 'bg-red-50 text-red-700 border border-red-200'
-              : 'bg-blue-50 text-blue-700 border border-blue-200'
+              ? 'bg-red-100 text-red-700 border border-red-200'
+              : 'bg-blue-100 text-blue-700 border border-blue-200'
           }`}>
             {messageType === 'success' && <CheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />}
             {messageType === 'error' && <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />}
@@ -148,14 +156,19 @@ export default function ActivateComponent() {
           </div>
         )}
 
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-          <p className="text-gray-700 font-medium mb-2">Registration Fee: KES 90</p>
-          <p className="text-gray-600 text-sm">
-            This one-time fee covers your account setup and provides access to all platform features including freelance opportunities, surveys, and content writing projects.
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v6a1 1 0 102 0V5zm-1 10a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+            </svg>
+            <p className="text-yellow-800 font-medium">Activation Fee: KES 100</p>
+          </div>
+          <p className="text-yellow-700 text-sm mt-2">
+            This one-time fee activates your account and gives you full access to the platform.
           </p>
         </div>
 
-        <form onSubmit={handlePayment}>
+        <form onSubmit={handleActivation}>
           <div className="mb-6">
             <label className="block font-medium mb-2 text-gray-700">
               M-Pesa Phone Number
@@ -167,50 +180,56 @@ export default function ActivateComponent() {
                 value={phoneNumber}
                 onChange={handlePhoneChange}
                 placeholder="07XXXXXXXX or 2547XXXXXXXX"
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
                 maxLength={12}
               />
             </div>
-            {phoneNumber && (
-              <p className="text-sm text-gray-500 mt-1">
-                {formatPhoneForDisplay(phoneNumber)}
-              </p>
-            )}
+            <p className="text-sm text-gray-500 mt-1">
+              {phoneNumber && formatPhoneForDisplay(phoneNumber)}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              Supported formats: 07XXXXXXXX, 2547XXXXXXXX
+            </p>
           </div>
 
           <button
             type="submit"
             disabled={loading || !isValidPhone(phoneNumber)}
-            className="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition duration-150 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
+            className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:bg-indigo-700 transition duration-150 disabled:bg-indigo-300 disabled:cursor-not-allowed flex items-center justify-center"
           >
             {loading ? (
               <>
                 <Loader2 className="animate-spin w-5 h-5 mr-2" />
-                Processing...
+                Initiating Payment...
               </>
             ) : (
-              'Pay KES 90 via M-Pesa'
+              'Pay KES 100 with M-Pesa'
             )}
           </button>
         </form>
 
-        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
-          <h4 className="font-semibold text-blue-800 mb-2">Payment Process:</h4>
+        <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+          <h4 className="font-semibold text-blue-800 mb-2">How to activate:</h4>
           <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
             <li>Enter your M-Pesa registered phone number</li>
-            <li>Click the pay button above</li>
-            <li>You will receive an M-Pesa prompt on your phone</li>
-            <li>Enter your M-Pesa PIN to complete the payment</li>
-            <li>Your account will be activated after successful payment</li>
+            <li>Click "Pay KES 100 with M-Pesa"</li>
+            <li>You'll be redirected to a waiting page</li>
+            <li>Check your phone for STK Push prompt</li>
+            <li>Enter your M-Pesa PIN to complete</li>
+            <li>Wait for confirmation on the waiting page</li>
+            <li>Your account will be activated automatically</li>
           </ol>
         </div>
 
-        <div className="mt-6 text-center">
-          <Link href="/" className="text-indigo-600 hover:text-indigo-700 text-sm">
-            Back to Home
-          </Link>
-        </div>
+        {/* Sandbox Testing Note */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-800 text-center">
+              🧪 <strong>Sandbox Mode:</strong> Use test numbers like 254708374149
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -85,7 +85,7 @@ const WRITER_INFO = {
   facebook: "https://www.facebook.com/share/19qVdp7RGC/",
   tiktok: "i____devvs",
   website: "hustlehubafrica.com",
-  phone: "+254707871154",
+  phone: "+254748264231",
   linkedin: "",
   fullBio: `Ian is a cybersecurity expert, C++ developer, data analyst, and emerging researcher with experience spanning software development, digital forensics, AI-driven systems, and full-stack web applications. He has worked across education, SaaS, and enterprise environments, building secure backends, cloud-hosted platforms, and automation tools for data-driven decision-making.
 

@@ -16,7 +16,7 @@ import {
   StatsCalcDB,
   TransactionDB,
 } from './definitions';
-import { formatCurrency, formatPhoneNumber } from './utils';
+import { formatCurrency } from './utils';
 
 // Import Mongoose models and connection utility
 import {
@@ -83,14 +83,8 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     // 1. Fetch Profile and Balance/Earnings. Use .lean<Type>() for safety and performance
     const profilePromise = Profile.findById(userId).lean<ProfileLean>();
 
-    // Compute start of today (EAT timezone - UTC+3) and start of tomorrow for date range queries
-    // EAT is UTC+3, so we need to calculate midnight EAT time
-    const now = new Date();
-    const eatOffset = 3 * 60 * 60 * 1000; // EAT is UTC+3
-    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
-    const eatTime = new Date(utcTime + eatOffset);
-    
-    const startOfToday = new Date(eatTime);
+    // Compute start of today (server local time) and start of tomorrow for date range queries
+    const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const startOfTomorrow = new Date(startOfToday);
     startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
@@ -106,15 +100,10 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
       Referral.countDocuments({ referrer_id: userId }),
       // C. Downline count
       DownlineUser.countDocuments({ main_user_id: userId }),
-      // D. Direct Referral Earnings (lifetime) - from Earning collection
+      // D. Direct Referral Earnings (lifetime)
       Earning.aggregate([
         { $match: { user_id: userId, type: 'REFERRAL' } },
         { $group: { _id: null, direct_referral_earnings_cents: { $sum: '$amount_cents' } } }
-      ]),
-      // D2. Direct Referral Earnings from Transaction collection (MPESA activation bonus)
-      Transaction.aggregate([
-        { $match: { user_id: userId, type: 'REFERRAL', status: 'completed' } },
-        { $group: { _id: null, transaction_referral_earnings_cents: { $sum: '$amount_cents' } } }
       ]),
       // E. Downline Earnings (lifetime)
       Earning.aggregate([
@@ -190,7 +179,6 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
       referralCount,
       downlineCount,
       directReferralEarningsAgg,
-      transactionReferralEarningsAgg,
       downlineEarningsAgg,
       spinEarningsAgg,
       surveyEarningsAgg,
@@ -201,28 +189,7 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     ] = statsCalcAggregates;
 
     // profileData is a plain JavaScript object because of .lean()
-    const profileData = profileResult;
-
-    // CRITICAL: Normalize phone number to fix any malformed entries (e.g., +254254791406)
-    if (profileData.phone_number) {
-      try {
-        const normalizedPhone = formatPhoneNumber(profileData.phone_number);
-        if (normalizedPhone !== profileData.phone_number) {
-          console.log('[v0] Phone number normalized during fetch:', {
-            original: profileData.phone_number,
-            normalized: normalizedPhone,
-            userId: userId
-          });
-          profileData.phone_number = normalizedPhone;
-        }
-      } catch (error) {
-        console.error('[v0] Failed to normalize phone number:', {
-          phone: profileData.phone_number,
-          error: error,
-          userId: userId
-        });
-      }
-    }
+    const profileData = profileResult; 
 
     // Debug log to see what we're getting
     console.log('📊 Profile available_spins:', profileData.available_spins);
@@ -234,20 +201,11 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     });
 
     // Aggregate stats into a single object
-    // FIX: Use only Transaction collection to avoid double-counting
-    // The Transaction collection contains the authoritative referral earnings data
-    const totalDirectReferralEarnings = transactionReferralEarningsAgg[0]?.transaction_referral_earnings_cents || 0;
-    
-    console.log('[v0] Direct referral earnings:', {
-      from_transaction_collection: totalDirectReferralEarnings / 100,
-      total: totalDirectReferralEarnings / 100
-    });
-
     const statsCalcData = {
       pending_withdrawals_cents: pendingWithdrawalsAgg[0]?.pending_withdrawals_cents || 0,
       referral_count: referralCount,
       downline_count: downlineCount,
-      direct_referral_earnings_cents: totalDirectReferralEarnings,
+      direct_referral_earnings_cents: directReferralEarningsAgg[0]?.direct_referral_earnings_cents || 0,
       downline_earnings_cents: downlineEarningsAgg[0]?.downline_earnings_cents || 0,
       spin_earnings_cents: spinEarningsAgg[0]?.spin_earnings_cents || 0,
       survey_earnings_cents: surveyEarningsAgg[0]?.survey_earnings_cents || 0,
@@ -280,11 +238,6 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     } as ProfileDB;
 
     // 2. Construct Stats - FIXED VERSION
-    console.log('[v0] Balance conversion debug:', {
-      balance_cents: profileData.balance_cents,
-      converted_to_kes: centsToUnits(profileData.balance_cents),
-      formula: `${profileData.balance_cents} / 100 = ${centsToUnits(profileData.balance_cents)}`
-    });
     const stats = {
       totalEarnings: centsToUnits(profileData.total_earnings_cents),
       availableBalance: centsToUnits(profileData.balance_cents),

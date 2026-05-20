@@ -1,36 +1,26 @@
+//app/about/page.tsx
 import React from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import Link from 'next/link';
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'About Us | HustleHub Africa',
-  description: 'Learn about HustleHub Africa - a freelance work platform connecting skilled African professionals with legitimate opportunities in content writing, academic writing, and more.',
-  openGraph: {
-    title: 'About Us | HustleHub Africa',
-    description: 'Learn about HustleHub Africa - a freelance work platform connecting skilled African professionals with legitimate opportunities.',
-    url: 'https://hustlehubafrica.com/about',
-    siteName: 'HustleHub Africa',
-    locale: 'en_KE',
-    type: 'website',
-  },
-};
 
 const AboutPage: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="min-h-screen flex flex-col">
       <Header />
       
       <main className="flex-grow">
         {/* Hero Section */}
-        <section className="bg-indigo-600 text-white py-16 px-4 sm:px-6 lg:px-8">
+        <section className="bg-gradient-to-r from-indigo-600 to-purple-700 text-white py-16 px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl sm:text-5xl font-bold mb-6">
-              About HustleHub Africa
+            <h1 className="text-4xl sm:text-5xl font-extrabold mb-6">
+              About Us
             </h1>
-            <p className="text-xl opacity-90 leading-relaxed">
-              We are a freelance work platform dedicated to connecting skilled African professionals with legitimate work opportunities.
+            <p className="text-xl sm:text-2xl font-semibold mb-8">
+              Welcome to HustleHub Africa
+            </p>
+            <p className="text-lg sm:text-xl opacity-90 leading-relaxed">
+              At HustleHub Africa, we believe that every individual deserves the opportunity to earn, grow, and achieve financial independence—no matter where they are.
             </p>
           </div>
         </section>
@@ -40,154 +30,223 @@ const AboutPage: React.FC = () => {
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-3xl font-bold text-gray-900 mb-6">
-                Our Mission
+                Transforming Hustles into Sustainable Income
               </h2>
               <p className="text-lg text-gray-700 leading-relaxed mb-6">
-                HustleHub Africa aims to provide a trusted platform where skilled professionals can find legitimate freelance work opportunities. We focus on connecting talent with businesses that need quality content, research, and marketing services.
+                We are a Pan-African digital earning platform that empowers users with multiple, legitimate income streams in one secure and easy-to-use system.
               </p>
               <div className="bg-indigo-50 border-l-4 border-indigo-500 p-6 text-left">
-                <p className="text-lg text-indigo-800">
-                  Our platform emphasizes transparency, fair compensation, and professional development for all our users.
+                <p className="text-xl font-semibold text-indigo-800">
+                  Our mission is simple: to transform everyday hustles into sustainable income opportunities through technology, innovation, and community support.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Services Section */}
+        {/* Income Streams Section */}
         <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gray-50">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                What We Offer
+                Multiple Income Streams, One Platform
               </h2>
               <p className="text-lg text-gray-700 max-w-3xl mx-auto">
-                We provide various freelance opportunities for skilled professionals looking for legitimate work.
+                Choose how you want to earn. Combine multiple methods to maximize your income potential. HustleHub Africa offers a variety of flexible and rewarding earning options tailored to your lifestyle, skills, and goals.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-                <h3 className="text-xl font-bold text-gray-900 mb-3">Content Writing</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {/* Refer & Earn */}
+              <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
+                <div className="text-3xl mb-4">🤝</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Refer & Earn</h3>
                 <p className="text-gray-700">
-                  Create blog posts, articles, and web content for businesses. We connect writers with clients who need quality content for their websites and marketing materials.
+                  Invite friends and earn commissions on every successful referral. Build your network, grow your income, and help others discover new earning opportunities.
                 </p>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              {/* Spin to Win */}
+              <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
+                <div className="text-3xl mb-4">🎰</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Spin to Win</h3>
+                <p className="text-gray-700">
+                  Try your luck daily! Spin the wheel and win instant cash rewards, bonuses, and exclusive prizes. Every spin gives you a chance to boost your income effortlessly.
+                </p>
+              </div>
+
+              {/* Sell Electronic Airtime */}
+              <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
+                <div className="text-3xl mb-4">📱</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Sell Electronic Airtime</h3>
+                <p className="text-gray-700">
+                  Become an airtime vendor and start earning immediately. Buy and sell airtime at competitive rates from leading mobile providers and keep the profit margins.
+                </p>
+              </div>
+
+              {/* Academic Writing */}
+              <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
+                <div className="text-3xl mb-4">📚</div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Academic Writing</h3>
                 <p className="text-gray-700">
-                  Use your academic expertise to assist with research papers, essays, and educational content for students and institutions.
+                  Leverage your academic expertise to write essays, research papers, and academic projects for students and institutions worldwide. Turn your knowledge into income.
                 </p>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              {/* Research Surveys */}
+              <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
+                <div className="text-3xl mb-4">📊</div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Research Surveys</h3>
                 <p className="text-gray-700">
-                  Participate in market research surveys from established organizations. Share your opinions and insights on various topics.
+                  Share your opinions and insights by completing paid surveys from trusted brands and organizations. Your feedback helps shape products and services across industries.
                 </p>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+              {/* Blogging / Content Writing */}
+              <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
+                <div className="text-3xl mb-4">✍️</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Blogging / Content Writing</h3>
+                <p className="text-gray-700">
+                  Showcase your writing skills and creativity. Produce high-quality blog posts, articles, and digital content for businesses and publishers globally—and get paid for it.
+                </p>
+              </div>
+
+              {/* Sales & Marketing */}
+              <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
+                <div className="text-3xl mb-4">📈</div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Sales & Marketing</h3>
                 <p className="text-gray-700">
-                  Promote products and services through affiliate marketing programs. Help businesses reach their target audience.
+                  Earn through affiliate marketing and direct sales. Promote top products and services, drive conversions, and earn commissions for every successful transaction.
+                </p>
+              </div>
+
+              {/* Spin Vouchers */}
+              <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
+                <div className="text-3xl mb-4">🎁</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Spin Vouchers</h3>
+                <p className="text-gray-700">
+                  Redeem and trade vouchers earned from your spins. Convert them into cash, bonuses, or exclusive premium benefits within the HustleHub ecosystem.
+                </p>
+              </div>
+
+              {/* Leadership Token */}
+              <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
+                <div className="text-3xl mb-4">👑</div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Leadership Token</h3>
+                <p className="text-gray-700">
+                  Grow your influence and leadership within the platform. Earn exclusive tokens as you rise through the ranks, unlocking premium opportunities and extra rewards.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Values Section */}
+        {/* Why Choose Us Section */}
         <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                Our Values
+                Why Choose HustleHub Africa?
+              </h2>
+              <p className="text-lg text-gray-700">
+                We've built the most comprehensive earning platform designed specifically for African hustlers, freelancers, and digital entrepreneurs.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[
+                { icon: '🔒', title: 'Secure & Trusted', description: 'We use bank-grade security to protect your data, transactions, and personal information. Your safety is our top priority.' },
+                { icon: '⚡', title: 'Instant Payouts', description: 'Enjoy fast and reliable withdrawals directly through M-Pesa. Access your money instantly—anytime, anywhere.' },
+                { icon: '⚙️', title: 'Multiple Earning Methods', description: 'Diversify your income easily. With nine different earning options, you have complete freedom to choose what works best for you.' },
+                { icon: '🤝', title: 'Community Support', description: 'Join a vibrant community of motivated earners across Africa. Our 24/7 support team is always ready to assist you.' },
+                { icon: '⏰', title: 'Flexible Schedule', description: 'Work on your own terms. Choose when and how to earn—part-time or full-time, it’s all up to you.' },
+                { icon: '🌍', title: 'Pan-African Platform', description: 'We proudly serve users across the continent with localized payment solutions and culturally relevant earning opportunities. HustleHub Africa is built for Africans, by Africans.' }
+              ].map((feature, index) => (
+                <div key={index} className="bg-gray-50 rounded-lg p-6 border border-gray-200 hover:border-indigo-300 transition-colors">
+                  <div className="text-2xl mb-3">{feature.icon}</div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">{feature.title}</h3>
+                  <p className="text-gray-700">{feature.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* How It Works Section */}
+        <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-indigo-50 to-purple-50">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                Start Earning in 4 Simple Steps
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="text-center p-6">
-                <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { step: '1️⃣', title: 'Create Account', description: 'Sign up in minutes with your email and phone number. A one-time activation fee of KES 90 applies.' },
+                { step: '2️⃣', title: 'Choose Your Hustle', description: 'Pick from 9 different earning methods that match your skills, passion, and lifestyle.' },
+                { step: '3️⃣', title: 'Start Earning', description: 'Complete daily tasks, projects, or activities and watch your income grow every day.' },
+                { step: '4️⃣', title: 'Withdraw Instantly', description: 'Request withdrawals anytime via M-Pesa, and receive your money within minutes.' }
+              ].map((step, index) => (
+                <div key={index} className="bg-white rounded-lg shadow-md p-6 text-center border border-gray-200">
+                  <div className="text-3xl mb-4">{step.step}</div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">{step.title}</h3>
+                  <p className="text-gray-700 text-sm">{step.description}</p>
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Transparency</h3>
-                <p className="text-gray-600">
-                  We believe in clear communication about how our platform works, including fees and payment processes.
-                </p>
-              </div>
-
-              <div className="text-center p-6">
-                <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Community</h3>
-                <p className="text-gray-600">
-                  We are building a supportive community of professionals who help each other succeed.
-                </p>
-              </div>
-
-              <div className="text-center p-6">
-                <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Quality</h3>
-                <p className="text-gray-600">
-                  We prioritize quality work and fair compensation for our freelancers.
-                </p>
-              </div>
+              ))}
             </div>
-          </div>
-        </section>
 
-        {/* Contact Section */}
-        <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gray-50">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              Get in Touch
-            </h2>
-            <p className="text-lg text-gray-700 mb-8">
-              Have questions about our platform? We are here to help.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
+            <div className="text-center mt-12">
               <Link
-                href="/contact"
-                className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                href="/auth/sign-up"
+                className="inline-flex items-center px-8 py-4 bg-green-500 text-white font-bold rounded-xl hover:bg-green-600 transition-colors shadow-lg text-lg"
               >
-                Contact Us
-              </Link>
-              <Link
-                href="/faq"
-                className="px-8 py-3 border-2 border-indigo-600 text-indigo-600 font-semibold rounded-lg hover:bg-indigo-50 transition-colors"
-              >
-                View FAQ
+                Start Your Hustle Today
               </Link>
             </div>
           </div>
         </section>
 
-        {/* CTA Section */}
-        <section className="py-16 px-4 sm:px-6 lg:px-8 bg-indigo-600">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-3xl font-bold text-white mb-4">
-              Ready to Get Started?
-            </h2>
-            <p className="text-xl text-indigo-100 mb-8">
-              Join our community of freelancers and start working on projects that match your skills.
-            </p>
-            <Link
-              href="/auth/sign-up"
-              className="inline-block px-8 py-3 bg-white text-indigo-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              Create Your Account
-            </Link>
+        {/* Vision & Mission Section */}
+        <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white">
+          <div className="max-w-4xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              {/* Vision */}
+              <div className="text-center">
+                <div className="text-4xl mb-4">💡</div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Our Vision</h3>
+                <p className="text-gray-700 text-lg leading-relaxed">
+                  To be Africa's most trusted and innovative digital earning hub—empowering millions to achieve financial freedom and economic inclusion through technology.
+                </p>
+              </div>
+
+              {/* Mission */}
+              <div className="text-center">
+                <div className="text-4xl mb-4">💪</div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Our Mission</h3>
+                <p className="text-gray-700 text-lg leading-relaxed">
+                  To simplify digital work and online earning by providing accessible, secure, and diverse income opportunities for all Africans.
+                </p>
+              </div>
+            </div>
+
+            {/* Final CTA */}
+            <div className="text-center mt-16">
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white">
+                <h3 className="text-2xl sm:text-3xl font-bold mb-4">
+                  HustleHub Africa – Where Hustle Meets Opportunity.
+                </h3>
+                <p className="text-lg opacity-90 mb-6">
+                  Join thousands of Africans who are already transforming their financial future.
+                </p>
+                <Link
+                  href="/auth/sign-up"
+                  className="inline-flex items-center px-8 py-3 bg-white text-indigo-600 font-bold rounded-lg hover:bg-gray-100 transition-colors shadow-lg"
+                >
+                  Get Started Now
+                </Link>
+              </div>
+            </div>
           </div>
         </section>
       </main>

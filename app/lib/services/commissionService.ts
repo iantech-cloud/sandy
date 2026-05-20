@@ -1,13 +1,10 @@
 import { connectToDatabase, Profile, Referral, DownlineUser, Transaction, ActivationPayment } from '@/app/lib/models';
 
-// Commission configuration - Fixed to proper values
-// KES amounts are converted to cents (multiply by 100)
+// Updated commission configuration per referral system spec
 export const COMMISSION_CONFIG = {
-  level1: 7000,              // KES 70 for direct referrals (7000 cents)
-  activationFee: 9000,       // KES 90 activation fee (9000 cents)
-  companyFee: 2000,          // KES 20 company fee per activation (2000 cents)
-  unclaimedReferral: 7000,  // KES 70 unclaimed referral bonus (7000 cents)
-  level2: 1000               // KES 10 for level 2 (if ever implemented)
+  level1: 7000,  // KES 70 for direct referrals (Level 1)
+  level2: 1000,  // KES 10 for indirect referrals (Level 2)
+  activationFee: 10000 // KES 100 activation fee
 };
 
 export class CommissionService {
@@ -46,12 +43,15 @@ export class CommissionService {
 
       const directReferrer = directReferral.referrer_id;
       
-      // Process direct referral commission only (single level system)
+      // Process direct referral commission (Level 0)
       const directCommission = await this.processDirectReferralCommission(
         directReferrer, 
         approvedUser,
         directReferral
       );
+
+      // Process level 1 downline commission (only one level)
+      await this.processLevel1Commission(directReferrer, approvedUser);
 
       console.log(`Successfully processed commissions for approved user: ${approvedUserId}`);
       

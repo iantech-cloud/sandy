@@ -339,172 +339,32 @@ async function ensureSpinPrizes(): Promise<void> {
       
       const defaultPrizes = [
         {
-          type: 'KES_10000',
-          name: 'KES 10,000',
-          display_name: 'KES 10,000',
-          description: 'Win KES 10,000 bonus credit',
-          icon: '🎁',
-          base_probability: 1,
-          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
-          min_referrals: 0,
-          requires_activation: true,
-          value_cents: 1000000,
-          value_description: 'KES 10,000',
-          credit_type: 'balance',
-          duration_days: 0,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 1,
-          color: '#10B981',
-          created_by: 'system'
-        },
-        {
-          type: 'KES_5000',
-          name: 'KES 5,000',
-          display_name: 'KES 5,000',
-          description: 'Win KES 5,000 bonus credit',
-          icon: '💵',
-          base_probability: 2,
-          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
-          min_referrals: 0,
-          requires_activation: true,
-          value_cents: 500000,
-          value_description: 'KES 5,000',
-          credit_type: 'balance',
-          duration_days: 0,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 2,
-          color: '#8B5CF6',
-          created_by: 'system'
-        },
-        {
-          type: 'KES_2500',
-          name: 'KES 2,500',
-          display_name: 'KES 2,500',
-          description: 'Win KES 2,500 bonus credit',
-          icon: '💴',
-          base_probability: 3,
-          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
-          min_referrals: 0,
-          requires_activation: true,
-          value_cents: 250000,
-          value_description: 'KES 2,500',
-          credit_type: 'balance',
-          duration_days: 0,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 3,
-          color: '#EC4899',
-          created_by: 'system'
-        },
-        {
-          type: 'KES_1000',
-          name: 'KES 1,000',
-          display_name: 'KES 1,000',
-          description: 'Win KES 1,000 bonus credit',
-          icon: '💶',
-          base_probability: 5,
-          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
-          min_referrals: 0,
-          requires_activation: true,
-          value_cents: 100000,
-          value_description: 'KES 1,000',
-          credit_type: 'balance',
-          duration_days: 0,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 4,
-          color: '#F59E0B',
-          created_by: 'system'
-        },
-        {
-          type: 'KES_500',
-          name: 'KES 500',
-          display_name: 'KES 500',
-          description: 'Win KES 500 bonus credit',
-          icon: '💷',
-          base_probability: 8,
-          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
-          min_referrals: 0,
-          requires_activation: true,
-          value_cents: 50000,
-          value_description: 'KES 500',
-          credit_type: 'balance',
-          duration_days: 0,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 5,
-          color: '#06B6D4',
-          created_by: 'system'
-        },
-        {
-          type: 'KES_200',
-          name: 'KES 200',
-          display_name: 'KES 200',
-          description: 'Win KES 200 bonus credit',
-          icon: '💸',
-          base_probability: 10,
-          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
-          min_referrals: 0,
-          requires_activation: true,
-          value_cents: 20000,
-          value_description: 'KES 200',
-          credit_type: 'balance',
-          duration_days: 0,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 6,
-          color: '#6366F1',
-          created_by: 'system'
-        },
-        {
-          type: 'KES_100',
-          name: 'KES 100',
-          display_name: 'KES 100',
-          description: 'Win KES 100 bonus credit',
-          icon: '🏷️',
-          base_probability: 12,
+          type: 'BONUS_CREDIT',
+          name: 'Bonus Credit',
+          display_name: 'KES 50-200 Bonus',
+          description: 'Get bonus credit to your wallet',
+          icon: '💰',
+          base_probability: 15,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
           value_cents: 10000,
-          value_description: 'KES 100',
+          value_description: 'KES 100 bonus',
           credit_type: 'balance',
           duration_days: 0,
           is_active: true,
-          is_featured: false,
-          wheel_order: 7,
-          color: '#14B8A6',
+          is_featured: true,
+          wheel_order: 1,
+          color: '#4ECDC4',
           created_by: 'system'
         },
         {
-          type: 'KES_50',
-          name: 'KES 50',
-          display_name: 'KES 50',
-          description: 'Win KES 50 bonus credit',
-          icon: '🔖',
-          base_probability: 14,
-          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
-          min_referrals: 0,
-          requires_activation: true,
-          value_cents: 5000,
-          value_description: 'KES 50',
-          credit_type: 'balance',
-          duration_days: 0,
-          is_active: true,
-          is_featured: false,
-          wheel_order: 8,
-          color: '#F97316',
-          created_by: 'system'
-        },
-        {
-          type: 'FREE_SPIN',
-          name: 'Free Spin',
-          display_name: 'Free Spin',
+          type: 'EXTRA_SPIN',
+          name: 'Extra Spin',
+          display_name: '1 Free Spin',
           description: 'Get one free spin to try again',
           icon: '🎟️',
-          base_probability: 15,
+          base_probability: 12,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -513,9 +373,149 @@ async function ensureSpinPrizes(): Promise<void> {
           credit_type: 'spins',
           duration_days: 0,
           is_active: true,
+          is_featured: true,
+          wheel_order: 2,
+          color: '#FF6B6B',
+          created_by: 'system'
+        },
+        {
+          type: 'AIRTIME',
+          name: 'Airtime',
+          display_name: 'KES 50 Airtime',
+          description: 'Get KES 50 airtime credit',
+          icon: '📱',
+          base_probability: 10,
+          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
+          min_referrals: 0,
+          requires_activation: true,
+          value_cents: 5000,
+          value_description: 'KES 50 airtime',
+          credit_type: 'airtime',
+          duration_days: 0,
+          is_active: true,
+          is_featured: false,
+          wheel_order: 3,
+          color: '#45B7D1',
+          created_by: 'system'
+        },
+        {
+          type: 'SURVEY_BOOST',
+          name: 'Survey Priority',
+          display_name: '5 Priority Surveys',
+          description: 'Get priority access to 5 high-paying surveys',
+          icon: '🧾',
+          base_probability: 10,
+          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
+          min_referrals: 0,
+          requires_activation: true,
+          value_cents: 0,
+          value_description: '5 priority survey slots',
+          credit_type: 'feature',
+          duration_days: 30,
+          is_active: true,
+          is_featured: false,
+          wheel_order: 4,
+          color: '#98D8C8',
+          created_by: 'system'
+        },
+        {
+          type: 'REFERRAL_BONUS',
+          name: 'Referral Bonus',
+          display_name: 'KES 100 Referral Bonus',
+          description: 'Get extra bonus from next referral',
+          icon: '🧭',
+          base_probability: 10,
+          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
+          min_referrals: 0,
+          requires_activation: true,
+          value_cents: 10000,
+          value_description: 'KES 100 referral bonus',
+          credit_type: 'balance',
+          duration_days: 0,
+          is_active: true,
+          is_featured: false,
+          wheel_order: 5,
+          color: '#96CEB4',
+          created_by: 'system'
+        },
+        {
+          type: 'MYSTERY_REWARD',
+          name: 'Mystery Reward',
+          display_name: 'Mystery Reward',
+          description: 'Win a random surprise reward',
+          icon: '🎲',
+          base_probability: 8,
+          accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
+          min_referrals: 0,
+          requires_activation: true,
+          value_cents: 5000,
+          value_description: 'Random surprise (KES 25-100)',
+          credit_type: 'balance',
+          duration_days: 0,
+          is_active: true,
+          is_featured: false,
+          wheel_order: 6,
+          color: '#F7DC6F',
+          created_by: 'system'
+        },
+        {
+          type: 'COURSE_ACCESS',
+          name: 'Free Course',
+          display_name: 'Free Training Course',
+          description: 'Access to premium training',
+          icon: '🧠',
+          base_probability: 8,
+          accessible_tiers: ['bronze', 'silver', 'gold', 'diamond'],
+          min_referrals: 1,
+          requires_activation: true,
+          value_cents: 0,
+          value_description: 'Premium training access (30 days)',
+          credit_type: 'voucher',
+          duration_days: 30,
+          is_active: true,
+          is_featured: false,
+          wheel_order: 7,
+          color: '#FFEAA7',
+          created_by: 'system'
+        },
+        {
+          type: 'COMMISSION_BOOST',
+          name: 'Commission Boost',
+          display_name: '10% Commission Boost',
+          description: 'Get 10% boost on your next 5 referrals',
+          icon: '💎',
+          base_probability: 7,
+          accessible_tiers: ['silver', 'gold', 'diamond'],
+          min_referrals: 3,
+          requires_activation: true,
+          value_cents: 0,
+          value_description: '10% boost for 7 days',
+          credit_type: 'boost',
+          duration_days: 7,
+          is_active: true,
+          is_featured: false,
+          wheel_order: 8,
+          color: '#BB8FCE',
+          created_by: 'system'
+        },
+        {
+          type: 'BADGE_UNLOCK',
+          name: 'Achievement Badge',
+          display_name: 'Unlock Achievement Badge',
+          description: 'Unlock exclusive badge on your profile',
+          icon: '👑',
+          base_probability: 5,
+          accessible_tiers: ['gold', 'diamond'],
+          min_referrals: 5,
+          requires_activation: true,
+          value_cents: 0,
+          value_description: 'Exclusive achievement badge',
+          credit_type: 'badge',
+          duration_days: 0,
+          is_active: true,
           is_featured: false,
           wheel_order: 9,
-          color: '#3B82F6',
+          color: '#E8DAEF',
           created_by: 'system'
         },
         {
@@ -524,7 +524,7 @@ async function ensureSpinPrizes(): Promise<void> {
           display_name: 'Try Again',
           description: 'Better luck next time!',
           icon: '⭕',
-          base_probability: 30,
+          base_probability: 15,
           accessible_tiers: ['starter', 'bronze', 'silver', 'gold', 'diamond'],
           min_referrals: 0,
           requires_activation: true,
@@ -535,7 +535,7 @@ async function ensureSpinPrizes(): Promise<void> {
           is_active: true,
           is_featured: false,
           wheel_order: 10,
-          color: '#EF4444',
+          color: '#CCCCCC',
           created_by: 'system'
         }
       ]
@@ -546,7 +546,7 @@ async function ensureSpinPrizes(): Promise<void> {
       const totalProbability = defaultPrizes.reduce((sum, p) => sum + p.base_probability, 0)
       
       console.log(`✅ Created ${defaultPrizes.length} spin prizes`)
-      console.log(`������� Total probability: ${totalProbability}%`)
+      console.log(`📊 Total probability: ${totalProbability}%`)
     }
   } catch (error) {
     console.error('Error ensuring spin prizes:', error)
@@ -729,31 +729,18 @@ async function syncSpinDepositTransactionWithMpesaStatus(
     if (status === 'completed' && mpesaReceiptNumber) {
       updateData.metadata.mpesa_receipt_number = mpesaReceiptNumber;
       updateData.metadata.completed_at = new Date().toISOString();
-      // Mark balance_updated for completed spin deposits to prevent retries
-      updateData.balance_updated = true;
     }
 
     if (['failed', 'cancelled', 'timeout'].includes(status)) {
       updateData.metadata.failed_at = new Date().toISOString();
-      // For failed deposits, also mark balance_updated to prevent retries
-      updateData.balance_updated = true;
     }
 
-    const result = await (Transaction as any).findOneAndUpdate(
+    await (Transaction as any).findOneAndUpdate(
       { mpesa_transaction_id: mpesaTransactionId },
-      { $set: updateData },
-      { new: true }
+      updateData
     );
 
-    if (!result) {
-      console.warn(`⚠️ No Transaction found to sync for M-Pesa ID: ${mpesaTransactionId}`);
-    } else {
-      console.log(`🔄 Successfully synced spin deposit transaction status to: ${status}`, {
-        transactionId: result._id,
-        status: result.status,
-        balance_updated: result.balance_updated
-      });
-    }
+    console.log(`🔄 Successfully synced spin deposit transaction status to: ${status}`);
   } catch (error) {
     console.error('❌ Failed to sync spin deposit transaction status:', error);
     throw error;
@@ -894,10 +881,9 @@ export async function depositSpinWalletViaMpesa(depositData: {
         stk_push_response: stkData,
         result_code: 1032,
         result_desc: 'STK Push initiated successfully',
-        source: 'wallet',
         metadata: {
           user_username: currentUser.username,
-          deposit_type: 'spin_wallet',
+          deposit_type: 'spin_wallet_topup',
           initiated_at: new Date().toISOString(),
           callback_url: MPESA_CONFIG.callbackURL
         }
@@ -906,17 +892,14 @@ export async function depositSpinWalletViaMpesa(depositData: {
       const transaction = await (Transaction as any).create({
         user_id: currentUser._id,
         amount_cents: amountCents,
-        // Use 'SPIN_WALLET_DEPOSIT' to properly track spin wallet deposits as company revenue
-        type: 'SPIN_WALLET_DEPOSIT',
+        type: 'SPIN_DEPOSIT',
         description: `M-Pesa spin wallet deposit from ${formattedPhone}`,
         status: 'pending',
         mpesa_transaction_id: mpesaTransaction._id,
-
-        // Set target_type to 'company' to track as company revenue/income
-        // This ensures spin wallet deposits are recorded in the admin transactions 
-        // page as income for proper financial tracking and reporting.
-        target_type: 'company',
-        target_id: 'company',
+        
+        // Required fields for transaction tracking
+        target_type: 'spin_wallet',
+        target_id: currentUser._id.toString(),
         
         metadata: {
           phoneNumber: formattedPhone,
@@ -1094,21 +1077,21 @@ export async function checkSpinDepositMpesaStatus(checkoutRequestId: string): Pr
           queryData.MpesaReceiptNumber
         );
 
-        // 🔒 Idempotency: callback may have already credited this spin wallet.
-        // Only credit here if the callback hasn't processed it yet.
-        const alreadyProcessed = mpesaTransaction.metadata?.callback_processed === true;
-
-        if (safeStatus === 'completed' && !alreadyProcessed) {
+        // If completed, update spin wallet ONLY if callback hasn't already processed it
+        if (safeStatus === 'completed' && !mpesaTransaction.metadata?.callback_processed) {
+          console.log('💰 Callback not yet processed, updating spin wallet from polling...');
           await updateSpinWallet(mpesaTransaction.user_id, mpesaTransaction.amount_cents);
+          
+          // Mark that we've processed this to prevent double credit
           mpesaTransaction.metadata = {
-            ...(mpesaTransaction.metadata || {}),
-            callback_processed: true,
-            credited_via: 'polling',
-            credited_at: new Date().toISOString(),
+            ...mpesaTransaction.metadata,
+            callback_processed: false,
+            polling_processed: true,
+            polling_processed_at: new Date().toISOString()
           };
           await mpesaTransaction.save();
-        } else if (safeStatus === 'completed' && alreadyProcessed) {
-          console.log('⏭️ Skipping spin wallet credit — callback already processed');
+        } else if (safeStatus === 'completed' && mpesaTransaction.metadata?.callback_processed) {
+          console.log('✅ Callback already processed this deposit, skipping wallet update in polling');
         }
       } catch (updateError) {
         console.error('❌ Failed to update transaction or spin wallet:', updateError);
@@ -1206,19 +1189,9 @@ export async function checkSpinActivation(): Promise<{ active: boolean; message:
 /**
  * Main spin function - handles complete spin logic
  */
-export async function performSpin(spinAmountKes: number = 30): Promise<SpinResponse> {
+export async function performSpin(): Promise<SpinResponse> {
   try {
-    console.log("[v0] Starting performSpin with amount:", spinAmountKes, "KES")
-
-    // Validate spin amount
-    const MIN_SPIN = 30;
-    const MAX_SPIN = 70000;
-    if (spinAmountKes < MIN_SPIN || spinAmountKes > MAX_SPIN) {
-      return {
-        success: false,
-        message: `Spin amount must be between KES ${MIN_SPIN} and KES ${MAX_SPIN}`,
-      }
-    }
+    console.log("[v0] Starting performSpin...")
 
     const session = await auth()
     if (!isValidSession(session)) {
@@ -1242,7 +1215,7 @@ export async function performSpin(spinAmountKes: number = 30): Promise<SpinRespo
       tier: userTier,
     })
 
-    // NEW: Check spin wallet balance
+    // NEW: Check spin wallet balance (KES 30 = 3000 cents)
     let spinWallet = await (SpinWallet as any).findOne({ user_id: userId })
     if (!spinWallet) {
       spinWallet = await (SpinWallet as any).create({
@@ -1254,11 +1227,11 @@ export async function performSpin(spinAmountKes: number = 30): Promise<SpinRespo
       })
     }
 
-    const SPIN_COST_CENTS = Math.round(spinAmountKes * 100); // Convert KES to cents
+    const SPIN_COST_CENTS = 3000; // KES 30
     if (spinWallet.balance_cents < SPIN_COST_CENTS) {
       return {
         success: false,
-        message: `Insufficient spin wallet balance. You need KES ${spinAmountKes.toFixed(2)} but have KES ${(spinWallet.balance_cents / 100).toFixed(2)}. Please deposit via M-Pesa.`,
+        message: `Insufficient spin wallet balance. You need KES 30 but have KES ${(spinWallet.balance_cents / 100).toFixed(2)}. Please deposit via M-Pesa.`,
       }
     }
 
@@ -1670,18 +1643,112 @@ async function getAvailablePrizesForUser(userId: string): Promise<SpinPrizeLean[
  * Select prize based on probabilities
  */
 async function selectPrizeWithProbability(availablePrizes: SpinPrizeLean[], userTier: string): Promise<SpinPrizeLean> {
-  // Always return "Try Again" - no prizes are won
-  const tryAgainPrize: SpinPrizeLean = {
-    _id: "try-again-zero",
-    type: "ZERO",
+  if (availablePrizes.length === 0) {
+    const defaultPrize: SpinPrizeLean = {
+      _id: "default-try-again",
+      type: "TRY_AGAIN",
+      display_name: "Try Again",
+      value_cents: 0,
+      credit_type: "balance", // Changed from 'none' to 'balance'
+      base_probability: 100,
+    }
+    console.log(`🎉 No prizes available, returning default: ${defaultPrize.display_name} (${defaultPrize.type})`)
+    return defaultPrize
+  }
+
+  const spinSettings = (await (SpinSettings as any).findOne({}).lean()) as SpinSettingsLean | null
+  const probabilityMultipliers = spinSettings?.probability_multipliers || {
+    starter: 1.0,
+    bronze: 1.0,
+    silver: 1.1,
+    gold: 1.2,
+    diamond: 1.5,
+  }
+
+  const normalizedTier = normalizeRank(userTier)
+  const tierMultiplier = probabilityMultipliers[normalizedTier as keyof typeof probabilityMultipliers] || 1.0
+
+  console.log("🎲 Prize selection:", {
+    availablePrizesCount: availablePrizes.length,
+    userTier,
+    normalizedTier,
+    tierMultiplier,
+  })
+
+  const adjustedPrizes = availablePrizes.map((prize) => ({
+    ...prize,
+    adjustedProbability: prize.base_probability * tierMultiplier,
+  }))
+
+  const totalProbability = adjustedPrizes.reduce((sum, prize) => sum + prize.adjustedProbability, 0)
+
+  if (totalProbability === 0) {
+    console.warn("⚠️ Total probability is 0, using equal distribution")
+    const equalProbability = 100 / availablePrizes.length
+    const normalizedPrizes = adjustedPrizes.map((prize) => ({
+      ...prize,
+      adjustedProbability: equalProbability,
+    }))
+
+    const random = Math.random() * 100
+    let cumulativeProbability = 0
+
+    for (const prize of normalizedPrizes) {
+      cumulativeProbability += prize.adjustedProbability
+      if (random <= cumulativeProbability) {
+        console.log(`🎉 Selected prize (equal distribution): ${prize.display_name} (${prize.type})`)
+        return prize
+      }
+    }
+
+    const fallbackPrize = normalizedPrizes[0]
+    if (fallbackPrize) {
+      console.log(`🎉 Returning first prize as fallback: ${fallbackPrize.display_name}`)
+      return fallbackPrize
+    }
+  }
+
+  const normalizedPrizes = adjustedPrizes.map((prize) => ({
+    ...prize,
+    adjustedProbability: (prize.adjustedProbability / totalProbability) * 100,
+  }))
+
+  console.log(
+    "📊 Prize probabilities:",
+    normalizedPrizes.map((p) => ({
+      name: p.display_name,
+      baseProb: p.base_probability,
+      adjustedProb: p.adjustedProbability.toFixed(2),
+    })),
+  )
+
+  const random = Math.random() * 100
+  let cumulativeProbability = 0
+
+  for (const prize of normalizedPrizes) {
+    cumulativeProbability += prize.adjustedProbability
+    if (random <= cumulativeProbability) {
+      console.log(`🎉 Selected prize: ${prize.display_name} (${prize.type})`)
+      return prize
+    }
+  }
+
+  const lastPrize = normalizedPrizes[normalizedPrizes.length - 1]
+  if (lastPrize) {
+    console.log(`🎉 Selected last prize as fallback: ${lastPrize.display_name} (${lastPrize.type})`)
+    return lastPrize
+  }
+
+  const ultimateFallback: SpinPrizeLean = {
+    _id: "ultimate-fallback",
+    type: "TRY_AGAIN",
     display_name: "Try Again",
     value_cents: 0,
     credit_type: "balance",
     base_probability: 100,
   }
-  
-  console.log(`🎡 Spin wheel landed on: ${tryAgainPrize.display_name} - KES 30 deducted`)
-  return tryAgainPrize
+  console.log(`🎉 Returning ultimate fallback: ${ultimateFallback.display_name}`)
+  return ultimateFallback
 }
 
 /**
@@ -1942,32 +2009,28 @@ async function logSpin(data: {
       user_id: data.userId,
       spin_cost_cents: data.spinCost,
       spins_used: data.spinCost / 100,
+      prize_id: data.prize._id,
       prize_type: data.prize.type,
       prize_name: data.prize.display_name,
       prize_value_cents: data.prize.value_cents || 0,
-      status: "lost", // Always lost since we always land on Try Again
-      won: false,     // Never won
+      status: data.won ? "won" : "lost",
+      won: data.won,
       user_rank: data.userRank,
       user_tier: data.userRank,
       user_level: data.userLevel,
       user_referral_count: data.referralCount,
       user_balance_before: userProfile?.balance_cents || 0,
       user_spins_before: userProfile?.available_spins || 0,
-      calculated_probability: 0, // No prize selection
+      calculated_probability: data.prize.base_probability || 0,
       available_prizes_count: availablePrizes.length,
       probability_multiplier: probabilityMultiplier,
       cost_impact_cents: data.spinCost,
-      revenue_impact_cents: data.spinCost, // All revenue, no payout
-      net_impact_cents: data.spinCost,     // All cost to user
-      credited: false,
+      revenue_impact_cents: data.won ? -(data.prize.value_cents || 0) : data.spinCost,
+      net_impact_cents: data.won ? data.spinCost - (data.prize.value_cents || 0) : data.spinCost,
+      credited: data.won,
       spin_session_id: `session_${data.userId}_${Date.now()}`,
       user_agent: "server-action",
       ip_address: "server-action",
-    }
-
-    // Only set prize_id if it's a valid MongoDB ObjectId
-    if (data.prize._id && typeof data.prize._id === 'object' && data.prize._id.toString) {
-      spinLogData.prize_id = data.prize._id;
     }
 
     if (data.won) {
@@ -1982,7 +2045,29 @@ async function logSpin(data: {
     const spinLog = new (SpinLog as any)(spinLogData)
     await spinLog.save()
 
-    console.log("✅ Spin logged successfully - Try Again (KES 30 deducted)")
+    if (data.won) {
+      const auditLogData: any = {
+        actor_id: data.userId,
+        action: "SPIN_WIN",
+        target_type: "SpinLog",
+        target_id: spinLog._id.toString(),
+        resource_type: "spin",
+        resource_id: spinLog._id.toString(),
+        action_type: "spin_win",
+        ip_address: "server-action",
+        user_agent: "server-action",
+      }
+
+      if (data.prize.type) {
+        auditLogData.spin_related = {
+          prize_type: data.prize.type,
+        }
+      }
+
+      await (AdminAuditLog as any).create(auditLogData)
+    }
+
+    console.log("✅ Spin logged successfully")
   } catch (error) {
     console.error("Error logging spin:", error)
   }
@@ -2459,84 +2544,5 @@ export async function getSpinAnalytics(
   } catch (error) {
     console.error("Error getting spin analytics:", error)
     return { success: false, message: "Failed to fetch spin analytics" }
-  }
-}
-
-/**
- * Reconcile spin deposit transaction status with M-Pesa status
- * This function ensures that Transaction records match their corresponding MpesaTransaction status
- */
-export async function reconcileSpinDepositStatus(mpesaTransactionId: string) {
-  try {
-    await connectToDatabase()
-
-    // Find the M-Pesa transaction
-    const mpesaTransaction = await (MpesaTransaction as any).findById(mpesaTransactionId).lean()
-    
-    if (!mpesaTransaction) {
-      return {
-        success: false,
-        message: 'M-Pesa transaction not found'
-      }
-    }
-
-    // Find the associated Transaction record
-    const transaction = await (Transaction as any).findOne({
-      $or: [
-        { mpesa_transaction_id: mpesaTransaction._id },
-        { 'metadata.checkoutRequestID': mpesaTransaction.metadata?.checkoutRequestID }
-      ]
-    })
-
-    if (!transaction) {
-      console.warn('⚠️ No Transaction record found for M-Pesa:', mpesaTransactionId)
-      return {
-        success: false,
-        message: 'No matching Transaction record found'
-      }
-    }
-
-    // If M-Pesa transaction has a terminal status but Transaction doesn't, update it
-    if (mpesaTransaction.status && transaction.status !== mpesaTransaction.status) {
-      console.log('🔄 Reconciling status mismatch:', {
-        mpesaId: mpesaTransaction._id,
-        oldStatus: transaction.status,
-        newStatus: mpesaTransaction.status
-      })
-
-      transaction.status = mpesaTransaction.status
-      transaction.balance_updated = true // Mark as processed
-      
-      // Update metadata with M-Pesa details
-      transaction.metadata = {
-        ...transaction.metadata,
-        mpesa_receipt_number: mpesaTransaction.mpesa_receipt_number,
-        result_code: mpesaTransaction.result_code,
-        result_desc: mpesaTransaction.result_desc,
-        reconciled_at: new Date().toISOString()
-      }
-
-      await transaction.save()
-
-      console.log('✅ Successfully reconciled transaction status to:', mpesaTransaction.status)
-    } else {
-      console.log('✓ Transaction status already matches M-Pesa status')
-    }
-
-    return {
-      success: true,
-      data: {
-        transactionId: transaction._id,
-        status: transaction.status,
-        balance_updated: transaction.balance_updated
-      },
-      message: 'Reconciliation completed successfully'
-    }
-  } catch (error) {
-    console.error('❌ Reconciliation error:', error)
-    return {
-      success: false,
-      message: 'Failed to reconcile transaction status'
-    }
   }
 }

@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { checkSpinDepositMpesaStatus } from '@/app/actions/spin'
+import { checkSpinDepositStatus } from '@/app/actions/spin-wallet'
 
-/**
- * Unified spin-wallet payment status checker.
- *
- * Polls the M-Pesa transaction status via the canonical
- * `checkSpinDepositMpesaStatus` action, which respects the idempotency
- * flag set by the callback router to avoid double-crediting.
- */
+// Frontend polls: GET /api/spin-wallet/check_status?checkoutRequestId=xxx
 export async function GET(req: NextRequest) {
   try {
     const session = await auth()
-    // Support both session.user.id and session.user.email for auth check
-    if (!session?.user?.id && !session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
     }
 
@@ -27,7 +20,7 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const result = await checkSpinDepositMpesaStatus(checkoutRequestId)
+    const result = await checkSpinDepositStatus(checkoutRequestId)
     return NextResponse.json(result)
   } catch (error) {
     console.error('[SpinWallet] Error checking deposit status:', error)

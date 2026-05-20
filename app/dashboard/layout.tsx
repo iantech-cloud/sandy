@@ -7,12 +7,13 @@ import SideNav from '@/app/ui/dashboard/sidenav';
 import BottomNav from '@/app/ui/dashboard/BottomNav';
 import HamburgerMenu from '@/app/ui/dashboard/HamburgerMenu';
 import Alert from '@/app/ui/Alert';
-import { Loader2, LogOut, Sparkles } from 'lucide-react';
+import { Loader2, LogOut, FileText, Plus, BookOpen, Sparkles } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { DashboardProvider } from './DashboardContext';
 import { getUserProfile } from '../actions/user';
 import { getReferrals } from '../actions/referrals';
 import { getTransactions } from '../actions/transactions';
+import Link from 'next/link';
 import SessionMonitor from '@/app/components/SessionMonitor';
 import SessionDebugger from '@/app/components/SessionDebugger'
 import UserChatWidget from '@/app/components/chat/UserChatWidget';
@@ -292,9 +293,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    // Note: For credentials users, email verification is not a blocker for activation
-    // They proceed directly to activation payment. Skip this check.
-    // For Google OAuth users, email is verified by Google by default.
+    if (!userToCheck.isVerified) {
+      await signOut({ redirect: false });
+      console.log('Redirecting to /auth/login (unverified)');
+      setTimeout(() => {
+        router.push(`/auth/login?status=unverified_email&email=${encodeURIComponent(userToCheck.email || '')}`);
+      }, 0);
+      return;
+    }
 
     if (!userToCheck.isActive) {
       console.log('Redirecting to /activate');
@@ -407,54 +413,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setLoadingApp(false);
       setHasAttemptedFetch(false);
       
-      // Call the logout endpoint directly with a simple fetch
-      // This endpoint handles session cleanup and returns a redirect
-      console.log('[v0] Calling /api/auth/logout');
+      // Then call logout APIs
       try {
-        const response = await fetch('/api/auth/logout', {
-          method: 'POST',
-          credentials: 'include', // Important for cookie-based auth
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        console.log('[v0] Logout API response status:', response.status);
-        
-        // The logout endpoint returns a redirect (307), which fetch follows automatically
-        // If we got here, the logout was successful
-        if (response.ok) {
-          console.log('[v0] Logout API call successful');
-        } else {
-          console.warn('[v0] Logout API returned status:', response.status);
-        }
-      } catch (fetchError) {
-        // Network error or other fetch error - log but continue with client-side logout
-        console.warn('[v0] Logout API fetch error (proceeding with client-side logout):', fetchError);
+        await authenticatedApiFetch('/api/auth/logout', 'POST'); 
+      } catch(e) {
+        console.warn("Custom logout API call failed, proceeding with NextAuth signOut.", e);
       }
       
-      // Also call NextAuth signOut to ensure session is cleared on the client
-      console.log('[v0] Calling NextAuth signOut');
       await signOut({ redirect: false });
+      console.log('Logging out, redirecting to /auth/login');
       
-      console.log('[v0] Logout complete, redirecting to login');
-      // Use setTimeout to ensure state updates are complete before redirect
+      // Use setTimeout to avoid React state updates during render
       setTimeout(() => {
-        router.push('/auth/login?message=logged_out');
-      }, 300);
-      
+        router.push('/auth/login');
+      }, 0);
     } catch (error) {
-      console.error('[v0] Logout error:', error);
+      console.error('Logout error:', error);
       // Even if there's an error, still redirect to login
       setTimeout(() => {
         router.push('/auth/login');
-      }, 500);
+      }, 0);
     } finally {
       if (isMounted) {
         setIsLoggingOut(false);
       }
     }
-  }, [router, isLoggingOut, isMounted]);
+  }, [authenticatedApiFetch, router, isLoggingOut, isMounted]);
 
   const isOverallLoading = 
     status === 'loading' || 
@@ -589,7 +573,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 	
           <SessionDebugger />
           
-          
+          {/* Quick Action Buttons with Modern Design */}
+          {(getCurrentSection() === 'dashboard' || getCurrentSection() === 'content') && (
+            <div className="mb-6">
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href="/dashboard/content/create"
+                  className="group inline-flex items-center px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-250 transform hover:scale-105"
+                >
+                  <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform duration-250" />
+                  Create Content
+                </Link>
+                <Link
+                  href="/dashboard/content"
+                  className="inline-flex items-center px-5 py-3 border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold rounded-xl hover:bg-white hover:border-blue-300 hover:text-blue-600 transition-all duration-250 shadow-sm hover:shadow-md"
+                >
+                  <FileText className="w-5 h-5 mr-2" />
+                  My Submissions
+                </Link>
+                <Link
+                  href="/dashboard/blog"
+                  className="inline-flex items-center px-5 py-3 border-2 border-slate-200 bg-white/70 backdrop-blur-sm text-slate-700 font-semibold rounded-xl hover:bg-white hover:border-cyan-300 hover:text-cyan-600 transition-all duration-250 shadow-sm hover:shadow-md"
+                >
+                  <BookOpen className="w-5 h-5 mr-2" />
+                  Read Blogs
+                </Link>
+              </div>
+            </div>
+          )}
 
           {/* Section Headers with Gradient */}
           <div className="mb-6">
@@ -657,7 +668,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <p className="text-slate-600 mt-2">Promote products and earn commissions</p>
               </div>
             )}
-            
+            {getCurrentSection() === 'dashboard' && (
+              <div className="bg-white/70 backdrop-blur-xl p-6 rounded-2xl shadow-lg border border-white/50">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                  Dashboard
+                </h1>
+                <p className="text-slate-600 mt-2">Welcome back, {user.name}! 👋</p>
+              </div>
+            )}
           </div>
 
           <div className="max-w-6xl mx-auto">
