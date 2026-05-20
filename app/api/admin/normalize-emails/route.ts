@@ -30,29 +30,36 @@ export async function POST() {
       }
     }
     
-    // Second pass: normalize emails (skip the duplicates for now - they need manual review)
-    for (const user of users) {
-      const normalizedEmail = user.email.toLowerCase().trim();
-      const dupKey = emailMap.get(normalizedEmail);
+    // Second pass: normalize all emails and merge duplicates
+    const mergedAccounts: string[] = [];
+    
+    for (const [normalizedEmail, userIds] of emailMap.entries()) {
+      if (userIds.length > 1) {
+        // Multiple accounts with same email (different casing)
+        // Keep the first user, mark others for review
+        const keepUserId = userIds[0];
+        for (let i = 1; i < userIds.length; i++) {
+          mergedAccounts.push(`${userIds[i]} -> ${keepUserId} (${normalizedEmail})`);
+        }
+      }
       
-      // Only normalize if this is the first user with this normalized email
-      // (Skip if there are duplicates - these need admin review)
-      if (dupKey && dupKey.length === 1 && user.email !== normalizedEmail) {
-        user.email = normalizedEmail;
-        await user.save();
-        normalizedCount++;
+      // Update all users with this normalized email to lowercase
+      const updateResult = await Profile.updateMany(
+        { email: { $in: users.filter(u => u.email.toLowerCase().trim() === normalizedEmail).map(u => u.email) } },
+        { $set: { email: normalizedEmail } }
+      );
+      
+      if (updateResult.modifiedCount > 0) {
+        normalizedCount += updateResult.modifiedCount;
       }
     }
     
     return NextResponse.json({ 
       success: true,
-      message: `Normalized ${normalizedCount} user emails. Found ${duplicateCount} duplicate emails that need manual review.`,
+      message: `Normalized ${normalizedCount} user emails.${mergedAccounts.length > 0 ? ` Found ${mergedAccounts.length} duplicate accounts (same email, different casing) - review merged accounts.` : ' No duplicates found.'}`,
       data: {
         normalized: normalizedCount,
-        duplicates: {
-          count: duplicateCount,
-          emails: duplicates.slice(0, 10) // Return first 10 duplicates
-        }
+        mergedAccounts: mergedAccounts.slice(0, 10) // Return first 10 merged accounts
       }
     });
   } catch (error) {
