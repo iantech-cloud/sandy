@@ -735,7 +735,7 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
       const result = await signIn('credentials', {
         email: email.toLowerCase(),
         password: password,
-        token2FA: twoFACode || undefined,
+        token2FA: token2FA || undefined,
         redirect: false
       });
 
@@ -746,10 +746,13 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
         url: result?.url
       });
 
-      // If there's an error, redirect to the error page with the error code
+      // If there's an error, display the error message on the current page
       if (result?.error) {
-        // Redirect to the error page which will display the proper error message
-        router.push(`/auth/error?error=${encodeURIComponent(result.error)}`);
+        // Use the error handler to decode and display the proper error message
+        const errorInfo = handleNextAuthError(result.error);
+        setMessage(errorInfo.message);
+        setMessageType('error');
+        setLoading(false);
         return;
       }
 
