@@ -169,6 +169,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   
   callbacks: {
+    // ==================== REDIRECT CALLBACK ====================
+    // Intercept redirects to handle and preserve error messages
+    async redirect({ url, baseUrl }) {
+      return url.startsWith(baseUrl) ? url : baseUrl;
+    },
+
     // ==================== SIGN IN CALLBACK ====================
     async signIn({ user, account, profile }) {
       try {

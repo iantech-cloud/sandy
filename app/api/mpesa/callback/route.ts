@@ -596,7 +596,14 @@ export async function POST(request: NextRequest) {
               spinWallet.total_deposited_cents += transaction.amount_cents;
               await spinWallet.save({ session: session || undefined });
             }
+            
+            // Add M-Pesa receipt number and reference code to transaction for tracking
+            // Similar to how activation fees track M-Pesa references
+            transaction.mpesa_receipt_number = mpesaTransaction.MpesaReceiptNumber || mpesaTransaction.receipt_number || '';
+            transaction.transaction_code = `SPIN-${mpesaTransaction.MpesaReceiptNumber || mpesaTransaction.receipt_number || transaction._id}`;
+            
             console.log(`💳 Spin wallet credited: +KSh ${transaction.amount_cents / 100}. New balance: KSh ${spinWallet.balance_cents / 100}`);
+            console.log(`📝 M-Pesa Receipt: ${transaction.mpesa_receipt_number}, Transaction Code: ${transaction.transaction_code}`);
             transaction.balance_updated = true;
           } catch (spinError) {
             console.error('❌ Failed to credit spin wallet:', spinError);
