@@ -327,13 +327,7 @@ export default function DashboardPage() {
                 </div>
                 <span className="text-base font-bold text-blue-800">KES {(stats.directReferralEarnings || 0).toFixed(0)}</span>
               </div>
-              <div className="flex flex-col justify-center gap-2 bg-green-100 border border-green-200 rounded-lg px-4 py-4">
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-green-600" />
-                  <span className="text-sm text-green-700 font-medium">Downline Commission</span>
-                </div>
-                <span className="text-base font-bold text-green-800">KES {(stats.downlineEarnings || 0).toFixed(0)}</span>
-              </div>
+
               <div className="flex flex-col justify-center gap-2 bg-pink-100 border border-pink-200 rounded-lg px-4 py-4">
                 <div className="flex items-center gap-2">
                   <Gift className="w-5 h-5 text-pink-600" />
