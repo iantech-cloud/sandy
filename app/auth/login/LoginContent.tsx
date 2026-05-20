@@ -174,16 +174,17 @@ const handleNextAuthError = (errorParam: string | null): { message: string } => 
 
   switch (errorParam) {
     case 'CredentialsSignin':
-      return { message: 'Invalid email or password. Please try again.' };
+      return { message: 'Invalid email or password. Please check your credentials and try again.' };
     case 'OAuthSignin':
-      return { message: 'Error signing in with an OAuth provider.' };
+      return { message: 'Unable to sign in with Google. Please try again or use a different method.' };
     case 'OAuthCallback':
-      return { message: 'An error occurred while processing the login callback.' };
+      return { message: 'Google sign-in was interrupted. Please try again.' };
     case 'EmailSignin':
-      return { message: 'Error sending the email magic link.' };
+      return { message: 'Unable to send magic link. Please check your email address and try again.' };
     case 'Configuration':
-      return { message: 'Server configuration error. Please contact support.' };
+      return { message: 'Unable to sign in at this time. Please try again in a few moments.' };
     default:
+      // Return the decoded error message directly for custom auth errors
       return { message: decodeURIComponent(errorParam).replace(/_+/g, ' ') };
   }
 };
@@ -686,10 +687,12 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
         }
       }
 
-      console.log('Attempting login for:', email);
+      // Normalize email to lowercase and trim whitespace for case-insensitive matching
+      const normalizedEmail = email.trim().toLowerCase();
+      console.log('Attempting login for:', normalizedEmail);
       
       const result = await signIn('credentials', {
-        email,
+        email: normalizedEmail,
         password,
         token2FA: requires2FA ? token2FA : undefined,
         redirect: false,
@@ -754,10 +757,12 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
         }
       }
 
-      console.log('Submitting 2FA verification for:', email);
+      // Normalize email to lowercase and trim whitespace for case-insensitive matching
+      const normalizedEmail = email.trim().toLowerCase();
+      console.log('Submitting 2FA verification for:', normalizedEmail);
       
       const result = await signIn('credentials', {
-        email,
+        email: normalizedEmail,
         password,
         token2FA,
         redirect: false,

@@ -37,7 +37,10 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
 
     const body = await request.json();
-    const { username, email, phone, password, referralId: rawReferralId } = body;
+    const { username, email: rawEmail, phone, password, referralId: rawReferralId } = body;
+
+    // Normalize email to lowercase and trim whitespace for case-insensitive matching
+    const email = rawEmail ? rawEmail.trim().toLowerCase() : '';
 
     console.log('Registration attempt for:', { username, email, phone });
 
