@@ -114,7 +114,15 @@ const ProfileSchema = new Schema({
     default: null,
     maxlength: 50 
   },
-  email: { type: String, required: true, unique: true, maxlength: 255 },
+  email: { 
+    type: String, 
+    required: true, 
+    unique: true, 
+    maxlength: 255,
+    lowercase: true,
+    trim: true,
+    index: { unique: true, collation: { locale: 'en', strength: 2 } }
+  },
   password: {
     type: String,
     required: false,

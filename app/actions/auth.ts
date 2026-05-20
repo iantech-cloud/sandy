@@ -27,11 +27,14 @@ export async function registerUser(userData: {
 
     const { username, email, phone, password, referralId, isOAuthUser, oauthProvider, oauthId, googleProfilePicture } = userData;
 
+    // Normalize email: lowercase and trim
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Check for existing users
     const existingUser = await (Profile as any).findOne({ 
       $or: [
         { username }, 
-        { email }, 
+        { email: normalizedEmail }, 
         { oauth_id: oauthId },
         { phone_number: phone }
       ].filter(Boolean) // Remove null/undefined conditions
@@ -41,7 +44,7 @@ export async function registerUser(userData: {
       if (existingUser.username === username) {
         return { success: false, message: 'Username already taken' };
       }
-      if (existingUser.email === email) {
+      if (existingUser.email === normalizedEmail) {
         return { success: false, message: 'Email already registered' };
       }
       if (oauthId && existingUser.oauth_id === oauthId) {
@@ -74,7 +77,7 @@ export async function registerUser(userData: {
     const newUser = await (Profile as any).create({
       _id: newUserId,
       username,
-      email,
+      email: normalizedEmail,
       phone_number: phone,
       password: hashedPassword,
       referral_id: newUserReferralId,
@@ -235,7 +238,10 @@ export async function resendVerificationEmail(email: string): Promise<{
   try {
     await connectToDatabase();
 
-    const user = await (Profile as any).findOne({ email });
+    // Normalize email: lowercase and trim
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    const user = await (Profile as any).findOne({ email: normalizedEmail });
     if (!user) {
       return { success: false, message: 'User not found' };
     }
@@ -416,7 +422,10 @@ export async function getUserByEmail(email: string): Promise<{
   try {
     await connectToDatabase();
 
-    const user = await (Profile as any).findOne({ email }).select('+password');
+    // Normalize email: lowercase and trim
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    const user = await (Profile as any).findOne({ email: normalizedEmail }).select('+password');
     if (!user) {
       return { success: false, message: 'User not found' };
     }
@@ -580,7 +589,10 @@ export async function requestPasswordReset(email: string): Promise<{
   try {
     await connectToDatabase();
 
-    const user = await (Profile as any).findOne({ email });
+    // Normalize email: lowercase and trim
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    const user = await (Profile as any).findOne({ email: normalizedEmail });
     if (!user) {
       // Don't reveal if email exists or not
       return { 
