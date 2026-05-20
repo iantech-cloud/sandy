@@ -1099,19 +1099,16 @@ export async function checkSpinDepositMpesaStatus(checkoutRequestId: string): Pr
         const alreadyProcessed = mpesaTransaction.metadata?.callback_processed === true;
 
         if (safeStatus === 'completed' && !alreadyProcessed) {
-          // IMPORTANT: Do NOT credit the spin wallet here!
-          // The M-Pesa callback (api/mpesa/callback/route.ts) is the authoritative source
-          // and handles crediting when it receives the confirmed transaction reference.
-          // Crediting here causes double-crediting issues.
+          await updateSpinWallet(mpesaTransaction.user_id, mpesaTransaction.amount_cents);
           mpesaTransaction.metadata = {
             ...(mpesaTransaction.metadata || {}),
-            callback_note: 'Credit will be applied via M-Pesa callback when reference is received',
-            polled_at: new Date().toISOString(),
+            callback_processed: true,
+            credited_via: 'polling',
+            credited_at: new Date().toISOString(),
           };
           await mpesaTransaction.save();
-          console.log('⏭️ Spin wallet credit will be applied via M-Pesa callback');
         } else if (safeStatus === 'completed' && alreadyProcessed) {
-          console.log('⏭️ Skipping — M-Pesa callback already processed this transaction');
+          console.log('⏭️ Skipping spin wallet credit — callback already processed');
         }
       } catch (updateError) {
         console.error('❌ Failed to update transaction or spin wallet:', updateError);

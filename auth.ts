@@ -8,14 +8,6 @@ import { Profile, connectToDatabase } from '@/app/lib/models';
 import { randomUUID } from 'crypto';
 import clientPromise from '@/app/lib/mongodb';
 
-// Custom error class for Auth.js to properly handle error messages
-class AuthError extends Error {
-  constructor(message: string, code?: string) {
-    super(message);
-    this.name = code || 'CredentialsSignin';
-  }
-}
-
 // Environment validation
 // IMPORTANT: do NOT throw at module top-level. This module is imported
 // transitively by many API route handlers, and Next.js evaluates those
@@ -90,26 +82,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           await connectToDatabase();
           
           if (!credentials?.email || !credentials?.password) {
-            throw new AuthError('Email and password are required.');
+            throw new Error('Email and password are required.');
           }
 
           const user = await Profile.findOne({ email: credentials.email }).select('+password');
-          if (!user) throw new AuthError('Email address not found. Please check and try again or register a new account.');
+          if (!user) throw new Error('Email address not found. Please check and try again or register a new account.');
 
           const userId = user._id?.toString();
-          if (!userId) throw new AuthError('User account data is invalid. Please contact support.');
+          if (!userId) throw new Error('User account data is invalid. Please contact support.');
 
           if (!user.password) {
-             throw new AuthError('This account was registered with Google Sign-In. Please use Google to sign in instead.');
+             throw new Error('This account was registered with Google Sign-In. Please use Google to sign in instead.');
           }
           
           const isPasswordValid = await bcrypt.compare(credentials.password as string, user.password);
-          if (!isPasswordValid) throw new AuthError('Password is incorrect. Please check and try again or use "Forgot Password" to reset it.');
+          if (!isPasswordValid) throw new Error('Password is incorrect. Please check and try again or use "Forgot Password" to reset it.');
 
           // Check 2FA if enabled
           if (user.twoFAEnabled && user.twoFASecret) {
             if (!credentials.token2FA) {
-              throw new AuthError('2FA code is required. Please check your email for the verification code.', 'TwoFactorRequired');
+              throw new Error('2FA code is required.');
             }
 
             const verified = speakeasy.totp.verify({
@@ -120,7 +112,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             });
 
             if (!verified) {
-              throw new AuthError('Invalid 2FA code. Please check the code and try again.', 'InvalidTwoFactorCode');
+              throw new Error('Invalid 2FA code.');
             }
           }
           
@@ -145,10 +137,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           
         } catch (error: any) {
           console.error('Authorize error:', error);
-          // Pass the error message as the error itself so Auth.js will include it in the response
-          // Auth.js will convert this to the error param on the frontend
-          const errorMessage = error?.message || 'Authentication failed';
-          throw new Error(errorMessage); 
+          throw error; 
         }
       },
     }),
