@@ -81,30 +81,61 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           await connectToDatabase();
           
+          // Validate input
           if (!credentials?.email || !credentials?.password) {
-            throw new Error('Email and password are required.');
+            console.warn('[v0] Auth attempt with missing email or password');
+            return null;
           }
 
-          // Normalize email to lowercase and trim whitespace for case-insensitive matching
           const email = (credentials.email as string).trim().toLowerCase();
+          const password = credentials.password as string;
+
+          // Ensure password is a string
+          if (typeof password !== 'string' || password.length === 0) {
+            console.warn('[v0] Auth attempt with invalid password format');
+            return null;
+          }
+
+          console.log('[v0] Auth attempt for email:', email);
 
           const user = await Profile.findOne({ email }).select('+password');
-          if (!user) throw new Error('Email address not found. Please check and try again or register a new account.');
+          
+          if (!user) {
+            console.warn('[v0] Auth failed: User not found for email:', email);
+            return null;
+          }
 
           const userId = user._id?.toString();
-          if (!userId) throw new Error('User account data is invalid. Please contact support.');
-
-          if (!user.password || user.password.trim() === '') {
-             throw new Error('This account was registered with Google Sign-In. Please use Google to sign in instead.');
+          if (!userId) {
+            console.error('[v0] Auth failed: Invalid user ID');
+            return null;
           }
-          
-          const isPasswordValid = await bcrypt.compare(credentials.password as string, user.password);
-          if (!isPasswordValid) throw new Error('Password is incorrect. Please check and try again or use "Forgot Password" to reset it.');
+
+          // Check if user has a password (OAuth-only accounts have empty string)
+          if (!user.password || user.password.trim() === '') {
+            console.warn('[v0] Auth failed: OAuth-only account attempted password login:', email);
+            return null;
+          }
+
+          // Validate password
+          let isPasswordValid = false;
+          try {
+            isPasswordValid = await bcrypt.compare(password, user.password);
+          } catch (bcryptError) {
+            console.error('[v0] Bcrypt comparison error:', bcryptError);
+            return null;
+          }
+
+          if (!isPasswordValid) {
+            console.warn('[v0] Auth failed: Invalid password for email:', email);
+            return null;
+          }
 
           // Check 2FA if enabled
           if (user.twoFAEnabled && user.twoFASecret) {
             if (!credentials.token2FA) {
-              throw new Error('2FA code is required.');
+              console.warn('[v0] Auth failed: 2FA code required but not provided');
+              return null;
             }
 
             const verified = speakeasy.totp.verify({
@@ -115,11 +146,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             });
 
             if (!verified) {
-              throw new Error('Invalid 2FA code.');
+              console.warn('[v0] Auth failed: Invalid 2FA code');
+              return null;
             }
           }
           
-          await Profile.updateOne({ _id: user._id }, { last_login: new Date() });
+          // Update last login
+          try {
+            await Profile.updateOne({ _id: user._id }, { last_login: new Date() });
+          } catch (updateError) {
+            console.error('[v0] Failed to update last_login:', updateError);
+            // Continue anyway - this shouldn't block login
+          }
+
+          console.log('[v0] Auth successful for user:', email);
 
           return {
             id: userId,
@@ -139,8 +179,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           };
           
         } catch (error: any) {
-          console.error('Authorize error:', error);
-          throw error; 
+          console.error('[v0] Authorize callback error:', error?.message || error);
+          return null;
         }
       },
     }),
