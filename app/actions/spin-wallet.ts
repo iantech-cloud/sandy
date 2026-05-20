@@ -186,31 +186,20 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
       // It would need to be fetched from the callback data
       deposit.deposited_at = new Date()
 
-      spinWallet.balance_cents += deposit.amount_cents
-      spinWallet.total_deposited_cents += deposit.amount_cents
+      // IMPORTANT: Do NOT credit the spin wallet here!
+      // The M-Pesa callback (route.ts) is the authoritative source and will handle crediting
+      // when it receives the confirmed transaction reference from M-Pesa.
+      // Crediting here causes double-crediting issues.
 
       await spinWallet.save()
 
-      await (Transaction as any).create({
-        user_id: session.user.id,
-        type: 'SPIN_DEPOSIT',
-        amount_cents: deposit.amount_cents,
-        status: 'completed',
-        source: 'mpesa',
-        description: `Spin wallet deposit - KES ${deposit.amount_cents / 100}`,
-        metadata: {
-          checkout_request_id: checkoutRequestId,
-          result_code: queryResult.resultCode,
-          result_desc: queryResult.resultDesc,
-        },
-      })
-
-      console.log(`[SpinWallet] Deposit completed — user: ${session.user.id}`)
+      console.log(`[SpinWallet] Deposit marked completed — user: ${session.user.id}`)
+      console.log('[SpinWallet] ⚠️ Actual credit will be applied via M-Pesa callback')
 
       return {
         success: true,
         status: 'completed',
-        message: `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`,
+        message: `Payment completed! Your spin wallet will be credited once M-Pesa confirms the transaction.`,
         balance: spinWallet.balance_cents,
       }
     } else if (queryResult.status === 'pending') {
