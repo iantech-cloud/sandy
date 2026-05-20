@@ -304,13 +304,7 @@ export async function processMpesaDeposit(depositData: {
 				status: 'initiated',
 				stk_push_response: stkData,
 				result_code: 1032,
-				result_desc: 'STK Push initiated successfully',
-				source: 'wallet',
-				metadata: {
-					user_username: currentUser.username,
-					deposit_type: 'wallet',
-					initiated_at: new Date().toISOString(),
-				}
+				result_desc: 'STK Push initiated successfully'
 			});
 
 			// FIXED: Add target_type and target_id
@@ -376,38 +370,21 @@ export async function processWithdrawal(withdrawalData: {
 		}
 
 		await connectToDatabase();
-		const currentUser: any = await Profile.findOne({ email: session.user.email }).lean(); 
+		const currentUser: any = await Profile.findOne({ email: session.user.email }).lean(); 
 
 		if (!currentUser) {
 			return { success: false, message: 'User not found' };
 		}
 
-		const amountCents = Math.round(withdrawalData.amount * 100);
-		const amountKES = amountCents / 100;
-		
-		// Check minimum withdrawal amount (KSh 200 = 20000 cents)
-		if (amountCents < 20000) {
-			return { success: false, message: 'Minimum withdrawal amount is KSh 200' };
+		const today = new Date();
+		const isFriday = today.getDay() === 5;
+		if (!isFriday) {
+			return { success: false, message: 'Withdrawals are only allowed on Fridays' };
 		}
 
-		// Calculate band-based processing fee
-		let processingFeeCents = 0;
-		if (amountKES >= 200 && amountKES <= 1000) {
-			processingFeeCents = 1000; // KSh 10
-		} else if (amountKES > 1000 && amountKES <= 2000) {
-			processingFeeCents = 2000; // KSh 20
-		} else if (amountKES > 2000 && amountKES <= 5000) {
-			processingFeeCents = 3000; // KSh 30
-		} else if (amountKES > 5000 && amountKES <= 10000) {
-			processingFeeCents = 5000; // KSh 50
-		} else if (amountKES > 10000) {
-			processingFeeCents = 10000; // KSh 100
-		}
-		
-		const totalDeductionCents = amountCents + processingFeeCents;
-		
-		if (currentUser.balance_cents < totalDeductionCents) {
-			return { success: false, message: `Insufficient balance. Amount + processing fee (KSh ${(processingFeeCents / 100).toFixed(0)}) required.` };
+		const amountCents = Math.round(withdrawalData.amount * 100);
+		if (currentUser.balance_cents < amountCents) {
+			return { success: false, message: 'Insufficient balance' };
 		}
 
 		if (!withdrawalData.mpesaNumber.match(/^254[0-9]{9}$/)) {
@@ -418,12 +395,7 @@ export async function processWithdrawal(withdrawalData: {
 			user_id: currentUser._id,
 			amount_cents: amountCents,
 			mpesa_number: withdrawalData.mpesaNumber,
-			processing_fee_cents: processingFeeCents,
-			status: 'pending',
-			metadata: {
-				feeType: 'band-based',
-				amountRange: amountKES <= 1000 ? '200-1000' : amountKES <= 2000 ? '1001-2000' : amountKES <= 5000 ? '2001-5000' : amountKES <= 10000 ? '5001-10000' : '10000+'
-			}
+			status: 'pending'
 		});
 
 		// FIXED: Add target_type and target_id
@@ -433,19 +405,17 @@ export async function processWithdrawal(withdrawalData: {
 			user_id: currentUser._id,
 			amount_cents: amountCents,
 			type: 'WITHDRAWAL',
-			description: `Withdrawal request to ${withdrawalData.mpesaNumber} (Processing fee: KSh ${(processingFeeCents / 100).toFixed(0)})`,
+			description: `Withdrawal request to ${withdrawalData.mpesaNumber}`,
 			status: 'pending',
 			source: 'wallet',
 			metadata: {
 				withdrawalId: withdrawal._id.toString(),
-				mpesaNumber: withdrawalData.mpesaNumber,
-				processingFeeCents: processingFeeCents,
-				totalDeductionCents: totalDeductionCents
+				mpesaNumber: withdrawalData.mpesaNumber
 			}
 		});
 
 		await Profile.findByIdAndUpdate(currentUser._id, {
-			$inc: { balance_cents: -totalDeductionCents }
+			$inc: { balance_cents: -amountCents }
 		});
 
 		revalidatePath('/dashboard/wallet');
@@ -461,12 +431,11 @@ export async function processWithdrawal(withdrawalData: {
 			success: true,
 			data: {
 				transactionCode: `WDL${withdrawal._id.toString().slice(-8).toUpperCase()}`,
-				newBalance: (currentUser.balance_cents - totalDeductionCents) / 100,
+				newBalance: (currentUser.balance_cents - amountCents) / 100,
 				withdrawal: transformedWithdrawal,
-				transaction: transformedTransaction,
-				processingFee: (processingFeeCents / 100).toFixed(0)
+				transaction: transformedTransaction
 			},
-			message: `Withdrawal request submitted successfully. Processing fee of KSh ${(processingFeeCents / 100).toFixed(0)} will be deducted.`
+			message: 'Withdrawal request submitted successfully'
 		};
 
 	} catch (error) {

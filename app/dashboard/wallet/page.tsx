@@ -3,168 +3,187 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { DollarSign, Phone, Loader2, CheckCircle, AlertCircle, RefreshCw, Send } from 'lucide-react';
+import { DollarSign, Phone, Loader2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import TransactionHistory from '@/app/ui/dashboard/TransactionHistory';
 import Alert from '@/app/ui/Alert';
 import { useDashboard } from '../../dashboard/DashboardContext';
 import { processWithdrawal } from '@/app/actions/transactions';
-import { getDepositHistory, getUserBalance } from '@/app/actions/deposit';
-import { reconcileSpinDepositStatus } from '@/app/actions/spin';
-import { formatPhoneNumber, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
+import { processMpesaDeposit, getDepositHistory, getUserBalance } from '@/app/actions/deposit';
 
 // Match the Transaction interface from TransactionHistory
 interface Transaction {
   id: string;
-  type: 'DEPOSIT' | 'WITHDRAWAL' | 'BONUS' | 'TASK_PAYMENT' | 'SPIN_WIN' | 'REFERRAL' | 'SURVEY' | 'ACTIVATION_FEE' | 'COMPANY_REVENUE' | 'ACCOUNT_ACTIVATION';
+  type: 'DEPOSIT' | 'WITHDRAWAL' | 'BONUS' | 'TASK_PAYMENT' | 'SPIN_WIN' | 'REFERRAL' | 'SURVEY';
   amount: number;
   description: string;
-  status: 'pending' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+  status: string;
   date: string;
-  transaction_code?: string;
-  mpesa_receipt_number?: string;
-}
-
-const MIN_WITHDRAWAL = 200;
-
-// Band-based processing fee calculation (matches backend in transactions.ts)
-function calculateProcessingFee(amount: number): number {
-  if (amount >= 200 && amount <= 1000) return 10;
-  if (amount > 1000 && amount <= 2000) return 20;
-  if (amount > 2000 && amount <= 5000) return 30;
-  if (amount > 5000 && amount <= 10000) return 50;
-  if (amount > 10000) return 100;
-  return 0;
-}
-
-// Get fee band description
-function getFeeBandDescription(amount: number): string {
-  if (amount >= 200 && amount <= 1000) return 'KSh 200 - 1,000';
-  if (amount > 1000 && amount <= 2000) return 'KSh 1,001 - 2,000';
-  if (amount > 2000 && amount <= 5000) return 'KSh 2,001 - 5,000';
-  if (amount > 5000 && amount <= 10000) return 'KSh 5,001 - 10,000';
-  if (amount > 10000) return 'Above KSh 10,000';
-  return '';
-}
-
-// Helper: format phone for display (0XXXXXXXXX)
-function formatPhoneForDisplay(phone: string): string {
-  if (!phone) return '';
-  try {
-    const formatted = formatPhoneNumber(phone);
-    if (formatted.startsWith('+254')) return `0${formatted.substring(4)}`;
-    return formatted;
-  } catch {
-    return phone;
-  }
-}
-
-// Map raw transaction to local Transaction type
-function transformTransaction(tx: any): Transaction {
-  let amount = 0;
-  if (typeof tx.amount === 'number' && !isNaN(tx.amount)) {
-    amount = tx.amount;
-  } else if (typeof tx.amount_cents === 'number' && !isNaN(tx.amount_cents)) {
-    amount = tx.amount_cents / 100;
-  }
-
-  const date = tx.created_at || tx.date || tx.transaction_date || new Date().toISOString();
-
-  const typeMap: Record<string, Transaction['type']> = {
-    DEPOSIT: 'DEPOSIT',
-    WITHDRAW: 'WITHDRAWAL',
-    WITHDRAWAL: 'WITHDRAWAL',
-    BONUS: 'BONUS',
-    TASK_PAYMENT: 'TASK_PAYMENT',
-    SPIN_WIN: 'SPIN_WIN',
-    REFERRAL: 'REFERRAL',
-    SURVEY: 'SURVEY',
-    ACTIVATION_FEE: 'ACTIVATION_FEE',
-    ACCOUNT_ACTIVATION: 'ACCOUNT_ACTIVATION',
-    COMPANY_REVENUE: 'COMPANY_REVENUE',
-  };
-
-  const type: Transaction['type'] = typeMap[(tx.type || '').toUpperCase()] ?? 'DEPOSIT';
-
-  return {
-    id: tx.id || tx._id?.toString() || `tx-${Date.now()}-${Math.random()}`,
-    type,
-    amount,
-    description: tx.description || `Transaction ${tx.type || 'DEPOSIT'}`,
-    date,
-    status: tx.status || 'completed',
-    transaction_code: tx.transaction_code,
-    mpesa_receipt_number: tx.mpesaReceiptNumber || tx.mpesa_receipt_number,
-  };
 }
 
 export default function WalletPage() {
   const { user } = useDashboard();
   const router = useRouter();
-
+  
+  if (!user) {
+    return <div className="p-8 text-center text-red-500 font-medium">User data is unavailable. Please refresh or check your data source.</div>;
+  }
+  
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [depositAmount, setDepositAmount] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [mpesaNumber, setMpesaNumber] = useState(user?.phone || '');
-  const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
+  const [mpesaNumber, setMpesaNumber] = useState(user.phone || '');
+  const [depositPhoneNumber, setDepositPhoneNumber] = useState(user.phone ? formatPhoneForDisplay(user.phone) : '');
+  const [isProcessingDeposit, setIsProcessingDeposit] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [depositMessage, setDepositMessage] = useState<string | null>(null);
+  const [depositMessageType, setDepositMessageType] = useState<'success' | 'error' | 'info'>('info');
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
-  const [currentBalance, setCurrentBalance] = useState(user?.balance || 0);
+  const [currentBalance, setCurrentBalance] = useState(user.balance || 0);
 
-  if (!user) {
-    return (
-      <div className="p-8 text-center text-red-500 font-medium">
-        User data is unavailable. Please refresh or check your data source.
-      </div>
-    );
+  // Helper function to format phone number for display
+  function formatPhoneForDisplay(phone: string): string {
+    if (!phone) return '';
+    const cleanPhone = phone.replace(/\s/g, '');
+    if (cleanPhone.startsWith('254')) {
+      return `0${cleanPhone.substring(3)}`;
+    } else if (cleanPhone.startsWith('+254')) {
+      return `0${cleanPhone.substring(4)}`;
+    } else if (cleanPhone.startsWith('01')) {
+      return `0${cleanPhone.substring(1)}`;
+    }
+    return cleanPhone;
   }
 
-  // Computed fee preview using band-based system
-  const withdrawAmountNum = parseFloat(withdrawAmount) || 0;
-  const processingFee = calculateProcessingFee(withdrawAmountNum);
-  const totalDeduction = withdrawAmountNum + processingFee;
-  const feeBand = getFeeBandDescription(withdrawAmountNum);
+  // Helper function to format phone number for API (convert to 254 format)
+  function formatPhoneForAPI(phone: string): string {
+    if (!phone) return '';
+    const cleanPhone = phone.replace(/\s/g, '');
+    if (cleanPhone.startsWith('254')) {
+      return cleanPhone;
+    } else if (cleanPhone.startsWith('0')) {
+      return `254${cleanPhone.substring(1)}`;
+    } else if (cleanPhone.startsWith('+254')) {
+      return cleanPhone.substring(1);
+    }
+    return `254${cleanPhone}`;
+  }
 
+  // Function to transform transaction data to match TransactionHistory interface
+  const transformTransaction = (tx: any): Transaction => {
+    console.log('Transforming transaction:', tx);
+    
+    // Handle amount safely
+    let amount = 0;
+    if (tx.amount_cents && !isNaN(tx.amount_cents)) {
+      amount = tx.amount_cents / 100;
+    } else if (tx.amount && !isNaN(tx.amount)) {
+      amount = tx.amount;
+    }
+    
+    // Handle description safely
+    let description = tx.description || 
+                     tx.transaction_desc || 
+                     `Transaction ${tx.type || 'DEPOSIT'}`;
+    
+    // Handle date safely
+    let date = tx.created_at || 
+               tx.date || 
+               tx.transaction_date;
+    
+    // Validate date
+    if (!date || isNaN(new Date(date).getTime())) {
+      date = new Date().toISOString();
+      console.warn('Invalid date found, using current date');
+    }
+
+    // Map transaction types to match TransactionHistory interface
+    let type: Transaction['type'] = 'DEPOSIT';
+    const txType = (tx.type || '').toUpperCase();
+    
+    switch (txType) {
+      case 'DEPOSIT':
+        type = 'DEPOSIT';
+        break;
+      case 'WITHDRAW':
+      case 'WITHDRAWAL':
+        type = 'WITHDRAWAL';
+        break;
+      case 'BONUS':
+        type = 'BONUS';
+        break;
+      case 'TASK_PAYMENT':
+        type = 'TASK_PAYMENT';
+        break;
+      case 'SPIN_WIN':
+        type = 'SPIN_WIN';
+        break;
+      case 'REFERRAL':
+        type = 'REFERRAL';
+        break;
+      case 'SURVEY':
+        type = 'SURVEY';
+        break;
+      default:
+        // Default to DEPOSIT for unknown types
+        type = 'DEPOSIT';
+    }
+
+    return {
+      id: tx.id || tx._id?.toString() || `tx-${Date.now()}-${Math.random()}`,
+      type: type,
+      amount: amount,
+      description: description,
+      date: date,
+      status: tx.status || 'completed'
+    };
+  };
+
+  // Fetch transactions and balance
   const fetchWalletData = async () => {
     try {
       setIsRefreshing(true);
-      const [historyResult, balanceResult] = await Promise.all([
-        getDepositHistory(50, 1),
-        getUserBalance(),
-      ]);
+      console.log('🔄 Fetching wallet data...');
 
-      if (historyResult.success && historyResult.data) {
-        const transformed = historyResult.data
-          .map(transformTransaction)
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      // Fetch transactions from deposit history
+      const result = await getDepositHistory(50, 1);
+      if (result.success && result.data) {
+        console.log('✅ Fetched deposit transactions:', result.data.length);
+        const transformedTransactions: Transaction[] = result.data.map(transformTransaction);
         
-        // Reconcile any pending spin deposits to ensure their status is correct
-        const pendingSpinDeposits = transformed.filter(
-          tx => tx.status === 'pending' && tx.type === 'DEPOSIT' && tx.description?.includes('Spin')
+        // Sort transactions by date (newest first)
+        const sortedTransactions = transformedTransactions.sort((a, b) => 
+          new Date(b.date).getTime() - new Date(a.date).getTime()
         );
         
-        if (pendingSpinDeposits.length > 0) {
-          console.log('[v0] Found pending spin deposits, triggering reconciliation...');
-          // Trigger reconciliation for pending spin deposits without blocking the UI
-          pendingSpinDeposits.forEach(async (tx) => {
-            try {
-              if (tx.id) {
-                await reconcileSpinDepositStatus(tx.id);
-              }
-            } catch (error) {
-              console.error('[v0] Reconciliation error for transaction:', tx.id, error);
-            }
+        setTransactions(sortedTransactions);
+        
+        // Log sample transaction for debugging
+        if (sortedTransactions.length > 0) {
+          console.log('📊 Sample transaction:', {
+            id: sortedTransactions[0].id,
+            type: sortedTransactions[0].type,
+            amount: sortedTransactions[0].amount,
+            description: sortedTransactions[0].description,
+            date: sortedTransactions[0].date,
+            status: sortedTransactions[0].status
           });
         }
-        
-        setTransactions(transformed);
       } else {
+        console.log('❌ No deposit history found or error:', result.message);
         setTransactions([]);
       }
 
+      // Fetch current balance
+      const balanceResult = await getUserBalance();
       if (balanceResult.success && balanceResult.data) {
+        console.log('💰 Fetched balance:', balanceResult.data.balance);
         setCurrentBalance(balanceResult.data.balance);
+      } else {
+        console.log('❌ Failed to fetch balance:', balanceResult.message);
       }
     } catch (error) {
+      console.error('💥 Error fetching wallet data:', error);
       setMessage('Failed to load wallet data. Please try refreshing.');
       setMessageType('error');
     } finally {
@@ -172,77 +191,171 @@ export default function WalletPage() {
     }
   };
 
+  // Initial data fetch
   useEffect(() => {
     fetchWalletData();
   }, []);
 
+  // Auto-populate phone number when user data changes
   useEffect(() => {
     if (user?.phone) {
-      if (!mpesaNumber) setMpesaNumber(user.phone);
+      const formattedPhone = formatPhoneForDisplay(user.phone);
+      setDepositPhoneNumber(formattedPhone);
+      // Also set withdrawal M-Pesa number if empty
+      if (!mpesaNumber) {
+        setMpesaNumber(user.phone);
+      }
     }
-  }, [user]);
+  }, [user, mpesaNumber]);
 
   const handleRefresh = async () => {
     await fetchWalletData();
-    setMessage('Wallet data refreshed successfully.');
+    setMessage('Wallet data refreshed successfully');
     setMessageType('success');
   };
 
-  const handleWithdraw = async () => {
-    setMessage(null);
-    const amount = parseFloat(withdrawAmount);
+  const handleDeposit = async () => {
+    const amount = parseFloat(depositAmount);
+    
+    if (isNaN(amount) || amount <= 0) {
+      setDepositMessage('Please enter a valid deposit amount.');
+      setDepositMessageType('error');
+      return;
+    }
 
-    if (isNaN(amount) || amount < MIN_WITHDRAWAL) {
-      setMessage(`Minimum withdrawal amount is KES ${MIN_WITHDRAWAL}.`);
+    if (amount < 10 || amount > 70000) {
+      setDepositMessage('Amount must be between KES 10 and KES 70,000.');
+      setDepositMessageType('error');
+      return;
+    }
+
+    if (!depositPhoneNumber) {
+      setDepositMessage('Please enter your M-Pesa phone number.');
+      setDepositMessageType('error');
+      return;
+    }
+
+    // Validate phone number format
+    const phoneRegex = /^(07\d{8}|2547\d{8}|\+2547\d{8}|01\d{7,8})$/;
+    const cleanPhone = depositPhoneNumber.replace(/\s/g, '');
+    if (!phoneRegex.test(cleanPhone)) {
+      setDepositMessage('Please enter a valid Kenyan phone number (07XXXXXXXX, 2547XXXXXXXX, +2547XXXXXXXX, or 01XXXXXXXX)');
+      setDepositMessageType('error');
+      return;
+    }
+
+    setIsProcessingDeposit(true);
+    setDepositMessage(null);
+
+    try {
+      const formattedPhone = formatPhoneForAPI(depositPhoneNumber);
+      
+      console.log('Initiating deposit with:', {
+        amount,
+        phoneNumber: formattedPhone
+      });
+
+      // Use server action for deposit
+      const result = await processMpesaDeposit({
+        amount,
+        phoneNumber: formattedPhone
+      });
+
+      console.log('M-Pesa STK Push response:', result);
+
+      if (result.success && result.data?.CheckoutRequestID) {
+        // Redirect to M-Pesa waiting page
+        const params = new URLSearchParams({
+          checkoutRequestId: result.data.CheckoutRequestID,
+          amount: amount.toString(),
+          phoneNumber: formattedPhone,
+          merchantRequestId: result.data.MerchantRequestID || '',
+          accountReference: result.data.AccountReference || '',
+          source: 'wallet'
+        });
+        
+        router.push(`/dashboard/deposit/mpesa-waiting?${params.toString()}`);
+        
+      } else {
+        setDepositMessage(result.message || 'Failed to initiate M-Pesa payment. Please try again.');
+        setDepositMessageType('error');
+      }
+    } catch (error) {
+      console.error('M-Pesa deposit error:', error);
+      setDepositMessage('An error occurred while initiating payment. Please try again.');
+      setDepositMessageType('error');
+    } finally {
+      setIsProcessingDeposit(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    const amount = parseFloat(withdrawAmount);
+    const today = new Date();
+    today.setTime(today.getTime() + (3 * 60 * 60 * 1000));  
+    const isFriday = today.getDay() === 5;
+
+    if (!isFriday) {
+      setMessage('Withdrawals are only allowed on Fridays.');
+      setMessageType('error');
+      return;
+    }
+
+    if (user.lastWithdrawalDate) {
+      const lastWithdrawal = new Date(user.lastWithdrawalDate);
+      const currentFridayStart = new Date(today);
+      currentFridayStart.setHours(0, 0, 0, 0);
+      if (lastWithdrawal >= currentFridayStart) {
+        setMessage('You have already made a withdrawal this Friday. Try again next Friday.');
+        setMessageType('error');
+        return;
+      }
+    }
+
+    if (isNaN(amount) || amount < 1000) {
+      setMessage('Minimum withdrawal amount is KSH 1000.');
+      setMessageType('error');
+      return;
+    }
+    if (amount > currentBalance) {
+      setMessage(`Insufficient balance. Available: KES ${currentBalance.toFixed(2)}.`);
       setMessageType('error');
       return;
     }
     
-    // Check balance including processing fee
-    const fee = calculateProcessingFee(amount);
-    const totalRequired = amount + fee;
-    if (totalRequired > currentBalance) {
-      setMessage(`Insufficient balance. You need KSh ${totalRequired.toFixed(0)} (amount + KSh ${fee} fee). Available: KSh ${currentBalance.toFixed(0)}.`);
-      setMessageType('error');
-      return;
-    }
-
+    // Validate M-Pesa number format
     const cleanMpesaNumber = mpesaNumber.replace(/\s/g, '');
-    if (!cleanMpesaNumber.match(/^254[0-9]{9}$/)) {
-      setMessage('Please enter a valid M-Pesa number in format 2547XXXXXXXX or 2541XXXXXXXX.');
+    if (!cleanMpesaNumber.match(/^254[17]\d{8}$/)) {
+      setMessage('Please enter a valid M-Pesa number (format: 2547XXXXXXXX or 2541XXXXXXXX).');
       setMessageType('error');
       return;
     }
 
-    setIsProcessingWithdraw(true);
-    try {
-      const result = await processWithdrawal({ amount, mpesaNumber: cleanMpesaNumber });
+    // Use server action for withdrawal (from transactions)
+    const result = await processWithdrawal({
+      amount,
+      mpesaNumber: cleanMpesaNumber
+    });
 
-      if (result.success && result.data) {
-        setMessage(
-          `Withdrawal request submitted! Transaction ID: ${result.data.transactionCode}. ` +
-          `Processing fee: KES ${result.data.processingFee}. Pending admin approval.`
-        );
-        setMessageType('success');
-        setWithdrawAmount('');
-        await fetchWalletData();
-      } else {
-        setMessage(result.message || 'Withdrawal failed. Please try again.');
-        setMessageType('error');
-      }
-    } catch (error) {
-      setMessage('An error occurred while processing your withdrawal.');
+    if (result.success && result.data) {
+      setMessage(`Withdrawal request submitted! Transaction ID: ${result.data.transactionCode}. Pending admin approval.`);
+      setMessageType('success');
+      setWithdrawAmount('');
+      
+      // Refresh balance and transactions
+      await fetchWalletData();
+    } else {
+      setMessage(result.message || 'Withdrawal failed.');
       setMessageType('error');
-    } finally {
-      setIsProcessingWithdraw(false);
     }
   };
 
+  const quickAmounts = [100, 500, 1000, 2000, 5000];
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
-      {/* Header */}
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-extrabold text-gray-800">Wallet</h2>
+        <h2 className="text-3xl font-extrabold text-gray-800 border-b pb-2">Wallet & Pay</h2>
         <button
           onClick={handleRefresh}
           disabled={isRefreshing}
@@ -252,146 +365,213 @@ export default function WalletPage() {
           {isRefreshing ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
-
+      
       {message && <Alert type={messageType} message={message} onClose={() => setMessage(null)} />}
+      
+      <div className="bg-white p-6 rounded-xl shadow-lg mb-8 border border-gray-200">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-semibold text-gray-800">Current Balance: KES {currentBalance.toFixed(2)}</h3>
+          <div className="text-sm text-gray-500">
+            Last updated: {new Date().toLocaleTimeString()}
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Deposit Section */}
+          <div className="space-y-4">
+            <h4 className="font-medium text-lg text-gray-700 flex items-center">
+              <DollarSign className="mr-2 text-green-500" size={20} />
+              Deposit via M-Pesa
+            </h4>
+            
+            <div>
+              <label htmlFor="depositAmount" className="block text-sm font-medium text-gray-700 mb-2">
+                Amount (KES) *
+              </label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  id="depositAmount"
+                  type="number"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  placeholder="Enter amount (min: 10, max: 70,000)"
+                  min="10"
+                  max="70000"
+                  step="1"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  required
+                  disabled={isProcessingDeposit}
+                />
+              </div>
+            </div>
 
-      {/* Balance Card */}
-      <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 text-white p-6 rounded-xl shadow-lg mb-6">
-        <p className="text-sm font-medium opacity-80 mb-1">Available Balance</p>
-        <p className="text-4xl font-extrabold">KES {currentBalance.toFixed(2)}</p>
-        <p className="text-xs opacity-70 mt-2">Last updated: {new Date().toLocaleTimeString()}</p>
-      </div>
+            <div className="grid grid-cols-5 gap-2">
+              {quickAmounts.map((quickAmount) => (
+                <button
+                  key={quickAmount}
+                  type="button"
+                  onClick={() => setDepositAmount(quickAmount.toString())}
+                  className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+                  disabled={isProcessingDeposit}
+                >
+                  KES {quickAmount}
+                </button>
+              ))}
+            </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Deposit via M-Pesa — temporarily disabled */}
-        <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
-          <h4 className="font-semibold text-lg text-gray-700 flex items-center gap-2 mb-4">
-            <DollarSign size={20} className="text-gray-400" />
-            Deposit via M-Pesa
-          </h4>
+            <div>
+              <label htmlFor="depositPhone" className="block text-sm font-medium text-gray-700 mb-2">
+                M-Pesa Phone Number *
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  id="depositPhone"
+                  type="tel"
+                  value={depositPhoneNumber}
+                  onChange={(e) => setDepositPhoneNumber(e.target.value)}
+                  placeholder="07XXXXXXXX or 2547XXXXXXXX"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  required
+                  disabled={isProcessingDeposit}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Enter your M-Pesa registered phone number
+              </p>
+            </div>
 
-          <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-center text-gray-500 text-sm mb-4">
-            Deposits via M-Pesa are temporarily unavailable. Please check back soon.
+            <button 
+              onClick={handleDeposit} 
+              disabled={isProcessingDeposit}
+              className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-semibold rounded-lg shadow-md transition duration-200 flex items-center justify-center"
+            >
+              {isProcessingDeposit ? (
+                <>
+                  <Loader2 className="animate-spin mr-2" size={20} />
+                  Initiating Payment...
+                </>
+              ) : (
+                'Deposit via M-Pesa'
+              )}
+            </button>
+
+            {depositMessage && (
+              <div className={`p-3 rounded-lg text-center font-medium ${
+                depositMessageType === 'success' 
+                  ? 'bg-green-100 text-green-700 border border-green-300' 
+                  : depositMessageType === 'error'
+                  ? 'bg-red-100 text-red-700 border border-red-300'
+                  : 'bg-blue-100 text-blue-700 border border-blue-300'
+              }`}>
+                {depositMessageType === 'success' && <CheckCircle className="inline mr-2" size={16} />}
+                {depositMessageType === 'error' && <AlertCircle className="inline mr-2" size={16} />}
+                {depositMessage}
+              </div>
+            )}
+
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <h5 className="font-semibold text-blue-800 mb-2">How to deposit:</h5>
+              <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
+                <li>Enter amount and your M-Pesa phone number</li>
+                <li>Click "Deposit via M-Pesa"</li>
+                <li>You'll be redirected to a waiting page</li>
+                <li>Check your phone for STK Push prompt</li>
+                <li>Enter your M-Pesa PIN to complete</li>
+                <li>Wait for confirmation on the waiting page</li>
+                <li>Funds will be added to your wallet instantly</li>
+              </ol>
+            </div>
           </div>
 
-          <button
-            disabled
-            className="w-full py-3 bg-gray-300 text-gray-500 font-semibold rounded-lg cursor-not-allowed"
-          >
-            Deposit via M-Pesa (Coming Soon)
-          </button>
-        </div>
-
-        {/* Withdrawal Section */}
-        <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
-          <h4 className="font-semibold text-lg text-gray-700 flex items-center gap-2 mb-4">
-            <Send size={20} className="text-red-500" />
-            Withdraw to M-Pesa
-          </h4>
-
+          {/* Withdrawal Section */}
           <div className="space-y-4">
+            <h4 className="font-medium text-lg text-gray-700">Withdraw</h4>
+            
             <div>
-              <label htmlFor="withdrawAmount" className="block text-sm font-medium text-gray-700 mb-1">
-                Amount (KES) — min KES {MIN_WITHDRAWAL}
+              <label htmlFor="withdrawAmount" className="block text-sm font-medium text-gray-700 mb-2">
+                Amount (KES) *
               </label>
               <input
                 id="withdrawAmount"
                 type="number"
                 value={withdrawAmount}
                 onChange={(e) => setWithdrawAmount(e.target.value)}
-                placeholder={`Min KES ${MIN_WITHDRAWAL}`}
-                min={MIN_WITHDRAWAL}
-                step="1"
-                disabled={isProcessingWithdraw}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:bg-gray-100"
+                placeholder="Enter amount (min KSH 1000)"
+                min="1000"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition duration-150 shadow-inner"
+                required
               />
             </div>
 
-            {/* Fee Preview - Band-based system */}
-            {withdrawAmountNum >= MIN_WITHDRAWAL && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800 space-y-1">
-                <div className="flex justify-between">
-                  <span>Withdrawal amount:</span>
-                  <span className="font-medium">KSh {withdrawAmountNum.toFixed(0)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Processing fee ({feeBand}):</span>
-                  <span className="font-medium text-red-600">KSh {processingFee}</span>
-                </div>
-                <div className="flex justify-between border-t border-orange-300 pt-1 font-semibold">
-                  <span>Total deducted from wallet:</span>
-                  <span className="text-red-700">KSh {totalDeduction.toFixed(0)}</span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span>You receive via M-Pesa:</span>
-                  <span className="text-green-700">KSh {withdrawAmountNum.toFixed(0)}</span>
-                </div>
-              </div>
-            )}
-
             <div>
-              <label htmlFor="withdrawMpesa" className="block text-sm font-medium text-gray-700 mb-1">
-                M-Pesa Number
+              <label htmlFor="withdrawMpesa" className="block text-sm font-medium text-gray-700 mb-2">
+                M-Pesa Number *
               </label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input
-                  id="withdrawMpesa"
-                  type="tel"
-                  value={mpesaNumber}
-                  onChange={(e) => setMpesaNumber(e.target.value)}
-                  placeholder="2547XXXXXXXX or 2541XXXXXXXX"
-                  disabled={isProcessingWithdraw}
-                  className="w-full pl-10 pr-4 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:bg-gray-100"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Format: 2547XXXXXXXX or 2541XXXXXXXX</p>
+              <input
+                id="withdrawMpesa"
+                type="text"
+                value={mpesaNumber}
+                onChange={(e) => setMpesaNumber(e.target.value)}
+                placeholder="M-Pesa Number (2547XXXXXXXX)"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition duration-150 shadow-inner"
+                required
+              />
             </div>
 
-            <button
-              onClick={handleWithdraw}
-              disabled={isProcessingWithdraw || withdrawAmountNum < MIN_WITHDRAWAL}
-              className="w-full py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white font-semibold rounded-lg shadow transition duration-200 flex items-center justify-center gap-2"
+            <button 
+              onClick={handleWithdraw} 
+              className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg shadow-md transition duration-200"
             >
-              {isProcessingWithdraw ? (
-                <>
-                  <Loader2 className="animate-spin" size={18} />
-                  Processing...
-                </>
-              ) : (
-                'Withdraw'
-              )}
+              Withdraw
             </button>
+            
+            <div className="p-3 bg-yellow-50 rounded-lg">
+              <p className="text-sm text-yellow-700 text-center">
+                💡 Withdrawals are only allowed on Fridays.
+              </p>
+            </div>
 
-            <div className="p-4 bg-blue-50 rounded-lg text-sm text-blue-700 space-y-1">
-              <p className="font-semibold text-blue-800 mb-1">Withdrawal Information:</p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Minimum withdrawal: KSh {MIN_WITHDRAWAL}</li>
-                <li className="font-medium">Processing fees (band-based):</li>
-                <ul className="ml-4 list-none space-y-0.5 text-xs">
-                  <li>KSh 200 - 1,000: <strong>KSh 10</strong></li>
-                  <li>KSh 1,001 - 2,000: <strong>KSh 20</strong></li>
-                  <li>KSh 2,001 - 5,000: <strong>KSh 30</strong></li>
-                  <li>KSh 5,001 - 10,000: <strong>KSh 50</strong></li>
-                  <li>Above KSh 10,000: <strong>KSh 100</strong></li>
-                </ul>
-                <li>Withdrawals are allowed any day, any time</li>
+            {/* Withdrawal Instructions */}
+            <div className="p-4 bg-orange-50 rounded-lg">
+              <h5 className="font-semibold text-orange-800 mb-2">Withdrawal Information:</h5>
+              <ul className="text-sm text-orange-700 list-disc list-inside space-y-1">
+                <li>Minimum withdrawal: KES 1,000</li>
+                <li>Withdrawals processed on Fridays only</li>
+                <li>One withdrawal per week allowed</li>
                 <li>Funds are sent to your M-Pesa number</li>
-                <li>Processing may take up to 12 hours after admin approval</li>
+                <li>Processing may take 24-48 hours</li>
               </ul>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Transaction History */}
+      
+      {/* Transaction History Section */}
       <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold text-gray-800">Transaction History</h3>
-          <span className="text-sm text-gray-500">{transactions.length} transaction{transactions.length !== 1 ? 's' : ''}</span>
+          <div className="text-sm text-gray-500">
+            {transactions.length} transactions found
+          </div>
         </div>
-        <TransactionHistory transactions={transactions} title="" limit={30} />
+        
+        <TransactionHistory 
+          transactions={transactions} 
+          title=""
+          limit={20}
+        />
       </div>
+
+      {/* Sandbox Testing Note */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-sm text-yellow-800 text-center">
+            🧪 <strong>Sandbox Mode:</strong> Use test numbers like 254708374149 for M-Pesa testing
+          </p>
+        </div>
+      )}
     </div>
   );
 }

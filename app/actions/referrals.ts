@@ -71,6 +71,10 @@ interface CommissionStats {
     totalEarnings: number; 
     count: number;
   };
+  level2: { 
+    totalEarnings: number; 
+    count: number;
+  };
   total: number;
 }
 
@@ -211,53 +215,38 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
       return { success: false, message: 'User not found' };
     }
 
-    console.log('[v0] Fetching referral commission stats for:', currentUser.username);
-
-    // Get direct referral commissions (KES 70 each)
-    // Look for REFERRAL transactions with level 1 or no level specified (for backward compatibility)
-    const directReferralTransactions = await (Transaction as any).find({
+    // Get Level 1 commissions (direct referrals - KES 70 each)
+    const level1Transactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
-      status: 'completed',
-      $or: [
-        { 'metadata.level': 1 },
-        { 'metadata.level': { $exists: false } },
-        { 'metadata.level': null }
-      ]
+      'metadata.level': 1
     }).lean();
 
-    console.log('[v0] Found referral transactions:', {
-      count: directReferralTransactions.length,
-      transactions: directReferralTransactions.map((tx: any) => ({
-        amount: tx.amount_cents / 100,
-        level: tx.metadata?.level,
-        description: tx.description
-      }))
-    });
+    const level1Earnings = level1Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
 
-    const level1Earnings = directReferralTransactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
+    // Get Level 2 commissions (indirect referrals - KES 10 each)
+    const level2Transactions = await (Transaction as any).find({
+      user_id: currentUser._id,
+      type: 'REFERRAL',
+      'metadata.level': 2
+    }).lean();
 
-    // Get count of referrals where bonus was actually paid
-    const paidReferrals = await (Referral as any).countDocuments({
-      referrer_id: currentUser._id,
-      referral_bonus_paid: true,
-      status: 'bonus_paid'
-    });
+    const level2Earnings = level2Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
+
+    // Calculate total
+    const totalEarnings = level1Earnings + level2Earnings;
 
     const stats: CommissionStats = {
       level1: {
         totalEarnings: level1Earnings,
-        count: directReferralTransactions.length,
-        paidReferrals: paidReferrals
+        count: level1Transactions.length
       },
-      total: level1Earnings
+      level2: {
+        totalEarnings: level2Earnings,
+        count: level2Transactions.length
+      },
+      total: totalEarnings
     };
-
-    console.log('[v0] Commission stats:', {
-      totalEarnings: level1Earnings / 100,
-      count: directReferralTransactions.length,
-      paidReferrals: paidReferrals
-    });
 
     return {
       success: true,

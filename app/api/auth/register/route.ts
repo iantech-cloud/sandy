@@ -6,9 +6,9 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
 // Import Mongoose models and the connection utility
-import { Profile, Referral, DownlineUser, connectToDatabase } from '@/app/lib/models'; 
+import { Profile, Referral, DownlineUser, VerificationToken, connectToDatabase } from '@/app/lib/models'; 
 import { CommissionService } from '@/app/lib/services/commissionService';
-import { formatPhoneNumber, isValidPhoneNumber } from '@/app/lib/utils/phoneFormatter';
+import { sendVerificationEmail } from '@/app/actions/email';
 
 // Configuration for generating new referral IDs
 const REFERRAL_ID_LENGTH = 8;
@@ -37,10 +37,7 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
 
     const body = await request.json();
-    const { username, email: rawEmail, phone, password, referralId: rawReferralId } = body;
-
-    // Normalize email to lowercase and trim whitespace for case-insensitive matching
-    const email = rawEmail ? rawEmail.trim().toLowerCase() : '';
+    const { username, email, phone, password, referralId: rawReferralId } = body;
 
     console.log('Registration attempt for:', { username, email, phone });
 
@@ -48,17 +45,6 @@ export async function POST(request: NextRequest) {
     if (!username || !email || !phone || !password) {
       return NextResponse.json({ message: 'Missing required fields.' }, { status: 400 });
     }
-
-    // Validate and format phone number
-    if (!isValidPhoneNumber(phone)) {
-      return NextResponse.json(
-        { message: 'Invalid phone number format. Please use: 791406285, 0791406285, 254791406285, or +254791406285' }, 
-        { status: 400 }
-      );
-    }
-
-    const formattedPhone = formatPhoneNumber(phone);
-    console.log('Formatted phone number:', formattedPhone);
 
     // Validate password strength
     if (password.length < 6) {
@@ -76,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Check for existing users (Uniqueness check)
-    const existingUser = await Profile.findOne({ $or: [{ username }, { email }, { phone_number: formattedPhone }] });
+    const existingUser = await Profile.findOne({ $or: [{ username }, { email }] });
 
     if (existingUser) {
       if (existingUser.username === username) {
@@ -84,9 +70,6 @@ export async function POST(request: NextRequest) {
       }
       if (existingUser.email === email) {
         return NextResponse.json({ message: 'Email already registered.' }, { status: 409 });
-      }
-      if (existingUser.phone_number === formattedPhone) {
-        return NextResponse.json({ message: 'Phone number already registered.' }, { status: 409 });
       }
     }
 
@@ -120,11 +103,9 @@ export async function POST(request: NextRequest) {
       _id: newUserId,
       username,
       email,
-      phone_number: formattedPhone,
+      phone_number: phone,
       password: hashedPassword, 
       referral_id: newUserReferralId,
-      // CRITICAL FIX: Set referred_by to link the referrer
-      referred_by: referrerProfile ? referrerProfile._id : null,
       // Set initial status as pending approval
       approval_status: 'pending',
       status: 'pending',
@@ -137,9 +118,7 @@ export async function POST(request: NextRequest) {
       email: newProfileData.email,
       username: newProfileData.username,
       referral_id: newUserReferralId,
-      hasReferrer: !!referrerProfile,
-      referrerId: referrerProfile?._id,
-      referrerUsername: referrerProfile?.username
+      hasReferrer: !!referrerProfile
     });
 
     const newUser = await Profile.create(newProfileData);
@@ -149,13 +128,41 @@ export async function POST(request: NextRequest) {
     console.log('User created successfully:', {
       id: createdUser._id,
       username: createdUser.username,
-      referral_id: createdUser.referral_id,
-      referred_by: createdUser.referred_by,
-      referrer_id: referrerProfile?._id
+      referral_id: createdUser.referral_id
     });
 
     // 5. Generate verification token and send email
-    // Email verification is no longer required - users proceed directly to login and activation
+    let emailSent = false;
+    try {
+      const verificationToken = randomUUID();
+      const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      // Delete any existing tokens for this user
+      await VerificationToken.deleteMany({ user_id: newUser._id });
+
+      // Create new verification token
+      await VerificationToken.create({
+        token: verificationToken,
+        user_id: newUser._id,
+        expires: tokenExpiry,
+      });
+
+      console.log('Verification token created for user:', newUser._id);
+
+      // Send verification email using your existing function
+      const emailResult = await sendVerificationEmail(newUser.email, verificationToken);
+      
+      if (emailResult.success) {
+        emailSent = true;
+        console.log('Verification email sent to:', newUser.email);
+      } else {
+        console.log('Failed to send verification email to:', newUser.email);
+        console.log('Email error:', emailResult.error);
+      }
+    } catch (emailError) {
+      console.error('Error sending verification email:', emailError);
+      // Don't fail registration if email fails
+    }
 
     // 6. Create Referral, Downline entries and build network structure if applicable
     if (referrerProfile) {
@@ -185,19 +192,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 7. Success Response - No email verification required, proceed directly to login/activation
+    // 7. Success Response
     return NextResponse.json(
       {
-        message: 'Registration successful! You can now log in and proceed to activation.', 
+        message: 'Registration successful! Your profile is pending approval.', 
         user_id: newUser._id,
         referral_id: newUserReferralId,
-        requires_approval: false,
+        email_sent: emailSent,
+        requires_approval: true,
         requires_activation_payment: true,
-        next_steps: [
-          'Log in to your account',
-          'Pay KES 90 activation fee to activate your account',
-          'Start earning from referrals'
-        ]
+        next_steps: emailSent 
+          ? [
+              'Check your email to verify your account',
+              'Wait for admin approval',
+              'Pay KES 100 activation fee to activate your account',
+              'Start earning from referrals once approved'
+            ]
+          : [
+              'Please contact support to verify your email',
+              'Wait for admin approval',
+              'Pay KES 100 activation fee to activate your account',
+              'Start earning from referrals once approved'
+            ]
       },
       { status: 201 }
     );

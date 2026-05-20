@@ -30,7 +30,7 @@ export function WriterBio({
   facebook = "https://www.facebook.com/share/19qVdp7RGC/",
   tiktok = "i____devvs",
   website = "hustlehubafrica.com",
-  phone = "+254707871154",
+  phone = "+254748264231",
   linkedin = "",
   postsCount 
 }: WriterBioProps) {

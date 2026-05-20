@@ -4,10 +4,7 @@ import { performSpin } from '@/app/actions/spin';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const spinAmountKes = body.spinAmount || 30; // Default to KES 30
-    
-    const result = await performSpin(spinAmountKes);
+    const result = await performSpin();
     return NextResponse.json(result);
   } catch (error) {
     console.error('API Error:', error);

@@ -8,7 +8,6 @@
     "build": "next build --no-lint",
     "start": "next start -p 5000 -H 0.0.0.0",
     "seed": "ts-node scripts/seed-spin-prizes.ts",
-    "seed:admin": "ts-node scripts/seed-admin.ts",
     "clean": "rm -rf .next node_modules out dist build && pnpm store prune && pnpm install",
     "migrate:transactions": "node scripts/migrate-transactions.js",
     "update:company": "node scripts/update-company-id.js"
@@ -26,6 +25,7 @@
     "@vercel/analytics": "^1.5.0",
     "@vercel/blob": "^2.0.0",
     "autoprefixer": "10.4.20",
+    "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",
     "bootstrap": "^5.3.8",
     "chart.js": "^4.5.1",
@@ -73,6 +73,9 @@
     "typescript": "5.7.3"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "bcrypt"
+    ],
     "ignoredBuiltDependencies": [
       "sharp"
     ]

@@ -4,15 +4,15 @@ import { connectToDatabase } from './mongoose';
 
 // --- Mongoose Enums (replaces SQL ENUM types) ---
 
-const UserRoles = ['user', 'support', 'admin'];
-const ApprovalStatuses = ['pending', 'approved', 'rejected'];
-const UserStatuses = ['active', 'inactive', 'suspended', 'banned', 'pending'];
-const PaymentProviders = ['mpesa', 'card', 'bank'];
-const PaymentStatuses = ['pending', 'completed', 'failed', 'refunded'];
-const TicketStatuses = ['open', 'in_progress', 'resolved', 'closed'];
-const TicketPriorities = ['low', 'medium', 'high', 'urgent'];
-const EarningTypes = ['REFERRAL', 'DOWNLINE', 'TASK', 'BONUS', 'SPIN', 'SURVEY'];
-const WithdrawalStatuses = ['pending', 'approved', 'rejected', 'completed'];
+const UserRoles = ['user', 'support', 'admin'] as const;
+const ApprovalStatuses = ['pending', 'approved', 'rejected'] as const;
+const UserStatuses = ['active', 'inactive', 'suspended', 'banned', 'pending'] as const;
+const PaymentProviders = ['mpesa', 'card', 'bank'] as const;
+const PaymentStatuses = ['pending', 'completed', 'failed', 'refunded'] as const;
+const TicketStatuses = ['open', 'in_progress', 'resolved', 'closed'] as const;
+const TicketPriorities = ['low', 'medium', 'high', 'urgent'] as const;
+const EarningTypes = ['REFERRAL', 'DOWNLINE', 'TASK', 'BONUS', 'SPIN', 'SURVEY'] as const;
+const WithdrawalStatuses = ['pending', 'approved', 'rejected', 'completed'] as const;
 const TransactionTypes = [
   'DEPOSIT',
   'WITHDRAWAL',
@@ -28,25 +28,26 @@ const TransactionTypes = [
   'ACCOUNT_ACTIVATION',
   'SPIN_COST',
   'SPIN_PRIZE',
-  'SPIN_WALLET_DEPOSIT',
   'ADMIN_CREDIT',
-  'ADMIN_DEBIT',
-  'UNCLAIMED_REFERRAL'
+  'ADMIN_DEBIT'
 ] as const;
-const BlogPostStatuses = ['draft', 'published', 'archived'];
-const UserContentTypes = ['blog_post', 'social_media', 'product_review', 'video', 'other'];
-const UserContentStatuses = ['pending', 'approved', 'rejected', 'revision_requested'];
-const UserContentPaymentStatuses = ['pending', 'paid', 'rejected'];
+const BlogPostStatuses = ['draft', 'published', 'archived'] as const;
+const UserContentTypes = ['blog_post', 'social_media', 'product_review', 'video', 'other'] as const;
+const UserContentStatuses = ['pending', 'approved', 'rejected', 'revision_requested'] as const;
+const UserContentPaymentStatuses = ['pending', 'paid', 'rejected'] as const;
 
 // M-Pesa Specific Enums
-const MpesaTransactionStatuses = ['initiated', 'pending', 'completed', 'failed', 'cancelled', 'timeout'];
-const MpesaResultCodes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 20, 26, 1032, 1037, 2001];
+const MpesaTransactionStatuses = ['initiated', 'pending', 'completed', 'failed', 'cancelled', 'timeout'] as const;
+const MpesaResultCodes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 20, 26, 1032, 1037, 2001] as const;
 
-const SourceTypes = ['wallet', 'dashboard', 'api', 'activation'];
+// Source Types for Transactions and M-Pesa
+const SourceTypes = ['wallet', 'dashboard', 'api', 'activation'] as const;
 
-const SurveyCategories = ['market_research', 'consumer_insights', 'product_feedback', 'academic', 'other'];
+// Survey Categories
+const SurveyCategories = ['market_research', 'consumer_insights', 'product_feedback', 'academic', 'other'] as const;
 
-const SurveyStatuses = ['draft', 'scheduled', 'active', 'completed', 'cancelled'];
+// Survey Status
+const SurveyStatuses = ['draft', 'scheduled', 'active', 'completed', 'cancelled'] as const;
 
 // Audit Log Action Types - UPDATED FOR USER MANAGEMENT, SPIN & CSV
 const AuditActionTypes = [
@@ -76,24 +77,23 @@ const AuditActions = [
 ] as const;
 
 // Spin to Win Enums - 10 rewards total
-// Note: Do NOT use 'as const' here - Mongoose enum validation requires an actual array
 const SpinPrizeTypes = [
-  'KES_10000',        // KES 10,000 bonus
-  'KES_5000',         // KES 5,000 bonus
-  'KES_2500',         // KES 2,500 bonus
-  'KES_1000',         // KES 1,000 bonus
-  'KES_500',          // KES 500 bonus
-  'KES_200',          // KES 200 bonus
-  'KES_100',          // KES 100 bonus
-  'KES_50',           // KES 50 bonus
-  'FREE_SPIN',        // 1 free spin
+  'BONUS_CREDIT',      // KES 50-200
+  'EXTRA_SPIN',        // 1 free spin
+  'AIRTIME',          // KES 50 airtime
+  'SURVEY_BOOST',     // 5 priority surveys
+  'REFERRAL_BONUS',   // KES 100 bonus
+  'MYSTERY_REWARD',   // Random reward
+  'COURSE_ACCESS',    // Free training
+  'COMMISSION_BOOST', // 10% boost for week
+  'BADGE_UNLOCK',     // Achievement badge
   'ZERO'              // Try again (0 value)
-];
+] as const;
 
-const SpinStatuses = ['pending', 'won', 'lost', 'credited'];
-const UserTiers = ['starter', 'bronze', 'silver', 'gold', 'diamond'];
-const SpinActivationModes = ['manual', 'scheduled'];
-const WeekDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const SpinStatuses = ['pending', 'won', 'lost', 'credited'] as const;
+const UserTiers = ['starter', 'bronze', 'silver', 'gold', 'diamond'] as const;
+const SpinActivationModes = ['manual', 'scheduled'] as const;
+const WeekDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
 // --- Helper function to get or create a model ---
 const getModel = (name: string, schema: Schema) => {
@@ -114,15 +114,7 @@ const ProfileSchema = new Schema({
     default: null,
     maxlength: 50 
   },
-  email: { 
-    type: String, 
-    required: true, 
-    unique: true, 
-    maxlength: 255,
-    lowercase: true,
-    trim: true,
-    index: { unique: true, collation: { locale: 'en', strength: 2 } }
-  },
+  email: { type: String, required: true, unique: true, maxlength: 255 },
   password: {
     type: String,
     required: false,
@@ -170,7 +162,7 @@ const ProfileSchema = new Schema({
   is_verified: { type: Boolean, default: false },
   email_verified_at: { type: Date },
   activation_paid_at: { type: Date },
-  activation_amount_cents: { type: Number, default: 9000 }, // KES 90
+  activation_amount_cents: { type: Number, default: 10000 }, // KES 100
   activation_method: { type: String, enum: ['mpesa', 'manual'], default: 'mpesa' },
   activation_transaction_id: { type: Schema.Types.ObjectId, ref: 'Transaction' },
 
@@ -496,8 +488,6 @@ const AdminAuditLogSchema = new Schema({
       'UPDATE_SPIN_SCHEDULE',
       'VIEW_SPIN_LOGS',
       'MANAGE_SPIN_PRIZES',
-      'SPIN_WIN',
-      'SPIN_ATTEMPT',
       'CREATE_BLOG_POST',
       'UPDATE_BLOG_POST',
       'DELETE_BLOG_POST',
@@ -709,7 +699,7 @@ const TransactionSchema = new Schema({
   description: { type: String, required: true },
   status: {
     type: String,
-    enum: ['pending', 'completed', 'failed', 'cancelled', 'timeout'],
+    enum: ['pending', 'completed', 'failed', 'cancelled'],
     default: 'completed',
     required: true
   },
@@ -1033,12 +1023,6 @@ const MpesaCallbackLogSchema = new Schema({
   },
   
   is_activation_callback: { type: Boolean, default: false },
-  received_from_safaricom: { type: Boolean, default: true },
-  callback_received_at: { type: Date },
-  processed_at: { type: Date },
-  final_status: { type: String },
-  failure_type: { type: String },
-  confirmation_invoice_sent: { type: Boolean },
   
 }, {
   timestamps: { createdAt: 'created_at' },

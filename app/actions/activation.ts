@@ -4,7 +4,6 @@
 import { auth } from '@/auth'; // NextAuth v5 auth import
 import { revalidatePath } from 'next/cache';
 import { connectToDatabase } from '@/app/lib/mongoose';
-import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
 import { 
   Profile, 
   MpesaTransaction, 
@@ -190,23 +189,19 @@ function mapMpesaResultCodeToDatabase(resultCode: string): number {
 }
 
 /**
- * M-Pesa STK Push initiation - matching deposit.ts working pattern exactly
- * Amount is in CENTS - will be converted to KES for M-Pesa
+ * M-Pesa STK Push initiation with proper URL registration and enhanced metadata
  */
 async function initiateMpesaSTKPush(
   phoneNumber: string, 
-  amountCents: number, 
+  amount: number, 
   description: string,
   reference: string,
   activationPaymentId: string
 ): Promise<MpesaSTKPushResult> {
   try {
-    // Convert cents to KES for M-Pesa API
-    const amountKES = Math.floor(amountCents / 100);
-    
     console.log('🔍 M-Pesa STK Push Initiation Started');
     console.log('📱 Phone:', phoneNumber);
-    console.log('💰 Amount (cents):', amountCents, '| Amount (KES):', amountKES);
+    console.log('💰 Amount (cents):', amount, '| Amount (KES):', Math.floor(amount / 100));
     console.log('📝 Description:', description);
     console.log('🏷️ Reference:', reference);
     console.log('🎯 Activation Payment ID:', activationPaymentId);
@@ -240,27 +235,20 @@ async function initiateMpesaSTKPush(
     const accessToken = await getMpesaAccessToken();
     console.log('✅ Access token obtained');
 
-    // Generate timestamp matching deposit.ts format
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    const timestamp = `${year}${month}${day}${hours}${minutes}${seconds}`;
-    
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
     const password = Buffer.from(`${BusinessShortCode}${PassKey}${timestamp}`).toString('base64');
 
     console.log('⏰ Timestamp:', timestamp);
     console.log('🔐 Password (base64):', password.substring(0, 20) + '...');
+
+    const amountInShillings = Math.floor(amount / 100);
     
     const stkPushPayload = {
       BusinessShortCode: BusinessShortCode,
       Password: password,
       Timestamp: timestamp,
       TransactionType: 'CustomerPayBillOnline',
-      Amount: amountKES,
+      Amount: amountInShillings,
       PartyA: phoneNumber,
       PartyB: BusinessShortCode,
       PhoneNumber: phoneNumber,
@@ -504,7 +492,7 @@ async function sendActivationConfirmationInvoice(
       business: {
         name: 'HustleHub Africa',
         address: 'Nairobi, Kenya',
-        phone: '+254 707 871154',
+        phone: '+254 748 264 231',
         email: 'support@hustlehub.africa'
       },
       activationDate: new Date().toLocaleDateString()
@@ -594,10 +582,7 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
     }
 
     // If already final status, return immediately (no need to query M-Pesa again)
-    // This ensures we use the callback-provided data when available
     if (['completed', 'failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status)) {
-      console.log('✅ Transaction already in final state:', mpesaTransaction.status);
-      console.log('📝 Source:', mpesaTransaction.metadata?.callback_processed ? 'Safaricom Callback' : 'Database');
       return {
         success: true,
         data: {
@@ -608,7 +593,7 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
           isActivationPayment: true,
           completedAt: mpesaTransaction.completed_at,
           failedAt: mpesaTransaction.failed_at,
-          source: mpesaTransaction.metadata?.callback_processed ? 'safaricom_callback' : 'database'
+          source: 'database'
         },
         message: `Payment status: ${mpesaTransaction.status}`
       };
@@ -616,82 +601,43 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
 
     // Query M-Pesa for latest status
     console.log('📡 Querying M-Pesa API for activation payment status...');
-    
-    let accessToken, timestamp, password, queryPayload;
-    
-    try {
-      accessToken = await getMpesaAccessToken();
-      timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
-      password = Buffer.from(`${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`).toString('base64');
+    const accessToken = await getMpesaAccessToken();
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    const password = Buffer.from(`${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`).toString('base64');
 
-      queryPayload = {
-        BusinessShortCode: process.env.MPESA_SHORTCODE,
-        Password: password,
-        Timestamp: timestamp,
-        CheckoutRequestID: checkoutRequestId
-      };
-    } catch (tokenError) {
-      console.error('❌ Failed to get M-Pesa access token:', tokenError);
-      // Return current transaction status from database
-      return {
-        success: true,
-        data: {
-          status: mpesaTransaction.status,
-          resultCode: mpesaTransaction.result_code?.toString(),
-          resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
-          source: 'database_fallback',
-          isActivationPayment: true,
-          message: 'Could not reach M-Pesa service, using last known status'
-        }
-      };
-    }
+    const queryPayload = {
+      BusinessShortCode: process.env.MPESA_SHORTCODE,
+      Password: password,
+      Timestamp: timestamp,
+      CheckoutRequestID: checkoutRequestId
+    };
 
     const mpesaApiUrl = (process.env.MPESA_ENVIRONMENT === 'production') 
       ? 'https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query'
       : 'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query';
 
-    let queryResponse;
-    try {
-      queryResponse = await fetch(mpesaApiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(queryPayload),
-        signal: AbortSignal.timeout(10000), // 10 second timeout
-      });
-    } catch (fetchError) {
-      console.error('❌ M-Pesa API fetch error:', fetchError);
-      // Return current transaction status from database as fallback
-      return {
-        success: true,
-        data: {
-          status: mpesaTransaction.status,
-          resultCode: mpesaTransaction.result_code?.toString(),
-          resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
-          source: 'database_fallback',
-          isActivationPayment: true,
-          fallbackReason: 'M-Pesa API unavailable'
-        },
-        message: 'M-Pesa service temporarily unavailable. Using last known status. Please check again in a moment.'
-      };
-    }
+    const queryResponse = await fetch(mpesaApiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(queryPayload),
+    });
 
     if (!queryResponse.ok) {
       const errorText = await queryResponse.text();
       console.error('❌ M-Pesa query API error:', errorText);
-      // Return current transaction status from database
       return {
         success: true,
         data: {
           status: mpesaTransaction.status,
           resultCode: mpesaTransaction.result_code?.toString(),
-          resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
+          resultDesc: mpesaTransaction.result_desc,
           source: 'database_fallback',
           isActivationPayment: true
         },
-        message: 'Using last known status. Please wait for payment confirmation.'
+        message: 'Using last known status'
       };
     }
 
@@ -780,24 +726,9 @@ export async function checkActivationPaymentStatus(checkoutRequestId: string): P
 
   } catch (error) {
     console.error('💥 Check activation payment status error:', error);
-    
-    // Provide more specific error messages based on the error type
-    let errorMessage = 'Failed to check activation payment status. Please try again.';
-    
-    if (error instanceof TypeError && error.message.includes('fetch')) {
-      errorMessage = 'Network error while checking payment status. The M-Pesa service may be temporarily unavailable. Please check again in a moment.';
-    } else if (error instanceof Error && error.message.includes('timeout')) {
-      errorMessage = 'Payment status check timed out. Please wait a moment and try again.';
-    }
-    
     return { 
       success: false, 
-      message: errorMessage,
-      data: {
-        status: 'error',
-        resultCode: '9999',
-        resultDesc: 'Unable to verify payment status'
-      }
+      message: 'Failed to check activation payment status. Please try again.' 
     };
   }
 }
@@ -934,27 +865,18 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       return { success: false, message: 'Account is already activated' };
     }
 
-    // Validate and format phone number
-    if (!isValidPhoneNumber(phoneNumber)) {
-      return { success: false, message: 'Invalid phone number format. Use 791406285, 0791406285, 254791406285, or +254791406285' };
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
+    let formattedPhone = cleanPhone;
+    
+    if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
+      formattedPhone = `254${cleanPhone.substring(1)}`;
+    } else if (cleanPhone.startsWith('254') && cleanPhone.length === 12) {
+      formattedPhone = cleanPhone;
+    } else {
+      return { success: false, message: 'Invalid phone number format. Use 07XXXXXXXX or 2547XXXXXXXX' };
     }
 
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    const mpesaPhone = getMpesaPhoneFormat(formattedPhone);
-
-    // CRITICAL: Verify that the phone number matches the user's registered phone
-    if (!phoneNumbersMatch(mpesaPhone, userProfile.phone_number)) {
-      console.error('[v0] Phone number mismatch for activation:', {
-        providedPhone: mpesaPhone,
-        registeredPhone: userProfile.phone_number,
-        userId: userProfile._id
-      });
-      return { success: false, message: 'Phone number does not match your registered phone number. Activation payments must be made from your registered phone number.' };
-    }
-
-    // Always use 9000 cents (KES 90) as the standard activation fee
-    // This ensures consistency regardless of any legacy values in user profiles
-    const activationAmount = 9000; // KES 90 - standard activation fee
+    const activationAmount = userProfile.activation_amount_cents || 9000; // KES 90
 
     console.log('🎯 Starting activation payment process:');
     console.log('👤 User:', userProfile.username);
@@ -965,7 +887,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       user_id: userProfile._id,
       amount_cents: activationAmount,
       provider: 'mpesa',
-      phone_number: mpesaPhone,
+      phone_number: formattedPhone,
       status: 'pending',
       metadata: {
         activation_type: 'account_activation',
@@ -982,7 +904,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       user_id: userProfile._id,
       action: 'initiated',
       amount_cents: activationAmount,
-      phone_number: mpesaPhone,
+      phone_number: formattedPhone,
       status: 'pending',
       metadata: {
         activation_payment_id: activationPayment._id
@@ -991,7 +913,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
     await activationLog.save();
 
     const mpesaResult = await initiateMpesaSTKPush(
-      mpesaPhone,
+      formattedPhone,
       activationAmount,
       `Activation fee for ${userProfile.username}`,
       `ACTIVATION-${userProfile._id}`,
@@ -1022,8 +944,7 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
         metadata: {
           activation_payment_id: activationPayment._id,
           callback_url: mpesaResult.callbackUrl,
-          user_username: userProfile.username,
-          deposit_type: 'activation'
+          user_username: userProfile.username
         }
       });
       await mpesaTransaction.save();
@@ -1035,16 +956,13 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       const transaction = await (Transaction as any).create({
         user_id: userProfile._id,
         amount_cents: activationAmount,
-        type: 'ACCOUNT_ACTIVATION',
+        type: 'ACTIVATION',
         description: `Account activation fee via M-Pesa from ${formattedPhone}`,
         status: 'pending',
         mpesa_transaction_id: mpesaTransaction._id,
         
-        // ✅ REQUIRED fields for transaction tracking.
-        // target_type must match schema enum ['user','company'].
-        // deposit_type in metadata identifies this as an activation payment
-        // so the callback can route it correctly.
-        target_type: 'user',
+        // ✅ REQUIRED fields for transaction tracking
+        target_type: 'activation',
         target_id: userProfile._id.toString(),
         
         metadata: {
@@ -1195,33 +1113,21 @@ export async function checkMpesaPaymentStatus(checkoutRequestId: string): Promis
 
 /**
  * ✅ FIXED: Complete activation after successful payment - Update correct schema fields
- * NOTE: This is called from MPESA callback (server-to-server), so no session required
  */
 export async function completeActivationAfterPayment(activationPaymentId: string): Promise<ApiResponse<ActivationCompletionData>> {
   try {
     await connectToDatabase();
 
-    // Get activation payment first - this will tell us which user to activate
-    const activationPayment = await (ActivationPayment as any).findById(activationPaymentId);
-    
-    if (!activationPayment) {
-      console.error(`[v0] Activation payment not found: ${activationPaymentId}`);
-      return { success: false, message: 'Activation payment not found' };
+    const session = await auth();
+    if (!session?.user?.email) {
+      return { success: false, message: 'User not authenticated' };
     }
 
-    console.log(`[v0] Processing activation for payment:`, {
-      activationPaymentId,
-      userId: activationPayment.user_id,
-      status: activationPayment.status,
-      amount: activationPayment.amount_cents / 100
-    });
+    const userProfile = await (Profile as any).findOne({ email: session.user.email });
+    const activationPayment = await (ActivationPayment as any).findById(activationPaymentId);
 
-    // Get user profile using the user_id from the activation payment (not from session)
-    const userProfile = await (Profile as any).findById(activationPayment.user_id);
-
-    if (!userProfile) {
-      console.error(`[v0] User profile not found for ID: ${activationPayment.user_id}`);
-      return { success: false, message: 'User profile not found' };
+    if (!userProfile || !activationPayment) {
+      return { success: false, message: 'User or activation payment not found' };
     }
 
     // ✅ FIXED: Check if already activated using correct fields
@@ -1270,26 +1176,13 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     await activationFeeTransaction.save();
 
     // =============================================================================
-    // STEP 2: Process Referral Bonus - KES 70 per Direct Referral
+    // STEP 2: Process Referral Bonus with Tiered Structure
     // =============================================================================
     let referralBonus = null;
 
     if (userProfile.referred_by) {
-      console.log(`[v0] User has referrer:`, {
-        userId: userProfile._id,
-        username: userProfile.username,
-        referred_by: userProfile.referred_by,
-        type: typeof userProfile.referred_by
-      });
-
       try {
         const referrer = await (Profile as any).findById(userProfile.referred_by);
-        
-        console.log(`[v0] Referrer lookup:`, {
-          referrer_id: userProfile.referred_by,
-          found: !!referrer,
-          referrer_username: referrer?.username
-        });
         
         if (referrer) {
           const referralRecord = await (Referral as any).findOne({
@@ -1297,24 +1190,17 @@ export async function completeActivationAfterPayment(activationPaymentId: string
             referred_id: userProfile._id
           });
 
-          console.log(`[v0] Referral record lookup:`, {
-            referrer_id: referrer._id,
-            referred_id: userProfile._id,
-            found: !!referralRecord,
-            already_paid: referralRecord?.referral_bonus_paid
-          });
-
           if (referralRecord && !referralRecord.referral_bonus_paid) {
-            // ✅ FIXED: Referral bonus is KES 70 = 7,000 cents (NOT 70,000)
-            const REFERRAL_BONUS_CENTS = 7000; // KES 70
-            const referralLevel = 1; // Direct referral (Level 1)
-
-            console.log(`[v0] Processing referral bonus:`, {
-              referrer: referrer.username,
-              newUser: userProfile.username,
-              bonusAmount: REFERRAL_BONUS_CENTS / 100,
-              bonusType: 'Direct Referral'
+            // Count how many direct referrals have been activated by this referrer
+            const activatedDirectReferrals = await (Referral as any).countDocuments({
+              referrer_id: referrer._id,
+              referral_bonus_paid: true,
+              'metadata.level': 0 // Direct referrals only
             });
+
+            // Single tier referral bonus: KES 70 (70,000 cents) for all direct referrals
+            const REFERRAL_BONUS_CENTS = 70000;
+            const referralLevel = 0; // Direct referral
 
             // Create transaction for direct referral bonus
             const referralTransaction = new (Transaction as any)({
@@ -1323,32 +1209,25 @@ export async function completeActivationAfterPayment(activationPaymentId: string
               user_id: referrer._id,
               amount_cents: REFERRAL_BONUS_CENTS,
               type: 'REFERRAL',
-              description: `Referral bonus for ${userProfile.username}'s activation (KES 70)`,
+              description: `Referral bonus for ${userProfile.username}'s activation`,
               status: 'completed',
               source: 'activation',
               balance_before_cents: referrer.balance_cents,
               balance_after_cents: referrer.balance_cents + REFERRAL_BONUS_CENTS,
               metadata: {
-                referred_user_id: userProfile._id.toString(),
+                referred_user_id: userProfile._id,
                 referred_username: userProfile.username,
-                activation_payment_id: activationPayment._id.toString(),
-                referral_id: referralRecord._id.toString(),
-                level: referralLevel,
-                bonus_amount: REFERRAL_BONUS_CENTS
+                activation_payment_id: activationPayment._id,
+                referral_id: referralRecord._id,
+                level: referralLevel
               }
             });
             await referralTransaction.save();
 
-            // Update referrer balance and earnings
+            // Update referrer balance
             referrer.balance_cents += REFERRAL_BONUS_CENTS;
             referrer.total_earnings_cents += REFERRAL_BONUS_CENTS;
             await referrer.save();
-
-            console.log(`[v0] Referrer balance updated:`, {
-              referrer: referrer.username,
-              newBalance: referrer.balance_cents / 100,
-              earned: REFERRAL_BONUS_CENTS / 100
-            });
 
             // Update referral record
             referralRecord.referral_bonus_paid = true;
@@ -1358,9 +1237,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
             referralRecord.referred_user_activated = true;
             referralRecord.referred_user_activated_at = new Date();
             referralRecord.metadata = {
-              level: referralLevel,
-              bonus_amount: REFERRAL_BONUS_CENTS,
-              activated_at: new Date().toISOString()
+              level: referralLevel
             };
             await referralRecord.save();
 
@@ -1369,7 +1246,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
               user_id: referrer._id,
               amount_cents: REFERRAL_BONUS_CENTS,
               type: 'REFERRAL',
-              description: `Referral bonus for ${userProfile.username}'s activation`,
+              description: `Referral bonus for ${userProfile.username}`,
               source_id: referralRecord._id,
               source_type: 'referral',
               transaction_id: referralTransaction._id,
@@ -1377,8 +1254,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
               processed_at: new Date(),
               metadata: {
                 level: referralLevel,
-                referred_user_id: userProfile._id.toString(),
-                bonus_amount: REFERRAL_BONUS_CENTS
+                bonus_tier: activatedDirectReferrals < 2 ? 'first_2' : 'subsequent'
               }
             });
             await earning.save();
@@ -1388,75 +1264,49 @@ export async function completeActivationAfterPayment(activationPaymentId: string
               referrer_username: referrer.username,
               amount_cents: REFERRAL_BONUS_CENTS,
               transaction_id: referralTransaction._id,
-              level: referralLevel
+              level: referralLevel,
+              bonus_tier: activatedDirectReferrals < 2 ? 'first_2' : 'subsequent'
             };
 
-            console.log(`✅ BONUS PAID: ${referrer.username} earned KES 70`, {
-              referrer: referrer.username,
-              referrerId: referrer._id,
-              newUser: userProfile.username,
-              bonusAmount: REFERRAL_BONUS_CENTS / 100,
-              transactionId: referralTransaction._id,
-              newBalance: referrer.balance_cents / 100
-            });
+            console.log(`✅ Direct referral bonus paid: KES ${REFERRAL_BONUS_CENTS / 100}`);
 
-          } else if (referralRecord && referralRecord.referral_bonus_paid) {
-            console.log(`[v0] Referral bonus already paid for ${userProfile.username}`);
-          } else {
-            console.log(`[v0] No referral record found for this user pair`);
+
           }
-        } else {
-          console.log(`[v0] Referrer not found by ID: ${userProfile.referred_by}`);
         }
       } catch (referralError) {
         console.error('⚠️ Error processing referral bonus:', referralError);
       }
-    } else {
-      console.log(`[v0] User has no referrer - no bonus to award`);
     }
 
     // =============================================================================
-    // STEP 3: Record Company Revenue - KES 20 (2,000 cents) per activation
+    // STEP 3: Record Company Revenue (Updated calculation)
     // =============================================================================
-    // Breakdown of KES 90 activation fee:
-    // - If has referrer: Referrer gets KES 70, Company gets KES 20
-    // - If no referrer: Company gets KES 90 (unclaimed referral bonus)
-    
     let companyRevenueCents;
-    let unclaimedReferralCents = 0;
 
-    if (userProfile.referred_by && referralBonus) {
-      // ✅ FIXED: With referrer, company gets KES 20 = 2,000 cents
-      companyRevenueCents = 2000; // KES 20
-      unclaimedReferralCents = 0;
+    if (userProfile.referred_by) {
+      // User has referrer - direct referral bonus is always 70,000 cents (KES 70)
+      const directBonus = 70000; // KES 70
+      
+      // Total activation fee (90000) - direct bonus
+      companyRevenueCents = activationPayment.amount_cents - directBonus;
     } else {
-      // No referrer OR bonus wasn't paid - company gets full amount
-      // Split into actual company fee + unclaimed referral bonus
-      companyRevenueCents = 2000; // Company fee (KES 20)
-      unclaimedReferralCents = 7000; // Unclaimed referral bonus (KES 70)
+      // No referrer - company gets full amount
+      companyRevenueCents = activationPayment.amount_cents;
     }
-
-    console.log(`[v0] Company revenue calculation:`, {
-      totalFee: activationPayment.amount_cents / 100,
-      hasReferrer: !!userProfile.referred_by,
-      bonusWasPaid: !!referralBonus,
-      companyRevenue: companyRevenueCents / 100,
-      unclaimedReferral: unclaimedReferralCents / 100
-    });
 
     const companyRevenueResult = await createCompanyRevenueTransaction(
       companyRevenueCents,
       'COMPANY_REVENUE',
-      `Company fee from ${userProfile.username}'s activation (KES 20)`,
+      userProfile.referred_by 
+        ? `Company revenue from ${userProfile.username}'s activation (after bonuses)`
+        : `Company revenue from ${userProfile.username}'s activation (no referrer)`,
       {
         total_activation_fee: activationPayment.amount_cents,
         referral_bonus_paid: referralBonus ? referralBonus.amount_cents : 0,
-        company_revenue: companyRevenueCents,
-        unclaimed_referral: unclaimedReferralCents,
         net_company_revenue: companyRevenueCents,
         has_referrer: !!userProfile.referred_by,
-        activation_payment_id: activationPayment._id.toString(),
-        user_id: userProfile._id.toString()
+        activation_payment_id: activationPayment._id,
+        user_id: userProfile._id
       },
       userProfile._id.toString()
     );
@@ -1469,23 +1319,19 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     // =============================================================================
     // STEP 4: Record Unclaimed Referral Revenue (if no referrer)
     // =============================================================================
-    if (unclaimedReferralCents > 0) {
-      // If no referrer or bonus wasn't paid, record unclaimed referral bonus
-      const unclaimedResult = await createCompanyRevenueTransaction(
-        unclaimedReferralCents, // KES 70 unclaimed referral bonus
+    if (!userProfile.referred_by) {
+      // If no referrer, the potential bonuses go to company
+      await createCompanyRevenueTransaction(
+        70000, // Maximum potential direct bonus
         'UNCLAIMED_REFERRAL',
-        `Unclaimed referral bonus from ${userProfile.username}'s activation (KES 70)`,
+        `Unclaimed referral bonus from ${userProfile.username}'s activation (no referrer)`,
         {
-          activation_payment_id: activationPayment._id.toString(),
-          user_id: userProfile._id.toString(),
-          reason: userProfile.referred_by ? 'bonus_failed' : 'no_referrer'
+          activation_payment_id: activationPayment._id,
+          user_id: userProfile._id,
+          reason: 'no_referrer'
         },
         userProfile._id.toString()
       );
-
-      if (unclaimedResult.success) {
-        console.log(`[v0] Unclaimed referral bonus recorded: KES ${unclaimedReferralCents / 100}`);
-      }
     }
 
     // =============================================================================
@@ -1494,7 +1340,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     userProfile.is_active = true;
     userProfile.status = 'active';
     userProfile.is_verified = true;
-    userProfile.approval_status = 'approved'; // ��� FIXED: Set approval_status to 'approved'
+    userProfile.approval_status = 'approved'; // ✅ FIXED: Set approval_status to 'approved'
     userProfile.is_approved = true;
     userProfile.level = 1;
     userProfile.rank = 'Bronze'; // ✅ FIXED: Change rank from 'Unactivated' to 'Bronze'

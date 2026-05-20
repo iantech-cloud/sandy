@@ -81,7 +81,7 @@ export default function ContactPage() {
       'description': 'Africa\'s Premier Earning Platform helping individuals and businesses succeed in the digital economy.',
       'url': process.env.NEXTAUTH_URL || 'https://hustlehubafrica.com',
       'email': 'hello@hustlehubafrica.com',
-      'telephone': '+254-707-871154',
+      'telephone': '+254-748-264-231',
       'address': {
         '@type': 'PostalAddress',
         'addressLocality': 'Nairobi',

@@ -174,19 +174,16 @@ const handleNextAuthError = (errorParam: string | null): { message: string } => 
 
   switch (errorParam) {
     case 'CredentialsSignin':
-      return { message: 'Invalid email or password. Please check your credentials and try again.' };
+      return { message: 'Invalid email or password. Please try again.' };
     case 'OAuthSignin':
-      return { message: 'Unable to sign in with Google. Please try again or use a different method.' };
+      return { message: 'Error signing in with an OAuth provider.' };
     case 'OAuthCallback':
-      return { message: 'Google sign-in was interrupted. Please try again.' };
+      return { message: 'An error occurred while processing the login callback.' };
     case 'EmailSignin':
-      return { message: 'Unable to send magic link. Please check your email address and try again.' };
+      return { message: 'Error sending the email magic link.' };
     case 'Configuration':
-    case 'CallbackRouteError':
-      // These generic errors usually wrap specific auth errors - show a helpful message
-      return { message: 'Invalid email or password. Please check your credentials and try again.' };
+      return { message: 'Server configuration error. Please contact support.' };
     default:
-      // Return the decoded error message directly for custom auth errors
       return { message: decodeURIComponent(errorParam).replace(/_+/g, ' ') };
   }
 };
@@ -628,8 +625,15 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
       if (authMethod === 'credentials') {
         console.log('Credentials user detected - using credentials flow');
         
-        // Email verification is no longer required - users proceed directly to activation
-        console.log('Credentials user - Proceeding to check activation status');
+        // Check email verification FIRST for credentials users
+        if (!user.is_verified) {
+          console.log('Credentials user - Email not verified, redirecting to verify-email');
+          router.push('/auth/verify-email');
+          return;
+        }
+
+        // Profile is already completed during signup for credentials users
+        console.log('Credentials user - Profile completed during signup, skipping profile check');
 
         // Check activation payment
         if (!user.isActivationPaid && !user.activation_paid_at) {
@@ -676,25 +680,10 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
     setMessage(null);
 
     try {
-      // Check if user is switching accounts (different email than current session)
-      if (hasExistingSession) {
-        const currentSession = await getSession();
-        if (currentSession?.user?.email && currentSession.user.email !== email) {
-          console.log('[v0] Account switch detected - logging out current session');
-          console.log('[v0] Current user:', currentSession.user.email, 'Attempting login as:', email);
-          // Log out the current session first before signing in with new account
-          await signOut({ redirect: false });
-          // Small delay to ensure logout completes
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-
-      // Normalize email to lowercase and trim whitespace for case-insensitive matching
-      const normalizedEmail = email.trim().toLowerCase();
-      console.log('Attempting login for:', normalizedEmail);
+      console.log('Attempting login for:', email);
       
       const result = await signIn('credentials', {
-        email: normalizedEmail,
+        email,
         password,
         token2FA: requires2FA ? token2FA : undefined,
         redirect: false,
@@ -746,25 +735,10 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
     setMessage(null);
 
     try {
-      // Check if user is switching accounts (different email than current session)
-      if (hasExistingSession) {
-        const currentSession = await getSession();
-        if (currentSession?.user?.email && currentSession.user.email !== email) {
-          console.log('[v0] Account switch detected in 2FA flow - logging out current session');
-          console.log('[v0] Current user:', currentSession.user.email, 'Attempting login as:', email);
-          // Log out the current session first before signing in with new account
-          await signOut({ redirect: false });
-          // Small delay to ensure logout completes
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-
-      // Normalize email to lowercase and trim whitespace for case-insensitive matching
-      const normalizedEmail = email.trim().toLowerCase();
-      console.log('Submitting 2FA verification for:', normalizedEmail);
+      console.log('Submitting 2FA verification for:', email);
       
       const result = await signIn('credentials', {
-        email: normalizedEmail,
+        email,
         password,
         token2FA,
         redirect: false,

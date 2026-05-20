@@ -116,7 +116,7 @@ export default function TransactionsPage() {
       .reduce((sum, t) => sum + t.amount, 0);
     
     // Company revenue (money earned BY company)
-    const companyRevenueTypes = ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'UNCLAIMED_REFERRAL', 'SPIN_WALLET_DEPOSIT'];
+    const companyRevenueTypes = ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'UNCLAIMED_REFERRAL'];
     const companyRevenue = companyTxns
       .filter(t => companyRevenueTypes.includes(t.type))
       .reduce((sum, t) => sum + t.amount, 0);
@@ -186,7 +186,7 @@ export default function TransactionsPage() {
 
   const getTypeColor = (type: string, targetType: string) => {
     // Company revenue = green (income)
-    if (targetType === 'company' && ['COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SPIN_WALLET_DEPOSIT'].includes(type)) {
+    if (targetType === 'company' && ['COMPANY_REVENUE', 'UNCLAIMED_REFERRAL'].includes(type)) {
       return 'text-green-600';
     }
     // User payments = red (expense from company view)
@@ -205,7 +205,7 @@ export default function TransactionsPage() {
   };
 
   const getTypeIcon = (type: string, targetType: string) => {
-    if (targetType === 'company' && ['COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SPIN_WALLET_DEPOSIT'].includes(type)) {
+    if (targetType === 'company' && ['COMPANY_REVENUE', 'UNCLAIMED_REFERRAL'].includes(type)) {
       return '+';
     }
     if (targetType === 'user' && ['REFERRAL', 'BONUS', 'TASK_PAYMENT', 'SURVEY', 'SPIN_WIN'].includes(type)) {
@@ -393,7 +393,6 @@ export default function TransactionsPage() {
             <option value="all">All Types</option>
             <option value="COMPANY_REVENUE">Company Revenue</option>
             <option value="UNCLAIMED_REFERRAL">Unclaimed Referral</option>
-            <option value="SPIN_WALLET_DEPOSIT">Spin Wallet Deposit</option>
             <option value="REFERRAL">Referral Bonus</option>
             <option value="BONUS">Bonus</option>
             <option value="TASK_PAYMENT">Task Payment</option>

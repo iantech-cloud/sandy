@@ -5,7 +5,6 @@
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
 import { connectToDatabase, Profile, MpesaTransaction, Transaction } from '../lib/models';
-import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '../lib/utils/phoneFormatter';
 
 // M-Pesa configuration matching transactions.ts
 const MPESA_CONFIG = {
@@ -39,7 +38,6 @@ interface DepositHistoryItem {
     description: string;
     date: string;
     status: string;
-    transaction_code?: string;
     mpesaReceiptNumber?: string;
 }
 
@@ -169,13 +167,16 @@ async function validateDeposit(
         return { valid: false, message: 'Amount must be between KES 10 and KES 70,000' };
     }
 
-    // Validate and format phone number
-    if (!isValidPhoneNumber(phoneNumber)) {
-        return { valid: false, message: 'Invalid phone number format. Use 791406285, 0791406285, 254791406285, or +254791406285' };
+    let formattedPhone = phoneNumber;
+    if (phoneNumber.startsWith('0') && phoneNumber.length === 10) {
+        formattedPhone = `254${phoneNumber.substring(1)}`;
+    } else if (phoneNumber.startsWith('+254')) {
+        formattedPhone = phoneNumber.substring(1);
     }
 
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    const mpesaPhone = getMpesaPhoneFormat(formattedPhone);
+    if (!formattedPhone.match(/^254[0-9]{9}$/)) {
+        return { valid: false, message: 'Invalid phone number format. Use 07XXXXXXXX, 2547XXXXXXXX, or +2547XXXXXXXX' };
+    }
 
     await connectToDatabase();
     const user = await (Profile as any).findOne({ _id: userId });
@@ -183,33 +184,17 @@ async function validateDeposit(
         return { valid: false, message: 'User not found' };
     }
 
-    // CRITICAL: Verify that the phone number matches the user's registered phone
-    if (!phoneNumbersMatch(mpesaPhone, user.phone_number)) {
-        console.error('[v0] Phone number mismatch:', {
-            providedPhone: mpesaPhone,
-            registeredPhone: user.phone_number,
-            userId: userId
-        });
-        return { valid: false, message: 'Phone number does not match your registered phone number. Deposits can only be made from your registered phone number.' };
-    }
-
-    // Only block if there is a *recent* in-flight wallet deposit (within the
-    // last 3 minutes). Stale 'initiated'/'pending' records left behind by failed
-    // spin-wallet or activation deposits must not prevent new wallet deposits.
-    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
     const pendingMpesaTransaction = await (MpesaTransaction as any).findOne({
         user_id: userId,
         status: { $in: ['initiated', 'pending'] },
-        phone_number: mpesaPhone,
-        source: 'wallet',
-        created_at: { $gte: threeMinutesAgo },
+        phone_number: formattedPhone,
     });
 
     if (pendingMpesaTransaction) {
-        return { valid: false, message: 'You have a pending M-Pesa deposit in progress. Please wait for it to complete before starting another.' };
+        return { valid: false, message: 'You have a pending M-Pesa transaction. Please complete or wait for it to be processed.' };
     }
 
-    return { valid: true, message: 'Validation passed', data: { formattedPhone: mpesaPhone } };
+    return { valid: true, message: 'Validation passed', data: { formattedPhone } };
 }
 
 /**
@@ -415,10 +400,9 @@ export async function processMpesaDeposit(depositData: {
                 stk_push_response: stkData,
                 result_code: 1032,
                 result_desc: 'STK Push initiated successfully',
-                source: 'wallet',
                 metadata: {
                     user_username: currentUser.username,
-                    deposit_type: 'wallet',
+                    deposit_type: 'wallet_topup',
                     initiated_at: new Date().toISOString(),
                     callback_url: MPESA_CONFIG.callbackURL
                 }
@@ -605,9 +589,6 @@ export async function checkMpesaPaymentStatus(checkoutRequestId: string): Promis
 
         if (['completed', 'failed', 'cancelled', 'timeout'].includes(safeStatus)) {
             try {
-                // Only sync the Transaction record status. Wallet crediting is
-                // exclusively handled by the M-Pesa callback route to prevent
-                // multi-credit from repeated polling cycles.
                 await syncTransactionWithMpesaStatus(
                     mpesaTransaction._id,
                     safeStatus,
@@ -615,8 +596,12 @@ export async function checkMpesaPaymentStatus(checkoutRequestId: string): Promis
                     queryData.ResultDesc,
                     queryData.MpesaReceiptNumber
                 );
+
+                if (safeStatus === 'completed') {
+                    await updateUserBalance(mpesaTransaction.user_id, mpesaTransaction.amount_cents);
+                }
             } catch (updateError) {
-                console.error('❌ Failed to sync transaction status:', updateError);
+                console.error('❌ Failed to update transaction or user balance:', updateError);
             }
         }
 
@@ -728,6 +713,7 @@ export async function getDepositHistory(limit: number = 20, page: number = 1): P
 
         const deposits = await (Transaction as any).find({
             user_id: currentUser._id,
+            type: 'DEPOSIT'
         })
         .sort({ created_at: -1 })
         .skip(skip)
@@ -736,6 +722,7 @@ export async function getDepositHistory(limit: number = 20, page: number = 1): P
 
         const total = await (Transaction as any).countDocuments({
             user_id: currentUser._id,
+            type: 'DEPOSIT'
         });
 
         const transformedDeposits: DepositHistoryItem[] = deposits.map((deposit: any) => ({
@@ -745,8 +732,7 @@ export async function getDepositHistory(limit: number = 20, page: number = 1): P
             description: deposit.description,
             date: deposit.created_at?.toISOString() || new Date().toISOString(),
             status: deposit.status,
-            transaction_code: deposit.transaction_code,
-            mpesaReceiptNumber: deposit.metadata?.mpesa_receipt_number || deposit.metadata?.mpesaReceiptNumber
+            mpesaReceiptNumber: deposit.metadata?.mpesa_receipt_number
         }));
 
         return {
@@ -789,16 +775,10 @@ export async function getUserBalance(): Promise<BalanceResponse> {
             return { success: false, message: 'User not found' };
         }
 
-        const balanceInKes = (currentUser.balance_cents || 0) / 100;
-        console.log('[v0] getUserBalance debug:', {
-          balance_cents: currentUser.balance_cents || 0,
-          balance_kes: balanceInKes,
-          formula: `${(currentUser.balance_cents || 0)} / 100 = ${balanceInKes}`
-        });
         return {
             success: true,
             data: {
-                balance: balanceInKes,
+                balance: (currentUser.balance_cents || 0) / 100,
                 balance_cents: currentUser.balance_cents || 0
             },
             message: 'Balance fetched successfully'

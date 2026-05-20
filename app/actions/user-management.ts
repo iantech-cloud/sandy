@@ -84,7 +84,7 @@ async function sendAdminActivationConfirmationInvoice(
     const invoiceData = {
       invoiceNumber: `ADMIN-ACT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       originalInvoiceNumber: `MANUAL-${userProfile._id}`,
-      amount: 90, // KSH 90 activation fee
+      amount: 100, // KSH 100 activation fee
       paymentDate: new Date().toLocaleDateString(),
       transactionId: `ADMIN-${adminProfile._id}-${Date.now()}`,
       paymentMethod: 'admin' as const,
@@ -95,7 +95,7 @@ async function sendAdminActivationConfirmationInvoice(
       business: {
         name: 'HustleHub Africa',
         address: 'Nairobi, Kenya',
-        phone: '+254 707 871154',
+        phone: '+254 748 264 231',
         email: 'support@hustlehub.africa'
       },
       activationDate: new Date().toLocaleDateString(),
@@ -374,7 +374,7 @@ export async function rejectUserAccount(userId: string, rejectionReason: string)
   }
 }
 
-// Activate user account with FIXED TIERED financial logic (KES 90 activation fee)
+// Activate user account with FIXED TIERED financial logic (KSH 100 activation fee)
 export async function activateUserAccount(userId: string, activationNotes?: string): Promise<{
   success: boolean;
   message: string;
@@ -498,7 +498,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
     const company = await getOrCreateCompany();
 
     // ============================================================================
-    // STEP 5: Company receives the FULL KES 90 activation fee
+    // STEP 5: Company receives the FULL KES 100 activation fee
     // This happens regardless of whether user paid or admin activated
     // ============================================================================
     const balanceBeforeCompanyCredit = company.wallet_balance_cents;
@@ -530,7 +530,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
     });
     await companyRevenueTransaction.save({ session });
 
-    console.log(`✅ Company credited with KES 90 activation fee from ${user.username}`);
+    console.log(`✅ Company credited with KES 100 activation fee from ${user.username}`);
 
     // ============================================================================
     // STEP 6: Process referral bonuses with TIERED STRUCTURE
