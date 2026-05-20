@@ -86,17 +86,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
 
           const user = await Profile.findOne({ email: credentials.email }).select('+password');
-          if (!user) throw new Error('Invalid email or password.');
+          if (!user) throw new Error('Email address not found. Please check and try again or register a new account.');
 
           const userId = user._id?.toString();
-          if (!userId) throw new Error('Invalid user data structure.');
+          if (!userId) throw new Error('User account data is invalid. Please contact support.');
 
           if (!user.password) {
-             throw new Error('User found but no password set (OAuth user?).');
+             throw new Error('This account was registered with Google Sign-In. Please use Google to sign in instead.');
           }
           
           const isPasswordValid = await bcrypt.compare(credentials.password as string, user.password);
-          if (!isPasswordValid) throw new Error('Invalid email or password.');
+          if (!isPasswordValid) throw new Error('Password is incorrect. Please check and try again or use "Forgot Password" to reset it.');
 
           // Check 2FA if enabled
           if (user.twoFAEnabled && user.twoFASecret) {

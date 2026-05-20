@@ -383,18 +383,31 @@ export async function processWithdrawal(withdrawalData: {
 		}
 
 		const amountCents = Math.round(withdrawalData.amount * 100);
+		const amountKES = amountCents / 100;
 		
 		// Check minimum withdrawal amount (KSh 200 = 20000 cents)
 		if (amountCents < 20000) {
 			return { success: false, message: 'Minimum withdrawal amount is KSh 200' };
 		}
 
-		// Calculate 2% processing fee
-		const processingFeeCents = Math.round(amountCents * 0.02);
+		// Calculate band-based processing fee
+		let processingFeeCents = 0;
+		if (amountKES >= 200 && amountKES <= 1000) {
+			processingFeeCents = 1000; // KSh 10
+		} else if (amountKES > 1000 && amountKES <= 2000) {
+			processingFeeCents = 2000; // KSh 20
+		} else if (amountKES > 2000 && amountKES <= 5000) {
+			processingFeeCents = 3000; // KSh 30
+		} else if (amountKES > 5000 && amountKES <= 10000) {
+			processingFeeCents = 5000; // KSh 50
+		} else if (amountKES > 10000) {
+			processingFeeCents = 10000; // KSh 100
+		}
+		
 		const totalDeductionCents = amountCents + processingFeeCents;
 		
 		if (currentUser.balance_cents < totalDeductionCents) {
-			return { success: false, message: 'Insufficient balance (including 2% processing fee)' };
+			return { success: false, message: `Insufficient balance. Amount + processing fee (KSh ${(processingFeeCents / 100).toFixed(0)}) required.` };
 		}
 
 		if (!withdrawalData.mpesaNumber.match(/^254[0-9]{9}$/)) {
@@ -408,7 +421,8 @@ export async function processWithdrawal(withdrawalData: {
 			processing_fee_cents: processingFeeCents,
 			status: 'pending',
 			metadata: {
-				processingFeePercent: 2
+				feeType: 'band-based',
+				amountRange: amountKES <= 1000 ? '200-1000' : amountKES <= 2000 ? '1001-2000' : amountKES <= 5000 ? '2001-5000' : amountKES <= 10000 ? '5001-10000' : '10000+'
 			}
 		});
 
@@ -419,7 +433,7 @@ export async function processWithdrawal(withdrawalData: {
 			user_id: currentUser._id,
 			amount_cents: amountCents,
 			type: 'WITHDRAWAL',
-			description: `Withdrawal request to ${withdrawalData.mpesaNumber} (2% fee: KSh ${(processingFeeCents / 100).toFixed(2)})`,
+			description: `Withdrawal request to ${withdrawalData.mpesaNumber} (Processing fee: KSh ${(processingFeeCents / 100).toFixed(0)})`,
 			status: 'pending',
 			source: 'wallet',
 			metadata: {
@@ -450,9 +464,9 @@ export async function processWithdrawal(withdrawalData: {
 				newBalance: (currentUser.balance_cents - totalDeductionCents) / 100,
 				withdrawal: transformedWithdrawal,
 				transaction: transformedTransaction,
-				processingFee: (processingFeeCents / 100).toFixed(2)
+				processingFee: (processingFeeCents / 100).toFixed(0)
 			},
-			message: 'Withdrawal request submitted successfully. 2% processing fee will be deducted.'
+			message: `Withdrawal request submitted successfully. Processing fee of KSh ${(processingFeeCents / 100).toFixed(0)} will be deducted.`
 		};
 
 	} catch (error) {

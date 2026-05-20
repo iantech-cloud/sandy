@@ -577,6 +577,34 @@ export async function POST(request: NextRequest) {
 
         console.log(`✅ Transaction marked as completed (${transactionFlow})`);
 
+        // Handle spin wallet deposits - credit the SpinWallet balance
+        if (depositType === 'spin_wallet' && safeStatus === 'completed') {
+          try {
+            const { SpinWallet } = await import('@/app/lib/models');
+            let spinWallet = await SpinWallet.findOne({ user_id: transaction.user_id }).session(session || undefined);
+            
+            if (!spinWallet) {
+              spinWallet = await SpinWallet.create([{
+                user_id: transaction.user_id,
+                balance_cents: transaction.amount_cents,
+                total_deposited_cents: transaction.amount_cents,
+                total_used_cents: 0,
+                total_spins: 0,
+              }], { session: session || undefined });
+            } else {
+              spinWallet.balance_cents += transaction.amount_cents;
+              spinWallet.total_deposited_cents += transaction.amount_cents;
+              await spinWallet.save({ session: session || undefined });
+            }
+            console.log(`💳 Spin wallet credited: +KSh ${transaction.amount_cents / 100}. New balance: KSh ${spinWallet.balance_cents / 100}`);
+            transaction.balance_updated = true;
+          } catch (spinError) {
+            console.error('❌ Failed to credit spin wallet:', spinError);
+            // Don't throw - mark balance_updated anyway to prevent retries
+            transaction.balance_updated = true;
+          }
+        }
+
         // Update main Profile.balance_cents ONLY for main-wallet deposits.
         // Spin wallet deposits are credited above to SpinWallet, and
         // activation payments do not credit any user wallet at all.
