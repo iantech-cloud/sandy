@@ -605,23 +605,10 @@ export default function TransactionsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      {isEligible(txn) ? (
-                        <button
-                          onClick={() => setUpdateModal({
-                            isOpen: true,
-                            transactionId: txn.id,
-                            currentStatus: txn.status
-                          })}
-                          disabled={updating[txn.id]}
-                          className="text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
-                        >
-                          {updating[txn.id] ? 'Updating...' : 'Update'}
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-400" title="No M-Pesa transaction ID">
-                          —
-                        </span>
-                      )}
+                      {/* Update action temporarily disabled */}
+                      <span className="text-xs text-gray-400">
+                        —
+                      </span>
                     </td>
                   </tr>
                 ))
@@ -656,8 +643,8 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Single Status Update Modal */}
-      {updateModal.isOpen && updateModal.transactionId && (
+      {/* Single Status Update Modal - TEMPORARILY DISABLED */}
+      {false && updateModal.isOpen && updateModal.transactionId && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <h2 className="text-xl font-bold mb-4">Update Transaction Status</h2>
