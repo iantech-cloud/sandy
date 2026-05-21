@@ -184,30 +184,17 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
       checkout_request_id: checkoutRequestId
     })
 
-    if (mpesaTransaction?.metadata?.callback_processed === true) {
-      // Callback already handled this - just sync the embedded deposit status
-      if (mpesaTransaction.status === 'completed' && deposit.status !== 'completed') {
-        deposit.mpesa_status = 'completed'
-        deposit.status = 'completed'
-        deposit.mpesa_receipt_number = mpesaTransaction.mpesa_receipt_number
-        deposit.deposited_at = mpesaTransaction.completed_at || new Date()
-        await spinWallet.save()
-        console.log('[SpinWallet] Synced deposit status from callback-processed transaction')
-      } else if (['failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status) && deposit.status === 'pending') {
-        deposit.mpesa_status = mpesaTransaction.status
-        deposit.status = mpesaTransaction.status === 'cancelled' ? 'cancelled' : mpesaTransaction.status === 'timeout' ? 'timeout' : 'failed'
-        await spinWallet.save()
-      }
-
-      return {
-        success: mpesaTransaction.status === 'completed',
-        status: mpesaTransaction.status,
-        message: mpesaTransaction.status === 'completed'
-          ? `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`
-          : `Payment ${mpesaTransaction.status}.`,
-        balance: spinWallet.balance_cents,
-      }
-    }
+  if (mpesaTransaction?.metadata?.callback_processed === true) {
+  // Callback already handled this - read the transaction status from DB, don't write
+  return {
+  success: mpesaTransaction.status === 'completed',
+  status: mpesaTransaction.status,
+  message: mpesaTransaction.status === 'completed'
+  ? `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`
+  : `Payment ${mpesaTransaction.status}.`,
+  balance: spinWallet.balance_cents,
+  }
+  }
 
     // ========================================================================
     // Callback hasn't processed yet — query M-Pesa API for status
@@ -217,41 +204,33 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
     const queryResult = await queryStkPushStatus(checkoutRequestId)
     console.log(`[SpinWallet] STK status for ${checkoutRequestId}:`, queryResult)
 
-    // Update the embedded deposit status for UI feedback, but DO NOT credit wallet
-    if (queryResult.success && queryResult.status === 'completed') {
-      // Payment completed according to M-Pesa, but callback hasn't processed yet
-      // The callback will handle crediting — we just update UI status
-      deposit.mpesa_status = 'completed'
-      // Keep status as 'pending' until callback confirms and credits
-      // This prevents double-crediting if callback runs after this
-      await spinWallet.save()
-
-      return {
-        success: true,
-        status: 'processing',
-        message: 'Payment received! Processing your deposit...',
-        balance: spinWallet.balance_cents,
-      }
-    } else if (queryResult.status === 'pending') {
-      return {
-        success: true,
-        status: 'pending',
-        message: 'Payment still processing…',
-        balance: spinWallet.balance_cents,
-      }
-    } else {
-      // Handle failed, cancelled, or timeout statuses
-      deposit.mpesa_status = queryResult.status || 'failed'
-      deposit.status = queryResult.status === 'cancelled' ? 'cancelled' : queryResult.status === 'timeout' ? 'timeout' : 'failed'
-      await spinWallet.save()
-
-      return {
-        success: false,
-        status: queryResult.status || 'failed',
-        message: queryResult.resultDesc || 'Payment failed or was cancelled.',
-        balance: spinWallet.balance_cents,
-      }
-    }
+  // Query M-Pesa API for status, but DO NOT write to database
+  // The callback is the sole writer — polling is read-only
+  if (queryResult.success && queryResult.status === 'completed') {
+  // Payment completed according to M-Pesa, but callback hasn't processed yet
+  // Return 'processing' to UI — the callback will credit and complete
+  return {
+  success: true,
+  status: 'processing',
+  message: 'Payment received! Processing your deposit...',
+  balance: spinWallet.balance_cents,
+  }
+  } else if (queryResult.status === 'pending') {
+  return {
+  success: true,
+  status: 'pending',
+  message: 'Payment still processing…',
+  balance: spinWallet.balance_cents,
+  }
+  } else {
+  // Handle failed, cancelled, or timeout statuses
+  return {
+  success: false,
+  status: queryResult.status || 'failed',
+  message: queryResult.resultDesc || 'Payment failed or was cancelled.',
+  balance: spinWallet.balance_cents,
+  }
+  }
   } catch (error) {
     console.error('[SpinWallet] Error checking deposit status:', error)
     return {

@@ -1094,31 +1094,26 @@ export async function checkSpinDepositMpesaStatus(checkoutRequestId: string): Pr
           queryData.MpesaReceiptNumber
         );
 
-        // 🔒 Idempotency: callback may have already credited this spin wallet.
-        // Only credit here if the callback hasn't processed it yet.
-        const alreadyProcessed = mpesaTransaction.metadata?.callback_processed === true;
-
-        if (safeStatus === 'completed' && !alreadyProcessed) {
-          await updateSpinWallet(mpesaTransaction.user_id, mpesaTransaction.amount_cents);
-          mpesaTransaction.metadata = {
-            ...(mpesaTransaction.metadata || {}),
-            callback_processed: true,
-            credited_via: 'polling',
-            credited_at: new Date().toISOString(),
-          };
-          await mpesaTransaction.save();
-        } else if (safeStatus === 'completed' && alreadyProcessed) {
-          console.log('⏭️ Skipping spin wallet credit — callback already processed');
-        }
+        // 🔒 CRITICAL: Polling ONLY reads M-Pesa status, it does NOT credit wallets.
+        // The M-Pesa callback is the SOLE source of truth for crediting SpinWallet.
+        // This prevents race conditions and double-crediting.
+        console.log('📊 Polling synchronized transaction status with M-Pesa (read-only, no credits)');
       } catch (updateError) {
-        console.error('❌ Failed to update transaction or spin wallet:', updateError);
+        console.error('❌ Failed to sync transaction status:', updateError);
       }
     }
 
+    // For completed payments waiting for callback to credit, show "processing" to UI
+    // The callback is the source of truth for wallet credits
+    const displayStatus = (
+      mpesaTransaction.status === 'completed' && 
+      mpesaTransaction.metadata?.callback_processed !== true
+    ) ? 'processing' : mpesaTransaction.status;
+
     return {
-      success: true,
+      success: displayStatus === 'completed' || displayStatus === 'processing',
       data: {
-        status: mpesaTransaction.status,
+        status: displayStatus,
         resultCode: mpesaTransaction.result_code,
         resultDesc: mpesaTransaction.result_desc,
         mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
@@ -1127,7 +1122,9 @@ export async function checkSpinDepositMpesaStatus(checkoutRequestId: string): Pr
         failedAt: mpesaTransaction.failed_at,
         source: 'api'
       },
-      message: `Payment status: ${mpesaTransaction.status}`
+      message: displayStatus === 'processing' 
+        ? 'Payment received! Processing your deposit...' 
+        : `Payment status: ${mpesaTransaction.status}`
     };
 
   } catch (error) {

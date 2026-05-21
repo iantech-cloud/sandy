@@ -82,7 +82,7 @@ function getFailureType(resultCode: number): string {
  */
 function getTransactionFlow(type: string): 'credit' | 'debit' | 'neutral' {
   const creditTypes = ['DEPOSIT', 'BONUS', 'TASK_PAYMENT', 'SPIN_WIN', 'REFERRAL', 'SURVEY'];
-  const neutralTypes = ['ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'ADMIN_ACTIVATION']; // These don't affect user balance
+  const neutralTypes = ['ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'ADMIN_ACTIVATION', 'SPIN_WALLET_DEPOSIT']; // These don't affect user balance
   
   if (neutralTypes.includes(type)) {
     return 'neutral'; // Don't modify balance for activation/admin payments
@@ -681,16 +681,10 @@ export async function POST(request: NextRequest) {
         safeStatus
       });
 
-      // For spin wallet deposits without a Transaction record, still ensure 
-      // the spin wallet gets credited if the payment succeeded
-      if (depositType === 'spin' && safeStatus === 'completed') {
-        console.log('🔄 Fallback: Ensuring spin wallet is credited for completed payment...');
-        try {
-          const spinWalletResult = await updateSpinWallet(user_id, amount_cents);
-          console.log('✅ Fallback spin wallet credit successful:', spinWalletResult);
-        } catch (fallbackError) {
-          console.error('❌ Fallback spin wallet credit failed:', fallbackError);
-        }
+      // For spin wallet deposits without a Transaction record, the SpinWallet block
+      // above already handled crediting the wallet. Just log for debugging.
+      if (depositType === 'spin_wallet') {
+        console.warn('⚠️ Spin wallet deposit processed but no Transaction record found for auditing');
       }
     }
 
