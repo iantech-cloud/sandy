@@ -755,6 +755,19 @@ const TransactionSchema = new Schema({
   admin_processed_by: { type: String, ref: 'Profile' },
   admin_processed_at: { type: Date },
 
+  // Admin update tracking
+  balance_updated: { type: Boolean, default: false },
+  admin_last_updated_by: { type: String, ref: 'Profile' },
+  admin_last_updated_at: { type: Date },
+  
+  // Balance reversal log for failed transactions
+  balance_reversal_log: [{
+    reversed_at: { type: Date, default: Date.now },
+    reversed_by: { type: String, ref: 'Profile' },
+    amount_reversed_cents: { type: Number },
+    reason: { type: String }
+  }],
+
   target_type: {
     type: String,
     enum: ['user', 'company'],
@@ -783,6 +796,8 @@ const TransactionSchema = new Schema({
     { fields: { admin_processed: 1 } },
     { fields: { 'spin_related.prize_type': 1 } },
     { fields: { target_type: 1, target_id: 1 } },
+    { fields: { balance_updated: 1 } },
+    { fields: { admin_last_updated_at: -1 } },
   ]
 });
 
