@@ -118,8 +118,10 @@ export default function TransactionsPage() {
         if (data.data.pagination) {
           setPagination(data.data.pagination);
         }
-        calculateStats(data.data.transactions);
         setSelectedIds(new Set()); // Clear selections on fetch
+        
+        // Fetch ALL transactions (without pagination) for stats calculation across all pages
+        fetchAllTransactionsForStats();
       } else {
         console.error('Failed to fetch transactions:', data.message);
       }
@@ -127,6 +129,31 @@ export default function TransactionsPage() {
       console.error('Error fetching transactions:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAllTransactionsForStats = async () => {
+    try {
+      // Fetch all transactions with a high limit to get complete data for stats
+      const params = new URLSearchParams();
+      params.append('limit', '10000'); // Fetch up to 10k transactions for stats
+      params.append('page', '1');
+      
+      // Apply the same filters as current page
+      if (filters.type !== 'all') params.append('type', filters.type);
+      if (filters.status !== 'all') params.append('status', filters.status);
+      if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.append('dateTo', filters.dateTo);
+
+      const response = await fetch(`/api/admin/transactions?${params}`);
+      const data = await response.json();
+      
+      if (data.success && data.data.transactions) {
+        // Calculate stats from ALL transactions (all pages)
+        calculateStats(data.data.transactions);
+      }
+    } catch (error) {
+      console.error('Error fetching all transactions for stats:', error);
     }
   };
 
@@ -470,8 +497,8 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Bulk Actions Bar */}
-      {selectedIds.size > 0 && (
+      {/* Bulk Actions Bar - TEMPORARILY DISABLED */}
+      {false && selectedIds.size > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-blue-600" />
@@ -512,13 +539,8 @@ export default function TransactionsPage() {
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={eligibleCount > 0 && selectedIds.size === eligibleCount}
-                    onChange={toggleSelectAll}
-                    disabled={eligibleCount === 0}
-                    className="rounded border-gray-300"
-                  />
+                  {/* Checkboxes disabled temporarily - bulk operations disabled */}
+                  <div className="w-5"></div>
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Target</th>
@@ -541,18 +563,8 @@ export default function TransactionsPage() {
                 transactions.map((txn) => (
                   <tr key={txn.id} className={`border-b hover:bg-gray-50 ${!isEligible(txn) ? 'bg-gray-50' : ''}`}>
                     <td className="px-4 py-3">
-                      {isEligible(txn) ? (
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(txn.id)}
-                          onChange={() => toggleRowSelection(txn.id)}
-                          className="rounded border-gray-300"
-                        />
-                      ) : (
-                        <div title="No M-Pesa transaction ID" className="text-xs text-gray-400">
-                          N/A
-                        </div>
-                      )}
+                      {/* Checkboxes disabled temporarily */}
+                      <div className="w-5"></div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {new Date(txn.date).toLocaleDateString()}
