@@ -24,11 +24,14 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '1000');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
     const type = searchParams.get('type') || 'all';
     const status = searchParams.get('status') || 'all';
     const dateFrom = searchParams.get('dateFrom') || '';
     const dateTo = searchParams.get('dateTo') || '';
+
+    const skip = (page - 1) * limit;
 
     let query: any = {};
     
@@ -50,10 +53,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Get total count for pagination
+    const total = await Transaction.countDocuments(query);
+    const pages = Math.ceil(total / limit);
+
     const transactions = await Transaction.find(query)
       .populate('user_id', 'username email')
       .populate('mpesa_transaction_id', 'mpesa_receipt_number phone_number')
       .sort({ created_at: -1 })
+      .skip(skip)
       .limit(limit)
       .lean();
 
@@ -74,6 +82,7 @@ export async function GET(request: NextRequest) {
       
       target_type: txn.target_type || 'user', 
       target_id: txn.target_id?.toString() || txn.user_id?._id?.toString() || null,
+      mpesa_transaction_id: txn.mpesa_transaction_id?._id?.toString(),
       
       source: txn.source || 'wallet',
       reconciled: txn.reconciled || false
@@ -83,7 +92,13 @@ export async function GET(request: NextRequest) {
       success: true,
       data: { 
         transactions: transformedTransactions,
-        count: transformedTransactions.length
+        count: transformedTransactions.length,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages
+        }
       },
       message: 'Transactions fetched successfully'
     });

@@ -1148,3 +1148,242 @@ export async function fixUserReferredBy(userId: string): Promise<{ success: bool
     return { success: false, message: 'Failed to fix user' };
   }
 }
+
+/**
+ * Update a single transaction status
+ * Handles balance reversal if marking a completed transaction as failed
+ */
+export async function updateTransactionStatus(
+  transactionId: string,
+  newStatus: 'pending' | 'completed' | 'failed' | 'cancelled' | 'timeout',
+  reason?: string
+): Promise<{ success: boolean; message: string; data?: any }> {
+  try {
+    const session = await auth();
+    
+    if (!session?.user?.email) {
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    await connectToDatabase();
+    const adminUser = await (Profile as any).findOne({ email: session.user.email });
+    
+    if (adminUser?.role !== 'admin') {
+      return { success: false, message: 'Admin access required' };
+    }
+
+    const transaction = await (Transaction as any).findById(transactionId);
+    if (!transaction) {
+      return { success: false, message: 'Transaction not found' };
+    }
+
+    const oldStatus = transaction.status;
+
+    // If marking a completed transaction as failed, reverse the balance
+    if (oldStatus === 'completed' && newStatus === 'failed' && transaction.user_id) {
+      try {
+        const user = await (Profile as any).findById(transaction.user_id);
+        if (user) {
+          // Deduct the amount from user balance
+          user.balance_cents = Math.max(0, user.balance_cents - transaction.amount_cents);
+          await user.save();
+
+          // Log the reversal
+          transaction.balance_reversal_log = transaction.balance_reversal_log || [];
+          transaction.balance_reversal_log.push({
+            reversed_at: new Date(),
+            reversed_by: adminUser._id,
+            amount_reversed_cents: transaction.amount_cents,
+            reason: reason || 'Manual reversal by admin'
+          });
+
+          console.log(`[v0] Reversed KES ${transaction.amount_cents / 100} from user ${user.username}`);
+        }
+      } catch (reversalError) {
+        console.error('[v0] Error reversing balance:', reversalError);
+        return { success: false, message: 'Failed to reverse user balance' };
+      }
+    }
+
+    // Update transaction
+    transaction.status = newStatus;
+    transaction.balance_updated = true;
+    transaction.admin_last_updated_by = adminUser._id;
+    transaction.admin_last_updated_at = new Date();
+    
+    await transaction.save();
+
+    // Log audit
+    await (AdminAuditLog as any).create({
+      actor_id: adminUser._id.toString(),
+      action: 'UPDATE_TRANSACTION',
+      action_type: 'transaction_status_update',
+      target_type: 'Transaction',
+      target_id: transactionId,
+      resource_type: 'transaction',
+      resource_id: transactionId,
+      changes: { 
+        status: { from: oldStatus, to: newStatus },
+        reason: reason
+      },
+      metadata: {
+        transaction_type: transaction.type,
+        transaction_amount: transaction.amount_cents,
+        user_id: transaction.user_id,
+        balance_reversed: oldStatus === 'completed' && newStatus === 'failed'
+      },
+      ip_address: 'server-action',
+      user_agent: 'server-action'
+    });
+
+    revalidatePath('/admin/transactions');
+
+    return { 
+      success: true, 
+      message: `Transaction status updated from ${oldStatus} to ${newStatus}`,
+      data: {
+        transactionId,
+        oldStatus,
+        newStatus,
+        balanceReversed: oldStatus === 'completed' && newStatus === 'failed'
+      }
+    };
+
+  } catch (error) {
+    console.error('Update transaction error:', error);
+    return { success: false, message: 'Failed to update transaction' };
+  }
+}
+
+/**
+ * Bulk update multiple transactions
+ */
+export async function bulkUpdateTransactionStatus(
+  transactionIds: string[],
+  newStatus: 'pending' | 'completed' | 'failed' | 'cancelled' | 'timeout',
+  reason?: string
+): Promise<{ 
+  success: boolean; 
+  message: string; 
+  data?: {
+    updated: number;
+    failed: number;
+    results: any[];
+  }
+}> {
+  try {
+    const session = await auth();
+    
+    if (!session?.user?.email) {
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    await connectToDatabase();
+    const adminUser = await (Profile as any).findOne({ email: session.user.email });
+    
+    if (adminUser?.role !== 'admin') {
+      return { success: false, message: 'Admin access required' };
+    }
+
+    const results: any[] = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const transactionId of transactionIds) {
+      try {
+        const transaction = await (Transaction as any).findById(transactionId);
+        if (!transaction) {
+          results.push({ transactionId, success: false, message: 'Not found' });
+          failCount++;
+          continue;
+        }
+
+        const oldStatus = transaction.status;
+
+        // Reverse balance if needed
+        if (oldStatus === 'completed' && newStatus === 'failed' && transaction.user_id) {
+          try {
+            const user = await (Profile as any).findById(transaction.user_id);
+            if (user) {
+              user.balance_cents = Math.max(0, user.balance_cents - transaction.amount_cents);
+              await user.save();
+
+              transaction.balance_reversal_log = transaction.balance_reversal_log || [];
+              transaction.balance_reversal_log.push({
+                reversed_at: new Date(),
+                reversed_by: adminUser._id,
+                amount_reversed_cents: transaction.amount_cents,
+                reason: reason || 'Bulk reversal by admin'
+              });
+            }
+          } catch (reversalError) {
+            console.error('[v0] Bulk reversal error for transaction:', transactionId, reversalError);
+            results.push({ transactionId, success: false, message: 'Failed to reverse balance' });
+            failCount++;
+            continue;
+          }
+        }
+
+        // Update transaction
+        transaction.status = newStatus;
+        transaction.balance_updated = true;
+        transaction.admin_last_updated_by = adminUser._id;
+        transaction.admin_last_updated_at = new Date();
+        await transaction.save();
+
+        results.push({ 
+          transactionId, 
+          success: true, 
+          oldStatus, 
+          newStatus,
+          balanceReversed: oldStatus === 'completed' && newStatus === 'failed'
+        });
+        successCount++;
+
+      } catch (itemError) {
+        console.error('[v0] Error updating transaction:', transactionId, itemError);
+        results.push({ transactionId, success: false, message: 'Update failed' });
+        failCount++;
+      }
+    }
+
+    // Log bulk operation
+    await (AdminAuditLog as any).create({
+      actor_id: adminUser._id.toString(),
+      action: 'BULK_UPDATE_TRANSACTIONS',
+      action_type: 'bulk_transaction_update',
+      target_type: 'Transaction',
+      target_id: `bulk_${Date.now()}`,
+      resource_type: 'transactions',
+      resource_id: `bulk_${Date.now()}`,
+      changes: { 
+        count: transactionIds.length,
+        newStatus,
+        reason
+      },
+      metadata: {
+        updated_count: successCount,
+        failed_count: failCount,
+        total_count: transactionIds.length
+      },
+      ip_address: 'server-action',
+      user_agent: 'server-action'
+    });
+
+    revalidatePath('/admin/transactions');
+
+    return {
+      success: successCount > 0,
+      message: `Updated ${successCount} transaction(s), ${failCount} failed`,
+      data: {
+        updated: successCount,
+        failed: failCount,
+        results
+      }
+    };
+
+  } catch (error) {
+    console.error('Bulk update transactions error:', error);
+    return { success: false, message: 'Bulk update failed' };
+  }
+}
