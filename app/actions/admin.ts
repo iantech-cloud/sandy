@@ -1217,8 +1217,8 @@ export async function updateTransactionStatus(
     await (AdminAuditLog as any).create({
       actor_id: adminUser._id.toString(),
       action: 'UPDATE_TRANSACTION',
-      action_type: 'transaction_status_update',
-      target_type: 'Transaction',
+      action_type: 'update',
+      target_type: 'transaction',
       target_id: transactionId,
       resource_type: 'transaction',
       resource_id: transactionId,
@@ -1350,11 +1350,11 @@ export async function bulkUpdateTransactionStatus(
     // Log bulk operation
     await (AdminAuditLog as any).create({
       actor_id: adminUser._id.toString(),
-      action: 'BULK_UPDATE_TRANSACTIONS',
-      action_type: 'bulk_transaction_update',
-      target_type: 'Transaction',
+      action: 'UPDATE_TRANSACTION',
+      action_type: 'update',
+      target_type: 'transaction',
       target_id: `bulk_${Date.now()}`,
-      resource_type: 'transactions',
+      resource_type: 'transaction',
       resource_id: `bulk_${Date.now()}`,
       changes: { 
         count: transactionIds.length,
@@ -1362,6 +1362,7 @@ export async function bulkUpdateTransactionStatus(
         reason
       },
       metadata: {
+        bulk_operation: true,
         updated_count: successCount,
         failed_count: failCount,
         total_count: transactionIds.length
