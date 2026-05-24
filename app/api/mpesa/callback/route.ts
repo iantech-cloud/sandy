@@ -408,6 +408,7 @@ export async function POST(request: NextRequest) {
 
           if (existingDeposit) {
             existingDeposit.status = 'completed';
+            existingDeposit.overall_status = 'completed';
             existingDeposit.mpesa_status = 'completed';
             existingDeposit.mpesa_receipt_number = mpesaTransaction.mpesa_receipt_number;
             existingDeposit.deposited_at = new Date();
@@ -416,8 +417,10 @@ export async function POST(request: NextRequest) {
               amount_cents: mpesaTransaction.amount_cents,
               mpesa_checkout_request_id: checkoutRequestID,
               mpesa_merchant_request_id: mpesaTransaction.merchant_request_id,
+              mpesa_transaction_id: mpesaTransaction._id,
               mpesa_receipt_number: mpesaTransaction.mpesa_receipt_number,
               mpesa_status: 'completed',
+              overall_status: 'completed',
               status: 'completed',
               phone_number: mpesaTransaction.phone_number,
               deposited_at: new Date(),
@@ -434,13 +437,16 @@ export async function POST(request: NextRequest) {
         if (existingDeposit) {
           // Mark with the actual status (cancelled, failed, or timeout), not just 'failed'
           existingDeposit.status = safeStatus === 'cancelled' ? 'cancelled' : safeStatus === 'timeout' ? 'timeout' : 'failed';
+          existingDeposit.overall_status = safeStatus === 'cancelled' ? 'cancelled' : safeStatus === 'timeout' ? 'timeout' : 'failed';
           existingDeposit.mpesa_status = safeStatus;
         } else {
           spinWallet.deposits.push({
             amount_cents: mpesaTransaction.amount_cents,
             mpesa_checkout_request_id: checkoutRequestID,
             mpesa_merchant_request_id: mpesaTransaction.merchant_request_id,
+            mpesa_transaction_id: mpesaTransaction._id,
             mpesa_status: safeStatus,
+            overall_status: safeStatus === 'cancelled' ? 'cancelled' : safeStatus === 'timeout' ? 'timeout' : 'failed',
             status: safeStatus === 'cancelled' ? 'cancelled' : safeStatus === 'timeout' ? 'timeout' : 'failed',
             phone_number: mpesaTransaction.phone_number,
             created_at: new Date(),
@@ -672,8 +678,7 @@ export async function POST(request: NextRequest) {
 
       await transaction.save({ session: session || undefined });
     } else {
-      // No associated Transaction found - this is a fallback that shouldn't happen
-      // but we log it for debugging purposes
+      // No associated Transaction found - this shouldn't happen normally, but handle it
       console.warn('⚠️ No associated Transaction found for M-Pesa callback', {
         mpesaTransactionId: mpesaTransaction._id,
         checkoutRequestID,
@@ -681,10 +686,42 @@ export async function POST(request: NextRequest) {
         safeStatus
       });
 
-      // For spin wallet deposits without a Transaction record, the SpinWallet block
-      // above already handled crediting the wallet. Just log for debugging.
-      if (depositType === 'spin_wallet') {
-        console.warn('⚠️ Spin wallet deposit processed but no Transaction record found for auditing');
+      // ====================================================================
+      // CRITICAL: For spin wallet deposits without a Transaction record,
+      // create one now for company revenue tracking.
+      // This handles edge cases where deposit was initiated outside normal flow.
+      // ====================================================================
+      if (depositType === 'spin_wallet' && safeStatus === 'completed') {
+        try {
+          console.log('🆕 Creating Transaction record for spin wallet deposit (backup)');
+          
+          const transaction = new Transaction({
+            user_id: mpesaTransaction.user_id,
+            amount_cents: mpesaTransaction.amount_cents,
+            type: 'SPIN_WALLET_DEPOSIT',
+            description: `Spin Wallet M-Pesa Deposit - KES ${mpesaTransaction.amount_cents / 100}`,
+            status: 'completed',
+            mpesa_transaction_id: mpesaTransaction._id,
+            target_type: 'company',
+            target_id: 'company',
+            balance_updated: true,
+            transaction_code: mpesaTransaction.mpesa_receipt_number,
+            metadata: {
+              mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+              phoneNumber: mpesaTransaction.phone_number,
+              transactionDate: mpesaTransaction.transaction_date,
+              transactionFlow: 'neutral',
+              callbackProcessedAt: new Date().toISOString(),
+              reason: 'Transaction created via backup flow - no pre-existing record'
+            }
+          });
+
+          await transaction.save({ session: session || undefined });
+          console.log('✅ Transaction record created for spin wallet deposit:', transaction._id);
+        } catch (txnError) {
+          console.error('❌ Failed to create Transaction record for spin wallet:', txnError);
+          // Don't throw - spin wallet was already credited above
+        }
       }
     }
 

@@ -2246,6 +2246,9 @@ export const Company = getModel('Company', CompanySchema);
 /**
  * 31. SpinWallet Model - Separate wallet for spin deposits via M-Pesa
  * Deposits are NON-WITHDRAWABLE and can only be used for spins
+ * 
+ * KEY: Deposits ONLY credited when M-Pesa callback is received (not on initiation).
+ * Follows same pattern as activation fees - callback is the sole source of truth.
  */
 const SpinWalletSchema = new Schema({
   user_id: { 
@@ -2285,15 +2288,21 @@ const SpinWalletSchema = new Schema({
     amount_cents: { type: Number, required: true },
     mpesa_checkout_request_id: { type: String, index: true },
     mpesa_merchant_request_id: { type: String },
+    mpesa_transaction_id: { type: Schema.Types.ObjectId, ref: 'MpesaTransaction' },
     mpesa_receipt_number: { type: String },
     mpesa_status: { 
       type: String, 
       enum: MpesaTransactionStatuses,
       default: 'initiated'
     },
+    overall_status: {
+      type: String,
+      enum: ['pending', 'completed', 'failed', 'cancelled', 'timeout'],
+      default: 'pending'
+    },
     status: { 
       type: String, 
-      enum: ['pending', 'completed', 'failed', 'cancelled'],
+      enum: ['pending', 'completed', 'failed', 'cancelled', 'timeout'],
       default: 'pending'
     },
     phone_number: { type: String },
@@ -2315,6 +2324,7 @@ const SpinWalletSchema = new Schema({
     { fields: { balance_cents: 1 } },
     { fields: { is_active: 1 } },
     { fields: { 'deposits.status': 1 } },
+    { fields: { 'deposits.overall_status': 1 } },
     { fields: { total_spins: 1 } },
   ]
 });
