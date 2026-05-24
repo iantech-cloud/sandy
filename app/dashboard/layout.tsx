@@ -567,7 +567,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         
         <main className="flex-1 p-4 md:p-8 pb-20 lg:pb-8 relative z-0 h-screen overflow-y-auto main-content-scrollbar">
           {/* Header with Notification Bell - Visible on all devices */}
-          <header className="flex justify-between items-center mb-6 bg-white/70 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-white/50">
+          <header className="relative z-50 flex justify-between items-center mb-6 bg-white/70 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-white/50">
             <div className="flex items-center space-x-3 flex-1">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
                 <Sparkles className="text-white w-5 h-5" />

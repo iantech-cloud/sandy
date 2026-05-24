@@ -152,22 +152,39 @@ export async function getReferrals(filters?: {
       .exec();
 
     // Get referral counts for all referred users in one query
-    const referralCountsMap = new Map();
-    if (userReferrals.length > 0) {
-      const referredIds = userReferrals
-        .map(ref => ref.referred_id?._id)
-        .filter(Boolean);
+      const referralCountsMap = new Map();
+      if (userReferrals.length > 0) {
+        const referredIds = userReferrals
+          .map(ref => ref.referred_id?._id)
+          .filter(Boolean);
 
-      const referralCounts = await (Referral as any)
-        .aggregate([
-          { $match: { referrer_id: { $in: referredIds } } },
-          { $group: { _id: '$referrer_id', count: { $sum: 1 } } }
-        ]);
+        const referralCounts = await (Referral as any)
+          .aggregate([
+            { $match: { referrer_id: { $in: referredIds } } },
+            { $group: { _id: '$referrer_id', count: { $sum: 1 } } }
+          ]);
 
-      referralCounts.forEach((item: any) => {
-        referralCountsMap.set(item._id.toString(), item.count);
-      });
-    }
+        referralCounts.forEach((item: any) => {
+          referralCountsMap.set(item._id.toString(), item.count);
+        });
+      }
+
+      // Get referral payments (KSH 70 = 7000 cents) to determine activation
+      const referralPayments = await (Transaction as any)
+        .find({
+          type: 'REFERRAL',
+          status: 'completed',
+          amount_cents: 7000 // KSH 70 activation payment
+        })
+        .select('metadata.referredUser')
+        .lean()
+        .exec();
+
+      const activatedUserIds = new Set(
+        referralPayments
+          .map((p: any) => p.metadata?.referredUser?.toString())
+          .filter(Boolean)
+      );
 
     // Transform data for frontend - no async operations needed
     const transformedReferrals: ReferralItem[] = (userReferrals as ReferralDocument[]).map((ref) => {
@@ -177,6 +194,9 @@ export async function getReferrals(filters?: {
       const earnings = (referralTransactions as TransactionDocument[])
         .filter(tx => tx.metadata?.referredUser === userId)
         .reduce((sum, tx) => sum + tx.amount_cents, 0);
+
+      // Activation status: yes if user has paid KSH 70, otherwise no
+      const isActivated = activatedUserIds.has(userId) ? 'activated' : 'not_activated';
 
       return {
         id: ref._id.toString(),
@@ -189,7 +209,7 @@ export async function getReferrals(filters?: {
         rank: 'Bronze',
         tasksCompleted: 0,
         totalEarnings: 0,
-        activationStatus: referredUser?.activation_status || 'not_activated',
+        activationStatus: isActivated,
         referralCount: referralCountsMap.get(userId) || 0
       };
     });
