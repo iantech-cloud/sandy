@@ -134,12 +134,13 @@ export default function NotificationBell() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative z-40">
       {/* Bell Icon Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all duration-200 flex-shrink-0"
+        className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all duration-200 flex-shrink-0 z-40"
         title="Notifications"
+        type="button"
       >
         <Bell size={18} className="lg:w-6 lg:h-6" />
         
@@ -151,9 +152,18 @@ export default function NotificationBell() {
         )}
       </button>
 
+      {/* Backdrop to close dropdown - Higher z-index than panel */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-[998]"
+          onClick={() => setIsOpen(false)}
+          role="presentation"
+        />
+      )}
+
       {/* Dropdown Notification Panel - Mobile Responsive */}
       {isOpen && (
-        <div className="fixed sm:absolute inset-x-0 sm:inset-auto top-auto sm:top-12 right-0 bottom-0 sm:bottom-auto sm:right-0 sm:mt-2 w-full sm:w-96 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 z-[100] max-h-96 flex flex-col sm:max-h-96">
+        <div className="fixed sm:absolute inset-x-0 sm:inset-auto top-auto sm:top-12 left-0 sm:left-auto right-0 bottom-0 sm:bottom-auto sm:right-0 sm:mt-2 w-full sm:w-96 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 z-[999] max-h-96 flex flex-col sm:max-h-96">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-t-2xl sm:rounded-t-2xl">
             <h3 className="font-semibold text-slate-900">Notifications</h3>
@@ -281,14 +291,6 @@ export default function NotificationBell() {
             </div>
           )}
         </div>
-      )}
-
-      {/* Backdrop to close dropdown */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[99]"
-          onClick={() => setIsOpen(false)}
-        />
       )}
     </div>
   );
