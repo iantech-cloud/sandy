@@ -138,10 +138,10 @@ export default function NotificationBell() {
       {/* Bell Icon Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all duration-200"
+        className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all duration-200 flex-shrink-0"
         title="Notifications"
       >
-        <Bell size={24} />
+        <Bell size={18} className="lg:w-6 lg:h-6" />
         
         {/* Unread Badge */}
         {unreadCount > 0 && (

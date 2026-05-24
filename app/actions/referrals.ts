@@ -119,8 +119,10 @@ export async function getReferrals(filters?: {
       return { success: false, message: 'User not found' };
     }
 
+    console.log('[v0] Fetching referrals for user:', currentUser.username || currentUser.email);
+
     const page = filters?.page || 1;
-    const limit = filters?.limit || 10;
+    const limit = filters?.limit || 1000; // Fetch all referrals by default
     const skip = (page - 1) * limit;
 
     const query: any = { referrer_id: currentUser._id };
@@ -137,11 +139,22 @@ export async function getReferrals(filters?: {
 
     const totalCount = await (Referral as any).countDocuments(query);
 
-    // Get referral earnings from transactions
+    console.log('[v0] Found referrals:', {
+      count: userReferrals.length,
+      totalCount: totalCount
+    });
+
+    // Get referral earnings from transactions - ONLY completed transactions
     const referralTransactions = await (Transaction as any).find({
       user_id: currentUser._id,
-      type: 'REFERRAL'
+      type: 'REFERRAL',
+      status: 'completed' // Only count completed/paid transactions
     }).lean();
+
+    console.log('[v0] Referral transactions:', {
+      count: referralTransactions.length,
+      totalEarnings: referralTransactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0) / 100
+    });
 
     // Transform data for frontend
     const transformedReferrals: ReferralItem[] = await Promise.all(
@@ -163,13 +176,13 @@ export async function getReferrals(filters?: {
           name: referredUser?.username || 'Unknown User',
           email: referredUser?.email || 'No email',
           joinDate: referredUser?.created_at,
-          status: referredUser?.status || 'active',
+          status: referredUser?.status || 'inactive',
           earnings: earnings / 100,
           level: referredUser?.level || 1,
           rank: referredUser?.rank || 'Bronze',
           tasksCompleted: referredUser?.tasks_completed || 0,
           totalEarnings: (referredUser?.total_earnings_cents || 0) / 100,
-          activationStatus: referredUser?.activation_status || 'pending',
+          activationStatus: referredUser?.activation_status || 'not_activated',
           referralCount: referralCount
         };
       })
