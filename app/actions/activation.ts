@@ -23,6 +23,9 @@ import { sendPaymentConfirmationInvoice } from '@/app/actions/email';
 // Import company helper function
 import { createCompanyRevenueTransaction } from './company';
 
+// Import notification function
+import { createReferralActivationNotification } from './notifications';
+
 // =============================================================================
 // TYPE DEFINITIONS
 // =============================================================================
@@ -1494,13 +1497,36 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     userProfile.is_active = true;
     userProfile.status = 'active';
     userProfile.is_verified = true;
-    userProfile.approval_status = 'approved'; // ��� FIXED: Set approval_status to 'approved'
+    userProfile.approval_status = 'approved'; // ✅ FIXED: Set approval_status to 'approved'
     userProfile.is_approved = true;
     userProfile.level = 1;
     userProfile.rank = 'Bronze'; // ✅ FIXED: Change rank from 'Unactivated' to 'Bronze'
     userProfile.activation_transaction_id = activationFeeTransaction._id;
     await userProfile.save();
 
+    // =============================================================================
+    // STEP 5.5: Send Referral Activation Notification to Referrer
+    // =============================================================================
+    if (userProfile.referred_by) {
+      try {
+        const notificationResult = await createReferralActivationNotification(
+          userProfile.referred_by.toString(),
+          userProfile._id.toString()
+        );
+        
+        if (notificationResult.success) {
+          console.log(`[v0] Referral activation notification sent to ${userProfile.referred_by}`);
+        } else {
+          console.warn(`[v0] Failed to send referral notification: ${notificationResult.message}`);
+        }
+      } catch (notificationError) {
+        console.error('[v0] Error sending referral notification:', notificationError);
+        // Don't fail activation if notification fails
+      }
+    }
+
+    // =============================================================================
+    // STEP 6: Update Activation Payment Record
     // =============================================================================
     // STEP 6: Update Activation Payment Record
     // =============================================================================
