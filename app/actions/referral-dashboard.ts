@@ -44,27 +44,24 @@ export async function getReferralDashboardData() {
     // Get direct referrals (Level 1)
     const directReferrals = await (Referral as any).find({
       referrer_id: currentUser._id
-    }).populate('referred_id', 'username email status created_at activation_status').lean();
+    }).populate('referred_id', 'username email status created_at activation_status firstName lastName').lean();
 
     // Get Level 1 earnings (KES 70 per direct referral)
-    // Include transactions with level 1 metadata OR all REFERRAL type (backward compat)
+    // Query by user_id (the referrer who earned) and REFERRAL type
     const level1Transactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
-      $or: [
-        { 'metadata.level': 1 },
-        { 'metadata.level': { $exists: false } },
-        { 'metadata.level': null }
-      ]
+      status: 'completed'
     }).lean();
 
     const level1Earnings = level1Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0) / 100;
 
-    // Get Level 2 earnings (KES 10 per indirect referral) - currently not used
+    // Get Level 2 earnings (if implemented with metadata.level: 2)
     const level2Transactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
-      'metadata.level': 2
+      'metadata.level': 2,
+      status: 'completed'
     }).lean();
 
     const level2Earnings = level2Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0) / 100;
@@ -77,20 +74,27 @@ export async function getReferralDashboardData() {
       level2Earnings: level2Earnings
     });
 
-    // Count active referrals
-    const activeReferrals = directReferrals.filter((ref: any) => ref.referred_id?.status === 'active').length;
+    // Count active referrals (where referred user's status is 'active' or 'verified')
+    const activeReferrals = directReferrals.filter((ref: any) => 
+      ref.referred_id?.status === 'active' || ref.referred_id?.status === 'verified'
+    ).length;
+
+    // Count referrals with activated accounts (activation_status === 'activated')
+    const activatedReferrals = directReferrals.filter((ref: any) => 
+      ref.referred_id?.activation_status === 'activated'
+    ).length;
 
     // Build referral items with commission details
     const referralItems = directReferrals.map((ref: any) => ({
       id: ref._id.toString(),
-      name: ref.referred_id?.username || 'Unknown',
+      name: `${ref.referred_id?.firstName || ''} ${ref.referred_id?.lastName || ''}`.trim() || ref.referred_id?.username || 'Unknown',
       email: ref.referred_id?.email || 'N/A',
       joinDate: ref.referred_id?.created_at,
       status: ref.referred_id?.status || 'pending',
       activationStatus: ref.referred_id?.activation_status || 'pending',
       bonusPaid: ref.referral_bonus_paid || false,
       bonusAmount: (ref.referral_bonus_amount_cents || 0) / 100,
-      commission: 70 // KES 70 per level 1 referral (shown as regular number, not cents)
+      commission: 70 // KES 70 per level 1 referral
     }));
 
     return {
@@ -100,7 +104,7 @@ export async function getReferralDashboardData() {
         referralCode: currentUser.referral_id,
         totalReferrals: directReferrals.length,
         activeReferrals,
-        activatedReferralsWithBonus: directReferrals.filter((ref: any) => ref.referral_bonus_paid).length,
+        activatedReferrals,
         level1Earnings,
         level2Earnings,
         totalEarnings: level1Earnings + level2Earnings,

@@ -16,6 +16,7 @@ import { getTransactions } from '../actions/transactions';
 import SessionMonitor from '@/app/components/SessionMonitor';
 import SessionDebugger from '@/app/components/SessionDebugger'
 import UserChatWidget from '@/app/components/chat/UserChatWidget';
+import NotificationBell from '@/app/components/NotificationBell';
 
 const MAX_RETRIES = 3;
 
@@ -575,16 +576,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 HustleHub
               </h1>
             </div>
-            <button
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="flex items-center space-x-2 text-red-500 hover:text-red-700 transition-all duration-250 p-2 rounded-xl bg-red-50 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
-            >
-              <LogOut size={20} />
-              <span className="font-semibold text-sm">
-                {isLoggingOut ? 'Logging Out...' : 'Logout'}
-              </span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <NotificationBell />
+              <button
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="flex items-center space-x-2 text-red-500 hover:text-red-700 transition-all duration-250 p-2 rounded-xl bg-red-50 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+              >
+                <LogOut size={20} />
+                <span className="font-semibold text-sm">
+                  {isLoggingOut ? 'Logging Out...' : 'Logout'}
+                </span>
+              </button>
+            </div>
           </header>
 	
           <SessionDebugger />

@@ -2340,6 +2340,99 @@ SpinWalletSchema.pre('findByIdAndDelete', async function(next) {
 
 export const SpinWallet = getModel('SpinWallet', SpinWalletSchema);
 
+/**
+ * 32. Notification Model - In-app notifications for user events
+ * Used for referral activations, system alerts, and user-specific events
+ */
+const NotificationSchema = new Schema({
+  user_id: {
+    type: String,
+    ref: 'Profile',
+    required: true,
+    index: true
+  },
+
+  type: {
+    type: String,
+    enum: ['referral_activated', 'system_alert', 'payment_received', 'achievement_unlocked'],
+    required: true,
+    index: true
+  },
+
+  title: {
+    type: String,
+    required: true
+  },
+
+  message: {
+    type: String,
+    required: true
+  },
+
+  read: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+
+  // For referral_activated notifications
+  referral_user_id: {
+    type: String,
+    ref: 'Profile',
+    index: true
+  },
+
+  referral_user_name: {
+    type: String
+  },
+
+  referral_user_phone: {
+    type: String
+  },
+
+  // Link to related resource
+  related_resource_type: {
+    type: String,
+    enum: ['referral', 'transaction', 'achievement'],
+    default: 'referral'
+  },
+
+  related_resource_id: {
+    type: String,
+    index: true
+  },
+
+  // Action URL or metadata
+  action_url: {
+    type: String
+  },
+
+  metadata: {
+    type: Schema.Types.Mixed,
+    default: {}
+  },
+
+  created_at: {
+    type: Date,
+    default: Date.now,
+    index: true
+  },
+
+  read_at: {
+    type: Date
+  }
+}, {
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+  indexes: [
+    { fields: { user_id: 1, created_at: -1 } },
+    { fields: { user_id: 1, read: 1 } },
+    { fields: { type: 1, created_at: -1 } },
+    { fields: { referral_user_id: 1 } }
+  ]
+});
+
+export const Notification = getModel('Notification', NotificationSchema);
+
 export { mongoose, connectToDatabase };
 
 // Import Soko and other models
