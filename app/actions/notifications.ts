@@ -196,9 +196,9 @@ export async function createReferralActivationNotification(
       user_id: referrer_id,
       type: 'referral_activated',
       title: 'Referral Activated',
-      message: `${referee.firstName || 'A user'} has activated their account from your referral link.`,
+      message: `${referee.username || 'Unknown user'} has activated their account from your referral link.`,
       referral_user_id: referee_id,
-      referral_user_name: `${referee.firstName || ''} ${referee.lastName || ''}`.trim(),
+      referral_user_name: referee.username || 'Unknown user',
       referral_user_phone: referee.phoneNumber,
       related_resource_type: 'referral',
       related_resource_id: referee_id,
@@ -211,6 +211,10 @@ export async function createReferralActivationNotification(
       created_at: new Date()
     })
 
+    // Invalidate unread count cache for this user
+    const { appCache, cacheKeys } = await import('@/app/lib/cache')
+    appCache.delete(cacheKeys.unreadCount(referrer_id.toString()))
+
     console.log(`[Notifications] Created referral activation notification for ${referrer_id}`)
     return { success: true, notification }
   } catch (error) {
@@ -221,6 +225,7 @@ export async function createReferralActivationNotification(
 
 /**
  * Get unread count for a specific user (for real-time updates)
+ * Now with caching to reduce database hits
  */
 export async function getUnreadCount() {
   try {
@@ -229,12 +234,24 @@ export async function getUnreadCount() {
       return { success: false, message: 'Unauthorized', count: 0 }
     }
 
+    // Check cache first
+    const { appCache, cacheKeys, cacheTTL } = await import('@/app/lib/cache')
+    const cacheKey = cacheKeys.unreadCount(session.user.id)
+    const cachedCount = appCache.get<number>(cacheKey)
+    
+    if (cachedCount !== null) {
+      return { success: true, count: cachedCount }
+    }
+
     await connectToDatabase()
 
     const count = await (Notification as any).countDocuments({
       user_id: session.user.id,
       read: false
     })
+
+    // Cache for 30 seconds
+    appCache.set(cacheKey, count, cacheTTL.SHORT)
 
     return { success: true, count }
   } catch (error) {

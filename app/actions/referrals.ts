@@ -119,10 +119,8 @@ export async function getReferrals(filters?: {
       return { success: false, message: 'User not found' };
     }
 
-    console.log('[v0] Fetching referrals for user:', currentUser.username || currentUser.email);
-
     const page = filters?.page || 1;
-    const limit = filters?.limit || 1000; // Fetch all referrals by default
+    const limit = filters?.limit || 10; // Database-level pagination
     const skip = (page - 1) * limit;
 
     const query: any = { referrer_id: currentUser._id };
@@ -130,63 +128,71 @@ export async function getReferrals(filters?: {
       query['referred_id.status'] = filters.status;
     }
 
-    const userReferrals = await (Referral as any).find(query)
-      .populate('referred_id', 'username email status created_at level rank total_earnings_cents balance_cents tasks_completed activation_status')
+    // Optimized query: only select needed fields and use database-level pagination
+    const userReferrals = await (Referral as any)
+      .find(query)
+      .populate('referred_id', 'username email status created_at activation_status') // Reduced fields
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limit)
-      .lean();
+      .lean()
+      .exec();
 
     const totalCount = await (Referral as any).countDocuments(query);
 
-    console.log('[v0] Found referrals:', {
-      count: userReferrals.length,
-      totalCount: totalCount
-    });
-
-    // Get referral earnings from transactions - ONLY completed transactions
-    const referralTransactions = await (Transaction as any).find({
-      user_id: currentUser._id,
-      type: 'REFERRAL',
-      status: 'completed' // Only count completed/paid transactions
-    }).lean();
-
-    console.log('[v0] Referral transactions:', {
-      count: referralTransactions.length,
-      totalEarnings: referralTransactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0) / 100
-    });
-
-    // Transform data for frontend
-    const transformedReferrals: ReferralItem[] = await Promise.all(
-      (userReferrals as ReferralDocument[]).map(async (ref) => {
-        const referredUser = ref.referred_id;
-        
-        // Get earnings for this specific referral
-        const earnings = (referralTransactions as TransactionDocument[])
-          .filter(tx => tx.metadata?.referredUser === referredUser?._id.toString())
-          .reduce((sum, tx) => sum + tx.amount_cents, 0);
-
-        // Count how many people this referred user has referred
-        const referralCount = await (Referral as any).countDocuments({
-          referrer_id: referredUser?._id
-        });
-
-        return {
-          id: ref._id.toString(),
-          name: referredUser?.username || 'Unknown User',
-          email: referredUser?.email || 'No email',
-          joinDate: referredUser?.created_at,
-          status: referredUser?.status || 'inactive',
-          earnings: earnings / 100,
-          level: referredUser?.level || 1,
-          rank: referredUser?.rank || 'Bronze',
-          tasksCompleted: referredUser?.tasks_completed || 0,
-          totalEarnings: (referredUser?.total_earnings_cents || 0) / 100,
-          activationStatus: referredUser?.activation_status || 'not_activated',
-          referralCount: referralCount
-        };
+    // Get referral earnings - only selected fields, single query
+    const referralTransactions = await (Transaction as any)
+      .find({
+        user_id: currentUser._id,
+        type: 'REFERRAL',
+        status: 'completed'
       })
-    );
+      .select('amount_cents metadata.referredUser') // Only needed fields
+      .lean()
+      .exec();
+
+    // Get referral counts for all referred users in one query
+    const referralCountsMap = new Map();
+    if (userReferrals.length > 0) {
+      const referredIds = userReferrals
+        .map(ref => ref.referred_id?._id)
+        .filter(Boolean);
+
+      const referralCounts = await (Referral as any)
+        .aggregate([
+          { $match: { referrer_id: { $in: referredIds } } },
+          { $group: { _id: '$referrer_id', count: { $sum: 1 } } }
+        ]);
+
+      referralCounts.forEach((item: any) => {
+        referralCountsMap.set(item._id.toString(), item.count);
+      });
+    }
+
+    // Transform data for frontend - no async operations needed
+    const transformedReferrals: ReferralItem[] = (userReferrals as ReferralDocument[]).map((ref) => {
+      const referredUser = ref.referred_id;
+      const userId = referredUser?._id?.toString();
+      
+      const earnings = (referralTransactions as TransactionDocument[])
+        .filter(tx => tx.metadata?.referredUser === userId)
+        .reduce((sum, tx) => sum + tx.amount_cents, 0);
+
+      return {
+        id: ref._id.toString(),
+        name: referredUser?.username || 'Unknown User',
+        email: referredUser?.email || 'No email',
+        joinDate: referredUser?.created_at,
+        status: referredUser?.status || 'inactive',
+        earnings: earnings / 100,
+        level: 1,
+        rank: 'Bronze',
+        tasksCompleted: 0,
+        totalEarnings: 0,
+        activationStatus: referredUser?.activation_status || 'not_activated',
+        referralCount: referralCountsMap.get(userId) || 0
+      };
+    });
 
     return {
       success: true,
