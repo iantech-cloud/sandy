@@ -151,17 +151,17 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown Notification Panel */}
+      {/* Dropdown Notification Panel - Mobile Responsive */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 max-h-96 flex flex-col">
+        <div className="fixed sm:absolute inset-x-0 sm:inset-auto top-auto sm:top-12 right-0 bottom-0 sm:bottom-auto sm:right-0 sm:mt-2 w-full sm:w-96 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 z-50 max-h-96 flex flex-col sm:max-h-96">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-cyan-50">
+          <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-t-2xl sm:rounded-t-2xl">
             <h3 className="font-semibold text-slate-900">Notifications</h3>
             <div className="flex items-center space-x-2">
               {unreadCount > 0 && (
                 <button
                   onClick={handleMarkAllAsRead}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center space-x-1"
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium hidden sm:flex items-center space-x-1"
                   title="Mark all as read"
                 >
                   <Check size={16} />
@@ -195,22 +195,22 @@ export default function NotificationBell() {
                 {notifications.map((notification) => (
                   <div
                     key={notification._id}
-                    className={`p-4 hover:bg-slate-50 transition-colors cursor-pointer ${
+                    className={`p-3 sm:p-4 hover:bg-slate-50 transition-colors ${
                       !notification.read ? 'bg-blue-50/50 border-l-4 border-blue-500' : ''
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start justify-between gap-2 sm:gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center space-x-2">
-                          <p className="font-semibold text-slate-900 text-sm">
+                          <p className="font-semibold text-slate-900 text-xs sm:text-sm line-clamp-1">
                             {notification.title}
                           </p>
                           {!notification.read && (
-                            <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                            <span className="inline-block w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></span>
                           )}
                         </div>
                         
-                        <p className="text-slate-600 text-sm mt-1 line-clamp-2">
+                        <p className="text-slate-600 text-xs sm:text-sm mt-1 line-clamp-2">
                           {notification.message}
                         </p>
 
@@ -220,7 +220,7 @@ export default function NotificationBell() {
                           </p>
                         )}
 
-                        <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center justify-between mt-2 flex-wrap gap-1">
                           <span className="text-xs text-slate-500">
                             {formatTime(notification.created_at)}
                           </span>
@@ -250,7 +250,7 @@ export default function NotificationBell() {
                             className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
                             title="Mark as read"
                           >
-                            <Check size={16} />
+                            <Check size={14} className="sm:w-4 sm:h-4" />
                           </button>
                         )}
                         <button
@@ -258,7 +258,7 @@ export default function NotificationBell() {
                           className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                           title="Delete"
                         >
-                          <X size={16} />
+                          <X size={14} className="sm:w-4 sm:h-4" />
                         </button>
                       </div>
                     </div>
@@ -270,11 +270,11 @@ export default function NotificationBell() {
 
           {/* Footer - View All Link */}
           {notifications.length > 0 && (
-            <div className="border-t border-slate-100 p-3 bg-slate-50">
+            <div className="border-t border-slate-100 p-3 bg-slate-50 rounded-b-2xl sm:rounded-b-2xl">
               <Link
                 href="/dashboard/notifications"
                 onClick={() => setIsOpen(false)}
-                className="block text-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+                className="block text-center text-xs sm:text-sm text-blue-600 hover:text-blue-700 font-medium"
               >
                 View All Notifications
               </Link>
