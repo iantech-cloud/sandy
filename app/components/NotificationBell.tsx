@@ -153,7 +153,7 @@ export default function NotificationBell() {
 
       {/* Dropdown Notification Panel - Mobile Responsive */}
       {isOpen && (
-        <div className="fixed sm:absolute inset-x-0 sm:inset-auto top-auto sm:top-12 right-0 bottom-0 sm:bottom-auto sm:right-0 sm:mt-2 w-full sm:w-96 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 z-50 max-h-96 flex flex-col sm:max-h-96">
+        <div className="fixed sm:absolute inset-x-0 sm:inset-auto top-auto sm:top-12 right-0 bottom-0 sm:bottom-auto sm:right-0 sm:mt-2 w-full sm:w-96 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 z-[100] max-h-96 flex flex-col sm:max-h-96">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-t-2xl sm:rounded-t-2xl">
             <h3 className="font-semibold text-slate-900">Notifications</h3>
@@ -286,7 +286,7 @@ export default function NotificationBell() {
       {/* Backdrop to close dropdown */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40"
+          className="fixed inset-0 z-[99]"
           onClick={() => setIsOpen(false)}
         />
       )}
