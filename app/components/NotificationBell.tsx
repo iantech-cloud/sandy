@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bell, X, Check } from 'lucide-react';
-import { getUnreadNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification } from '@/app/actions/notifications';
 import Link from 'next/link';
 
 interface Notification {
@@ -26,10 +25,17 @@ export default function NotificationBell() {
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await getUnreadNotifications();
-      if (result.success) {
-        setNotifications(result.notifications || []);
-        setUnreadCount(result.unreadCount || 0);
+      const response = await fetch('/api/notifications/unread', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setNotifications(result.notifications || []);
+          setUnreadCount(result.unreadCount || 0);
+        }
       }
     } catch (error) {
       console.error('[Notifications] Error fetching:', error);
@@ -50,12 +56,20 @@ export default function NotificationBell() {
   // Handle marking notification as read
   const handleMarkAsRead = async (notificationId: string) => {
     try {
-      const result = await markNotificationAsRead(notificationId);
-      if (result.success) {
-        setNotifications(prev =>
-          prev.map(n => n._id === notificationId ? { ...n, read: true } : n)
-        );
-        setUnreadCount(prev => Math.max(0, prev - 1));
+      const response = await fetch('/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setNotifications(prev =>
+            prev.map(n => n._id === notificationId ? { ...n, read: true } : n)
+          );
+          setUnreadCount(prev => Math.max(0, prev - 1));
+        }
       }
     } catch (error) {
       console.error('[Notifications] Error marking as read:', error);
@@ -65,10 +79,17 @@ export default function NotificationBell() {
   // Handle marking all as read
   const handleMarkAllAsRead = async () => {
     try {
-      const result = await markAllNotificationsAsRead();
-      if (result.success) {
-        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-        setUnreadCount(0);
+      const response = await fetch('/api/notifications/mark-all-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+          setUnreadCount(0);
+        }
       }
     } catch (error) {
       console.error('[Notifications] Error marking all as read:', error);
@@ -78,10 +99,18 @@ export default function NotificationBell() {
   // Handle deleting notification
   const handleDelete = async (notificationId: string) => {
     try {
-      const result = await deleteNotification(notificationId);
-      if (result.success) {
-        setNotifications(prev => prev.filter(n => n._id !== notificationId));
-        setUnreadCount(prev => Math.max(0, prev - 1));
+      const response = await fetch('/api/notifications/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setNotifications(prev => prev.filter(n => n._id !== notificationId));
+          setUnreadCount(prev => Math.max(0, prev - 1));
+        }
       }
     } catch (error) {
       console.error('[Notifications] Error deleting:', error);
