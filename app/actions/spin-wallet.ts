@@ -80,6 +80,26 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
 
     console.log(`[SpinWallet] STK push → ${formattedPhone}, amount: KES ${amount}`)
 
+    // ======================================================================
+    // CRITICAL: We create an MpesaTransaction record FIRST with 'initiated'
+    // status. This is the ONLY place we will create this transaction.
+    // The M-Pesa callback will find this record and update it.
+    // ======================================================================
+    let mpesaTransaction = await (MpesaTransaction as any).create({
+      user_id: session.user.id,
+      amount_cents: amount * 100,
+      phone_number: formattedPhone,
+      source: 'spin_wallet',
+      is_activation_payment: false,
+      status: 'initiated',
+      metadata: {
+        deposit_type: 'spin_wallet',
+        initiated_at: new Date().toISOString(),
+      },
+    })
+
+    console.log(`[SpinWallet] MpesaTransaction created: ${mpesaTransaction._id}`)
+
     const stkResponse = await initiateStkPush({
       amount,
       phoneNumber: formattedPhone,
@@ -91,6 +111,12 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
     console.log('[SpinWallet] Raw STK response:', JSON.stringify(stkResponse, null, 2))
 
     if (!stkResponse.success) {
+      // Mark transaction as failed since STK push failed
+      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_code: 1,
+        result_desc: 'Failed to initiate STK push'
+      })
       return {
         success: false,
         message: stkResponse.message || 'Failed to initiate payment',
@@ -103,18 +129,38 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
     // ── Guard: if we still can't find the ID something is very wrong ──────
     if (!checkoutRequestId) {
       console.error('[SpinWallet] Could not extract CheckoutRequestID from STK response:', stkResponse)
+      // Mark transaction as failed
+      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_code: 11,
+        result_desc: 'Could not extract CheckoutRequestID'
+      })
       return {
         success: false,
         message: 'Payment initiated but tracking ID was missing. Please contact support if you were charged.',
       }
     }
 
-    // Persist deposit record
+    // ======================================================================
+    // Update MpesaTransaction with checkout IDs - callback will use these
+    // ======================================================================
+    await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+      checkout_request_id: checkoutRequestId,
+      merchant_request_id: merchantRequestId,
+    })
+
+    // ======================================================================
+    // IMPORTANT: We do NOT credit the SpinWallet balance here.
+    // We ONLY create a 'pending' deposit record.
+    // The M-Pesa callback is the ONLY place where balance gets credited.
+    // ======================================================================
     spinWallet.deposits.push({
       amount_cents: amount * 100,
       mpesa_checkout_request_id: checkoutRequestId,
       mpesa_merchant_request_id: merchantRequestId,
+      mpesa_transaction_id: mpesaTransaction._id,
       mpesa_status: 'initiated',
+      overall_status: 'pending',
       status: 'pending',
       phone_number: formattedPhone,
       created_at: new Date(),
@@ -177,60 +223,61 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
 
     // ========================================================================
     // 🔒 IDEMPOTENCY CHECK: Check if M-Pesa callback has already processed this
-    // The callback sets metadata.callback_processed = true when it credits the wallet.
-    // If already processed, just sync the embedded deposit status and return.
+    // The callback sets metadata.callback_processed = true when it updates status.
+    // If already processed, just return the status - no polling, no writes.
     // ========================================================================
     const mpesaTransaction = await (MpesaTransaction as any).findOne({
       checkout_request_id: checkoutRequestId
     })
 
-  if (mpesaTransaction?.metadata?.callback_processed === true) {
-  // Callback already handled this - read the transaction status from DB, don't write
-  return {
-  success: mpesaTransaction.status === 'completed',
-  status: mpesaTransaction.status,
-  message: mpesaTransaction.status === 'completed'
-  ? `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`
-  : `Payment ${mpesaTransaction.status}.`,
-  balance: spinWallet.balance_cents,
-  }
-  }
+    if (mpesaTransaction?.metadata?.callback_processed === true) {
+      // Callback already processed - read the status from MpesaTransaction and sync to UI
+      // But do NOT write to database in this function
+      return {
+        success: mpesaTransaction.status === 'completed',
+        status: mpesaTransaction.status,
+        message: mpesaTransaction.status === 'completed'
+          ? `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`
+          : `Payment ${mpesaTransaction.status}.`,
+        balance: spinWallet.balance_cents,
+      }
+    }
 
     // ========================================================================
     // Callback hasn't processed yet — query M-Pesa API for status
-    // NOTE: We only READ status here. We do NOT credit the wallet.
-    // The M-Pesa callback is the ONLY source of truth for crediting.
+    // NOTE: We only READ status here. We do NOT update SpinWallet or
+    // MpesaTransaction. The M-Pesa callback is the ONLY source of truth for updating.
     // ========================================================================
     const queryResult = await queryStkPushStatus(checkoutRequestId)
     console.log(`[SpinWallet] STK status for ${checkoutRequestId}:`, queryResult)
 
-  // Query M-Pesa API for status, but DO NOT write to database
-  // The callback is the sole writer — polling is read-only
-  if (queryResult.success && queryResult.status === 'completed') {
-  // Payment completed according to M-Pesa, but callback hasn't processed yet
-  // Return 'processing' to UI — the callback will credit and complete
-  return {
-  success: true,
-  status: 'processing',
-  message: 'Payment received! Processing your deposit...',
-  balance: spinWallet.balance_cents,
-  }
-  } else if (queryResult.status === 'pending') {
-  return {
-  success: true,
-  status: 'pending',
-  message: 'Payment still processing…',
-  balance: spinWallet.balance_cents,
-  }
-  } else {
-  // Handle failed, cancelled, or timeout statuses
-  return {
-  success: false,
-  status: queryResult.status || 'failed',
-  message: queryResult.resultDesc || 'Payment failed or was cancelled.',
-  balance: spinWallet.balance_cents,
-  }
-  }
+    // Query M-Pesa API for status, but DO NOT write to any database
+    // The callback is the sole writer — polling is read-only
+    if (queryResult.success && queryResult.status === 'completed') {
+      // Payment completed according to M-Pesa, but callback hasn't processed yet
+      // Return 'processing' to UI — the callback will credit and complete
+      return {
+        success: true,
+        status: 'processing',
+        message: 'Payment received! Processing your deposit...',
+        balance: spinWallet.balance_cents,
+      }
+    } else if (queryResult.status === 'pending') {
+      return {
+        success: true,
+        status: 'pending',
+        message: 'Payment still processing…',
+        balance: spinWallet.balance_cents,
+      }
+    } else {
+      // Handle failed, cancelled, or timeout statuses
+      return {
+        success: false,
+        status: queryResult.status || 'failed',
+        message: queryResult.resultDesc || 'Payment failed or was cancelled.',
+        balance: spinWallet.balance_cents,
+      }
+    }
   } catch (error) {
     console.error('[SpinWallet] Error checking deposit status:', error)
     return {
@@ -298,7 +345,8 @@ export async function getSpinWalletHistory(limit: number = 20) {
       .slice(0, limit)
       .map((d: any) => ({
         amount_kes: (d.amount_cents / 100).toFixed(2),
-        status: d.status,
+        // Use overall_status if available (from callback), fallback to status for backward compatibility
+        status: d.overall_status || d.status,
         date: d.created_at,
         receipt: d.mpesa_receipt_number,
       }))
