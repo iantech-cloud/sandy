@@ -565,7 +565,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         
         <SideNav userName={user.name} onLogout={handleLogout} />
         
-        <main className="flex-1 p-4 md:p-8 pb-20 lg:pb-8 relative z-10 h-screen overflow-y-auto main-content-scrollbar">
+        <main className="flex-1 p-4 md:p-8 pb-20 lg:pb-8 relative z-0 h-screen overflow-y-auto main-content-scrollbar">
           {/* Header with Notification Bell - Visible on all devices */}
           <header className="flex justify-between items-center mb-6 bg-white/70 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-white/50">
             <div className="flex items-center space-x-3 flex-1">
