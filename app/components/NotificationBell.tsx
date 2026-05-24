@@ -163,9 +163,9 @@ export default function NotificationBell() {
 
       {/* Dropdown Notification Panel - Mobile Responsive */}
       {isOpen && (
-        <div className="fixed sm:absolute inset-x-0 sm:inset-auto top-auto sm:top-12 left-0 sm:left-auto right-0 bottom-0 sm:bottom-auto sm:right-0 sm:mt-2 w-full sm:w-96 bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 z-[999] max-h-96 flex flex-col sm:max-h-96">
+        <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 top-16 sm:top-12 sm:mt-2 w-auto sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-[999] max-h-96 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-t-2xl sm:rounded-t-2xl">
+          <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-t-2xl">
             <h3 className="font-semibold text-slate-900">Notifications</h3>
             <div className="flex items-center space-x-2">
               {unreadCount > 0 && (
