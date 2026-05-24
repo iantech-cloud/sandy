@@ -248,7 +248,7 @@ export default function DashboardPage() {
         {/* Accent bar */}
         <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-purple-600"></div>
         
-        <div className="relative z-10 flex items-center justify-between gap-3">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
           <div className="flex items-center space-x-2 flex-1 min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center shadow-md flex-shrink-0">
               <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
