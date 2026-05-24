@@ -566,25 +566,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <SideNav userName={user.name} onLogout={handleLogout} />
         
         <main className="flex-1 p-4 md:p-8 pb-20 lg:pb-8 relative z-10 h-screen overflow-y-auto main-content-scrollbar">
-          {/* Mobile Header with Glassmorphism */}
-          <header className="lg:hidden flex justify-between items-center mb-6 bg-white/70 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-white/50">
-            <div className="flex items-center space-x-3">
+          {/* Header with Notification Bell - Visible on all devices */}
+          <header className="flex justify-between items-center mb-6 bg-white/70 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-white/50">
+            <div className="flex items-center space-x-3 flex-1">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
                 <Sparkles className="text-white w-5 h-5" />
               </div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+              <h1 className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent truncate">
                 HustleHub
               </h1>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-shrink-0">
               <NotificationBell />
               <button
                 onClick={handleLogout}
                 disabled={isLoggingOut}
-                className="flex items-center space-x-2 text-red-500 hover:text-red-700 transition-all duration-250 p-2 rounded-xl bg-red-50 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                className="flex items-center space-x-1 lg:space-x-2 text-red-500 hover:text-red-700 transition-all duration-250 p-2 rounded-xl bg-red-50 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md flex-shrink-0"
               >
-                <LogOut size={20} />
-                <span className="font-semibold text-sm">
+                <LogOut size={18} className="lg:w-5 lg:h-5" />
+                <span className="hidden sm:inline font-semibold text-xs lg:text-sm whitespace-nowrap">
                   {isLoggingOut ? 'Logging Out...' : 'Logout'}
                 </span>
               </button>

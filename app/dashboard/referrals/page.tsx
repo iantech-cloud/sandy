@@ -126,17 +126,18 @@ export default function ReferralsPage() {
         {/* Referral Code */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">Referral Code</label>
-          <div className="flex items-center gap-4">
-            <code className="text-xl font-mono text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg border-2 border-indigo-200">
-              {user?.referralCode || 'Loading...'}
+          <div className="flex items-center gap-4 flex-wrap">
+            <code className="text-lg lg:text-xl font-mono text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg border-2 border-indigo-200 break-all">
+              {referralLink ? referralLink.split('ref=')[1]?.split('&')[0] || 'Loading...' : 'Loading...'}
             </code>
             <button
               onClick={() => {
-                if (user?.referralCode) {
-                  copyToClipboard(user.referralCode, 'Referral code');
+                const code = referralLink?.split('ref=')[1]?.split('&')[0];
+                if (code) {
+                  copyToClipboard(code, 'Referral code');
                 }
               }}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap flex-shrink-0"
             >
               Copy Code
             </button>
@@ -253,15 +254,25 @@ export default function ReferralsPage() {
             <p className="text-gray-400 text-sm">Start sharing your referral link to grow your network!</p>
           </div>
         ) : (
-          <div className="divide-y">
-            {referrals.map((ref) => (
-              <div key={ref.id} className="p-6 hover:bg-gray-50 transition-colors">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h4 className="font-semibold text-gray-800 text-lg">
-                        {ref.name || ref.email}
-                      </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Activated</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Joined</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Referrals</th>
+                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Your Earning</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {referrals.map((ref) => (
+                  <tr key={ref.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{ref.name || ref.email}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{ref.email}</td>
+                    <td className="px-4 py-3 text-sm">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         ref.status === 'active' 
                           ? 'bg-green-100 text-green-800' 
@@ -269,56 +280,29 @@ export default function ReferralsPage() {
                           ? 'bg-yellow-100 text-yellow-800'
                           : 'bg-red-100 text-red-800'
                       }`}>
-                        {ref.status?.charAt(0).toUpperCase() + ref.status?.slice(1)}
+                        {ref.status?.charAt(0).toUpperCase() + ref.status?.slice(1) || 'Unknown'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         ref.activationStatus === 'activated' 
                           ? 'bg-blue-100 text-blue-800' 
                           : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {ref.activationStatus === 'activated' ? '✓ Activated' : 'Not Activated'}
+                        {ref.activationStatus === 'activated' ? '✓ Yes' : 'No'}
                       </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                      <span className="flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Joined: {new Date(ref.joinDate).toLocaleDateString()}
-                      </span>
-                      {ref.level && (
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                          </svg>
-                          Level: {ref.level}
-                        </span>
-                      )}
-                      {ref.rank && (
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                          </svg>
-                          {ref.rank}
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        Referred: {ref.referralCount} {ref.referralCount === 1 ? 'person' : 'people'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-green-600">
-                      +KES {(ref.earnings || 0).toFixed(2)}
-                    </div>
-                    <div className="text-sm text-gray-500">Your Earnings</div>
-                  </div>
-                </div>
-              </div>
-            ))}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {ref.joinDate ? new Date(ref.joinDate).toLocaleDateString() : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{ref.referralCount || 0}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-green-600 text-right">
+                      KES {(ref.earnings || 0).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -326,27 +310,31 @@ export default function ReferralsPage() {
       {/* Stats Summary */}
       {referrals.length > 0 && (
         <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow border">
-            <div className="text-sm text-gray-500">Total Referrals</div>
-            <div className="text-2xl font-bold text-gray-800">{referrals.length}</div>
+          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="text-sm text-gray-500 mb-1">Total Referrals</div>
+            <div className="text-3xl font-bold text-gray-800">{referrals.length}</div>
+            <div className="text-xs text-gray-400 mt-1">All time</div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow border">
-            <div className="text-sm text-gray-500">Active Referrals</div>
-            <div className="text-2xl font-bold text-green-600">
+          <div className="bg-white p-4 rounded-lg shadow border border-green-200">
+            <div className="text-sm text-gray-500 mb-1">Active Referrals</div>
+            <div className="text-3xl font-bold text-green-600">
               {referrals.filter(ref => ref.status === 'active').length}
             </div>
+            <div className="text-xs text-gray-400 mt-1">Currently active</div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow border">
-            <div className="text-sm text-gray-500">Activated Users</div>
-            <div className="text-2xl font-bold text-blue-600">
+          <div className="bg-white p-4 rounded-lg shadow border border-blue-200">
+            <div className="text-sm text-gray-500 mb-1">Activated Users</div>
+            <div className="text-3xl font-bold text-blue-600">
               {referrals.filter(ref => ref.activationStatus === 'activated').length}
             </div>
+            <div className="text-xs text-gray-400 mt-1">Account verified</div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow border">
-            <div className="text-sm text-gray-500">Total Earnings</div>
-            <div className="text-2xl font-bold text-purple-600">
-              KES {referrals.reduce((sum, ref) => sum + (ref.earnings || 0), 0).toFixed(2)}
+          <div className="bg-white p-4 rounded-lg shadow border border-purple-200">
+            <div className="text-sm text-gray-500 mb-1">Total Earnings</div>
+            <div className="text-3xl font-bold text-purple-600">
+              KES {commissionStats?.total ? (commissionStats.total / 100).toFixed(2) : referrals.reduce((sum, ref) => sum + (ref.earnings || 0), 0).toFixed(2)}
             </div>
+            <div className="text-xs text-gray-400 mt-1">Verified earnings</div>
           </div>
         </div>
       )}
