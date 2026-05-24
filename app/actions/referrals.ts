@@ -414,16 +414,17 @@ export async function getReferralInfo(): Promise<{
       return { success: false, message: 'User not found' };
     }
 
-    // Generate referral code from user ID or use existing one
-    const referralCode = currentUser.referral_code || currentUser._id.toString().slice(-8).toUpperCase();
-    const referralLink = `${process.env.NEXTAUTH_URL}/auth/sign-up?ref=${referralCode}`;
-
-    // Update user with referral code if not exists
-    if (!currentUser.referral_code) {
-      await (Profile as any).findByIdAndUpdate(currentUser._id, {
-        referral_code: referralCode
-      });
+    // Use referral_id from the profile schema (e.g., "SANDY001")
+    const referralCode = currentUser.referral_id;
+    
+    if (!referralCode) {
+      return { 
+        success: false, 
+        message: 'Referral code not found for user' 
+      };
     }
+
+    const referralLink = `${process.env.NEXTAUTH_URL}/auth/sign-up?ref=${referralCode}`;
 
     return {
       success: true,

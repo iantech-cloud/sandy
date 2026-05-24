@@ -138,22 +138,47 @@ export default function ReferralsPage() {
         <h3 className="font-bold text-lg mb-4 text-gray-800">Your Referral Information</h3>
         
         {/* Referral Code */}
-        <div className="mb-4">
+        <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Referral Code</label>
           <div className="flex items-center gap-4 flex-wrap">
             <code className="text-lg lg:text-xl font-mono text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg border-2 border-indigo-200 break-all">
-              {referralLink ? referralLink.split('ref=')[1]?.split('&')[0] || 'Loading...' : 'Loading...'}
+              {referralLink && referralLink.includes('ref=') ? referralLink.split('ref=')[1]?.split('&')[0] : 'Loading...'}
             </code>
             <button
               onClick={() => {
-                const code = referralLink?.split('ref=')[1]?.split('&')[0];
-                if (code) {
-                  copyToClipboard(code, 'Referral code');
+                if (referralLink && referralLink.includes('ref=')) {
+                  const code = referralLink.split('ref=')[1]?.split('&')[0];
+                  if (code) {
+                    copyToClipboard(code, 'Referral code');
+                  }
                 }
               }}
               className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap flex-shrink-0"
             >
               Copy Code
+            </button>
+          </div>
+        </div>
+
+        {/* Referral Link */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Referral Link</label>
+          <div className="flex items-center gap-4 flex-wrap">
+            <input
+              type="text"
+              readOnly
+              value={referralLink || 'Loading...'}
+              className="flex-1 px-4 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg font-mono text-gray-600 break-all"
+            />
+            <button
+              onClick={() => {
+                if (referralLink) {
+                  copyToClipboard(referralLink, 'Referral link');
+                }
+              }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap flex-shrink-0"
+            >
+              Copy Link
             </button>
           </div>
         </div>
@@ -322,46 +347,48 @@ export default function ReferralsPage() {
           </div>
         )}
 
-        {/* Pagination Controls */}
+        {/* Pagination Controls - Mobile Responsive */}
         {allReferrals.length > ITEMS_PER_PAGE && (
-          <div className="border-t bg-gray-50 px-6 py-4 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+          <div className="border-t bg-gray-50 px-4 md:px-6 py-4">
+            <div className="text-xs md:text-sm text-gray-600 mb-3">
               Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, allReferrals.length)} of {allReferrals.length} referrals
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="flex items-center gap-1 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-              >
-                <ChevronLeft size={16} />
-                Previous
-              </button>
-              
-              <div className="flex items-center gap-1">
-                {Array.from({ length: Math.ceil(allReferrals.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map((page) => (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-2 rounded-lg transition-colors text-sm ${
-                      currentPage === page
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
-              </div>
+            <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 md:justify-between">
+              <div className="flex items-center gap-1 md:gap-2 flex-wrap justify-center md:justify-start">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="flex items-center gap-1 px-2 md:px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs md:text-sm"
+                >
+                  <ChevronLeft size={14} className="md:w-4 md:h-4" />
+                  <span className="hidden sm:inline">Prev</span>
+                </button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.ceil(allReferrals.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-2 md:px-3 py-2 rounded-lg transition-colors text-xs md:text-sm ${
+                        currentPage === page
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
 
-              <button
-                onClick={() => setCurrentPage(Math.min(Math.ceil(allReferrals.length / ITEMS_PER_PAGE), currentPage + 1))}
-                disabled={currentPage === Math.ceil(allReferrals.length / ITEMS_PER_PAGE)}
-                className="flex items-center gap-1 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-              >
-                Next
-                <ChevronRight size={16} />
-              </button>
+                <button
+                  onClick={() => setCurrentPage(Math.min(Math.ceil(allReferrals.length / ITEMS_PER_PAGE), currentPage + 1))}
+                  disabled={currentPage === Math.ceil(allReferrals.length / ITEMS_PER_PAGE)}
+                  className="flex items-center gap-1 px-2 md:px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs md:text-sm"
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <ChevronRight size={14} className="md:w-4 md:h-4" />
+                </button>
+              </div>
             </div>
           </div>
         )}
