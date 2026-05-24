@@ -2,9 +2,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Alert from '@/app/ui/Alert';
 import { useDashboard } from '../DashboardContext';
 import { getReferrals, getReferralCommissionStats, getReferralInfo } from '@/app/actions/referrals';
+import { maskEmail } from '@/app/lib/email-utils';
 
 interface Referral {
   id: string;
@@ -32,12 +34,15 @@ interface CommissionStats {
 export default function ReferralsPage() {
   const { user } = useDashboard();
   const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [allReferrals, setAllReferrals] = useState<Referral[]>([]);
   const [commissionStats, setCommissionStats] = useState<CommissionStats | null>(null);
   const [referralLink, setReferralLink] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,7 +63,9 @@ export default function ReferralsPage() {
             earnings: ref.earnings || ref.earning || 0,
             referredUser: ref.name || ref.email || 'Unknown User'
           }));
-          setReferrals(transformedReferrals);
+          setAllReferrals(transformedReferrals);
+          // Set first page
+          setCurrentPage(1);
         } else {
           setMessage(referralsResult.message || 'Failed to load referrals.');
           setMessageType('error');
@@ -75,7 +82,7 @@ export default function ReferralsPage() {
         }
 
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('[v0] Error fetching data:', error);
         setMessage('An error occurred while loading data.');
         setMessageType('error');
       } finally {
@@ -86,6 +93,13 @@ export default function ReferralsPage() {
     
     fetchData();
   }, []);
+
+  // Pagination effect
+  useEffect(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    setReferrals(allReferrals.slice(startIndex, endIndex));
+  }, [currentPage, allReferrals]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -270,8 +284,10 @@ export default function ReferralsPage() {
               <tbody className="divide-y">
                 {referrals.map((ref) => (
                   <tr key={ref.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{ref.name || ref.email}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{ref.email}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{ref.name || 'Unknown User'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600" title={ref.email}>
+                      {maskEmail(ref.email, 2)}
+                    </td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         ref.status === 'active' 
@@ -305,34 +321,78 @@ export default function ReferralsPage() {
             </table>
           </div>
         )}
+
+        {/* Pagination Controls */}
+        {allReferrals.length > ITEMS_PER_PAGE && (
+          <div className="border-t bg-gray-50 px-6 py-4 flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, allReferrals.length)} of {allReferrals.length} referrals
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+              >
+                <ChevronLeft size={16} />
+                Previous
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.ceil(allReferrals.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-2 rounded-lg transition-colors text-sm ${
+                      currentPage === page
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(Math.min(Math.ceil(allReferrals.length / ITEMS_PER_PAGE), currentPage + 1))}
+                disabled={currentPage === Math.ceil(allReferrals.length / ITEMS_PER_PAGE)}
+                className="flex items-center gap-1 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+              >
+                Next
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Stats Summary */}
-      {referrals.length > 0 && (
+      {/* Stats Summary - Based on ALL referrals, not current page */}
+      {allReferrals.length > 0 && (
         <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
             <div className="text-sm text-gray-500 mb-1">Total Referrals</div>
-            <div className="text-3xl font-bold text-gray-800">{referrals.length}</div>
+            <div className="text-3xl font-bold text-gray-800">{allReferrals.length}</div>
             <div className="text-xs text-gray-400 mt-1">All time</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border border-green-200">
             <div className="text-sm text-gray-500 mb-1">Active Referrals</div>
             <div className="text-3xl font-bold text-green-600">
-              {referrals.filter(ref => ref.status === 'active').length}
+              {allReferrals.filter(ref => ref.status === 'active').length}
             </div>
             <div className="text-xs text-gray-400 mt-1">Currently active</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border border-blue-200">
             <div className="text-sm text-gray-500 mb-1">Activated Users</div>
             <div className="text-3xl font-bold text-blue-600">
-              {referrals.filter(ref => ref.activationStatus === 'activated').length}
+              {allReferrals.filter(ref => ref.activationStatus === 'activated').length}
             </div>
             <div className="text-xs text-gray-400 mt-1">Account verified</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border border-purple-200">
             <div className="text-sm text-gray-500 mb-1">Total Earnings</div>
             <div className="text-3xl font-bold text-purple-600">
-              KES {commissionStats?.total ? (commissionStats.total / 100).toFixed(2) : referrals.reduce((sum, ref) => sum + (ref.earnings || 0), 0).toFixed(2)}
+              KES {commissionStats?.total ? (commissionStats.total / 100).toFixed(2) : allReferrals.reduce((sum, ref) => sum + (ref.earnings || 0), 0).toFixed(2)}
             </div>
             <div className="text-xs text-gray-400 mt-1">Verified earnings</div>
           </div>
