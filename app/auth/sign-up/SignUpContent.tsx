@@ -62,34 +62,38 @@ export default function SignUpContent() {
   const [hasValidReferral, setHasValidReferral] = useState(false);
   const router = useRouter();
 
+  // Default referral code for users who join without their own referral link
+  const DEFAULT_REFERRAL_CODE = 'SANDY001';
+
   // Check for referral code in URL and fetch referrer info
   useEffect(() => {
     const refParam = searchParams.get('ref');
-    if (refParam) {
-      const formattedRef = refParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      setFormData(prev => ({ ...prev, referralId: formattedRef }));
-      
-      // Fetch referrer info to display who referred the user
-      const fetchReferrer = async () => {
-        try {
-          const response = await fetch(`/api/referrer/${formattedRef}`);
-          if (response.ok) {
-            const data = await response.json();
-            setReferrerUsername(data.username);
-            setHasValidReferral(true);
-          } else {
-            setHasValidReferral(false);
-          }
-        } catch (err) {
-          console.error('Error fetching referrer:', err);
+    // Use the referral code from the URL, or fall back to the default code
+    // so people without another referral code can still join.
+    const formattedRef = refParam
+      ? refParam.toUpperCase().replace(/[^A-Z0-9]/g, '')
+      : DEFAULT_REFERRAL_CODE;
+
+    setFormData(prev => ({ ...prev, referralId: formattedRef }));
+
+    // Fetch referrer info to display who referred the user
+    const fetchReferrer = async () => {
+      try {
+        const response = await fetch(`/api/referrer/${formattedRef}`);
+        if (response.ok) {
+          const data = await response.json();
+          setReferrerUsername(data.username);
+          setHasValidReferral(true);
+        } else {
           setHasValidReferral(false);
         }
-      };
-      
-      fetchReferrer();
-    } else {
-      setHasValidReferral(false);
-    }
+      } catch (err) {
+        console.error('Error fetching referrer:', err);
+        setHasValidReferral(false);
+      }
+    };
+
+    fetchReferrer();
   }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
