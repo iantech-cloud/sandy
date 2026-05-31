@@ -1,12 +1,23 @@
 /**
- * Co-operative Bank M-Pesa Integration Types
+ * Co-operative Bank integration types
+ *
+ * Based on the official Postman collection (SANDRA OTIENO SCHOLINE).
+ * All API request/response fields use PascalCase as the bank's API demands.
  */
+
+// ---------------------------------------------------------------------------
+// Token
+// ---------------------------------------------------------------------------
 
 export interface CoopBankTokenResponse {
   access_token: string;
   token_type: string;
   expires_in: number;
 }
+
+// ---------------------------------------------------------------------------
+// STK Push  (POST /FT/stk/1.0.0)
+// ---------------------------------------------------------------------------
 
 export interface CoopBankSTKPushRequest {
   MessageReference: string;
@@ -27,9 +38,14 @@ export interface CoopBankSTKPushResponse {
   ResponseCode: string;
   ResponseDescription: string;
   MessageReference?: string;
+  OperatorTxnID?: string;
   ConversationID?: string;
   OriginatorConversationID?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Transaction Status  (POST /Enquiry/STK/1.0.0/)
+// ---------------------------------------------------------------------------
 
 export interface CoopBankStatusRequest {
   MessageReference: string;
@@ -38,52 +54,57 @@ export interface CoopBankStatusRequest {
 export interface CoopBankStatusResponse {
   ResponseCode: string;
   ResponseDescription: string;
-  MerchantRequestID?: string;
-  CheckoutRequestID?: string;
-  ResultCode?: string;
-  ResultDesc?: string;
+  MessageReference?: string;
+  Status?: string;
   Amount?: number;
-  MpesaReceiptNumber?: string;
   TransactionDate?: string;
+  // Receipt / reference from the bank on success
+  ReceiptNumber?: string;
+  OperatorTxnID?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Callback (POST to your CallBackUrl)
+// Co-op Bank posts a JSON body with these fields when the transaction settles.
+// ---------------------------------------------------------------------------
+
 export interface CoopBankCallbackPayload {
-  Body: {
-    stkCallback: {
-      MerchantRequestID: string;
-      CheckoutRequestID: string;
-      ResultCode: number;
-      ResultDesc: string;
-      CallbackMetadata?: {
-        Item: Array<{
-          Name: string;
-          Value: string | number;
-        }>;
-      };
-    };
-  };
+  MessageReference: string;
+  OperatorTxnID?: string;
+  ConversationID?: string;
+  ResponseCode: string;
+  ResponseDescription: string;
+  ResultCode?: number;
+  ResultDesc?: string;
+  Amount?: number;
+  PhoneNumber?: string;
+  TransactionDate?: string;
+  ReceiptNumber?: string;
+  [key: string]: unknown;
 }
+
+// ---------------------------------------------------------------------------
+// Application-level helpers
+// ---------------------------------------------------------------------------
 
 export interface PaymentInitiationRequest {
   amount: number;
   phoneNumber: string;
   narration?: string;
-  metadata?: Record<string, string>;
+  depositType?: 'wallet' | 'spin_wallet' | 'activation';
 }
 
 export interface PaymentInitiationResponse {
   success: boolean;
   messageReference?: string;
+  transactionId?: string;
+  message?: string;
   error?: string;
-  data?: {
-    conversationID?: string;
-    originatorConversationID?: string;
-  };
 }
 
 export interface TransactionStatus {
   messageReference: string;
-  status: 'pending' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'completed' | 'failed' | 'cancelled' | 'timeout';
   amount?: number;
   timestamp?: string;
   receiptNumber?: string;
@@ -96,5 +117,4 @@ export interface CoopBankConfig {
   clientSecret: string;
   operatorCode: string;
   environment: 'sandbox' | 'production';
-  callbackUrl: string;
 }

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useCoopBankPayment } from '@/hooks/useCoopBankPayment';
-import { Button } from '@/components/ui/button';
+import { useCoopBankPayment } from '@/app/hooks/useCoopBankPayment';
+import { Button } from '@/app/ui/button';
 import { Loader2 } from 'lucide-react';
 
 interface CoopBankPaymentButtonProps {
@@ -22,7 +22,7 @@ export function CoopBankPaymentButton({
   onError,
   className = '',
 }: CoopBankPaymentButtonProps) {
-  const { initiatePayment, isLoading, error } = useCoopBankPayment();
+  const { initiatePayment, loading, error } = useCoopBankPayment();
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handlePayment = async () => {
@@ -70,12 +70,11 @@ export function CoopBankPaymentButton({
     <div className="flex flex-col gap-2">
       <Button
         onClick={handlePayment}
-        disabled={isLoading}
+        disabled={loading}
         className={className}
-        size="lg"
       >
-        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        {isLoading ? 'Processing...' : `Pay KES ${amount.toLocaleString()}`}
+        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        {loading ? 'Processing...' : `Pay KES ${amount.toLocaleString()}`}
       </Button>
       {displayError && (
         <div className="text-sm text-red-600 bg-red-50 p-2 rounded">

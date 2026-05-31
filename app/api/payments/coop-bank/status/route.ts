@@ -1,5 +1,3 @@
-'use server';
-
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectToDatabase, MpesaTransaction } from '@/app/lib/models';
@@ -70,15 +68,15 @@ export async function GET(request: NextRequest) {
 
       console.log('[Status] Live status from Co-op Bank:', {
         messageReference,
-        status: statusResponse.status,
-        responseCode: statusResponse.responseCode,
+        ResponseCode: statusResponse.ResponseCode,
+        ResponseDescription: statusResponse.ResponseDescription,
       });
 
-      // Map Co-op Bank status to our schema
+      // Map Co-op Bank ResponseCode to our internal status
       let mappedStatus: 'completed' | 'pending' | 'failed' = 'pending';
-      if (statusResponse.responseCode === '0') {
+      if (statusResponse.ResponseCode === '0') {
         mappedStatus = 'completed';
-      } else if (statusResponse.responseCode === '2002' || statusResponse.responseCode === '2001') {
+      } else if (statusResponse.ResponseCode === '2002' || statusResponse.ResponseCode === '2001') {
         mappedStatus = 'failed';
       }
 
@@ -91,8 +89,8 @@ export async function GET(request: NextRequest) {
           cached: false,
           lastCheckedAt: new Date(),
           liveData: {
-            responseCode: statusResponse.responseCode,
-            responseDescription: statusResponse.responseDescription,
+            responseCode: statusResponse.ResponseCode,
+            responseDescription: statusResponse.ResponseDescription,
           },
         },
       });

@@ -11,8 +11,6 @@ interface STKPushResponse {
   success: boolean;
   data?: {
     messageReference: string;
-    operatorTxnID: string;
-    conversationID: string;
     transactionId: string;
     amount: number;
     phoneNumber: string;
