@@ -9,35 +9,21 @@ import {
   AdminAuditLog,
   MpesaTransaction,
 } from '@/app/lib/models'
-import { queryStkPushStatus, initiateStkPush } from '@/app/lib/mpesa'
+import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank'
 
-// ─── Helper: extract checkoutRequestId from any M-Pesa response shape ──────
-// Safaris returns inconsistent casing across environments. Check all variants.
-function extractCheckoutId(response: any): string | undefined {
-  return (
-    response?.checkoutRequestID      ||   // your mpesa.ts wrapper (confirmed)
-    response?.checkoutRequestId      ||   // camelCase
-    response?.CheckoutRequestID      ||   // PascalCase
-    response?.checkout_request_id    ||   // snake_case
-    response?.data?.checkoutRequestID||   // nested variants
-    response?.data?.CheckoutRequestID||
-    response?.data?.checkoutRequestId||
-    undefined
-  )
-}
-
-function extractMerchantId(response: any): string | undefined {
-  return (
-    response?.merchantRequestID      ||   // your mpesa.ts wrapper (confirmed)
-    response?.merchantRequestId      ||
-    response?.MerchantRequestID      ||
-    response?.merchant_request_id    ||
-    response?.data?.merchantRequestID||
-    response?.data?.MerchantRequestID||
-    response?.data?.merchantRequestId||
-    undefined
-  )
-}
+// ---------------------------------------------------------------------------
+// initiatSpinDeposit
+// ---------------------------------------------------------------------------
+// IMPORTANT ACCOUNTING RULE:
+//   When a user pays KES 30 to spin, that money goes to the COMPANY, not to
+//   the user's spin wallet balance.  The SpinWallet only tracks how many spins
+//   the user has available (each spin costs 30 KES).  The payment is recorded
+//   as company revenue (SPIN_COST) in the Transaction ledger, and the
+//   SpinWallet.spin_credits counter is incremented by 1 when confirmed.
+//
+//   The SpinWallet.balance_cents field is only used for winnings/prizes that
+//   the company pays OUT to the user, not for deposited amounts.
+// ---------------------------------------------------------------------------
 
 export async function initiatSpinDeposit(phoneNumber: string, amount: number = 30) {
   try {
@@ -66,98 +52,51 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
         total_deposited_cents: 0,
         total_used_cents: 0,
         total_spins: 0,
+        spin_credits: 0,
       })
     }
 
-    // Normalise phone number → 254XXXXXXXXX (12 digits)
-    let clean = phoneNumber.replace(/\D/g, '')
-    if (clean.startsWith('0'))   clean = clean.slice(1)       // 0712… → 712…
-    if (clean.startsWith('254')) clean = clean.slice(3)       // 254712… → 712…
-    if (clean.length < 9) {
+    // Normalise phone → 254XXXXXXXXX
+    const formattedPhone = CoopBankService.normalisePhone(phoneNumber)
+    if (!formattedPhone || formattedPhone.length < 12) {
       return { success: false, message: 'Invalid phone number format' }
     }
-    const formattedPhone = `254${clean.slice(-9)}`
 
-    console.log(`[SpinWallet] STK push → ${formattedPhone}, amount: KES ${amount}`)
+    // Unique message reference used as the idempotency key in the callback
+    const messageReference = `SPIN${Date.now()}${Math.random()
+      .toString(36)
+      .substring(2, 8)
+      .toUpperCase()}`
+
+    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`
 
     // ======================================================================
-    // CRITICAL: We create an MpesaTransaction record FIRST with 'initiated'
-    // status. This is the ONLY place we will create this transaction.
-    // The M-Pesa callback will find this record and update it.
+    // Create MpesaTransaction FIRST so the callback can always find it.
+    // deposit_type = 'spin_wallet' tells the callback to route this as
+    // company revenue (SPIN_COST), NOT as a user wallet credit.
     // ======================================================================
-    let mpesaTransaction = await (MpesaTransaction as any).create({
+    const mpesaTransaction = await (MpesaTransaction as any).create({
       user_id: session.user.id,
       amount_cents: amount * 100,
       phone_number: formattedPhone,
       source: 'spin_wallet',
       is_activation_payment: false,
       status: 'initiated',
+      checkout_request_id: messageReference,
       metadata: {
         deposit_type: 'spin_wallet',
+        payment_method: 'coop_bank_stk_push',
         initiated_at: new Date().toISOString(),
+        callback_url: callbackUrl,
+        // Flag: money goes to company, NOT to user spin wallet balance
+        revenue_target: 'company',
       },
     })
 
-    console.log(`[SpinWallet] MpesaTransaction created: ${mpesaTransaction._id}`)
-
-    const stkResponse = await initiateStkPush({
-      amount,
-      phoneNumber: formattedPhone,
-      accountReference: `SPIN_${session.user.id.slice(-8)}`,
-      transactionDesc: `Spin Wallet Deposit - KES ${amount}`,
-    })
-
-    // ── Debug: log the full STK response so we can see exact field names ──
-    console.log('[SpinWallet] Raw STK response:', JSON.stringify(stkResponse, null, 2))
-
-    if (!stkResponse.success) {
-      // Mark transaction as failed since STK push failed
-      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
-        status: 'failed',
-        result_code: 1,
-        result_desc: 'Failed to initiate STK push'
-      })
-      return {
-        success: false,
-        message: stkResponse.message || 'Failed to initiate payment',
-      }
-    }
-
-    const checkoutRequestId = extractCheckoutId(stkResponse)
-    const merchantRequestId = extractMerchantId(stkResponse)
-
-    // ── Guard: if we still can't find the ID something is very wrong ──────
-    if (!checkoutRequestId) {
-      console.error('[SpinWallet] Could not extract CheckoutRequestID from STK response:', stkResponse)
-      // Mark transaction as failed
-      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
-        status: 'failed',
-        result_code: 11,
-        result_desc: 'Could not extract CheckoutRequestID'
-      })
-      return {
-        success: false,
-        message: 'Payment initiated but tracking ID was missing. Please contact support if you were charged.',
-      }
-    }
-
-    // ======================================================================
-    // Update MpesaTransaction with checkout IDs - callback will use these
-    // ======================================================================
-    await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
-      checkout_request_id: checkoutRequestId,
-      merchant_request_id: merchantRequestId,
-    })
-
-    // ======================================================================
-    // IMPORTANT: We do NOT credit the SpinWallet balance here.
-    // We ONLY create a 'pending' deposit record.
-    // The M-Pesa callback is the ONLY place where balance gets credited.
-    // ======================================================================
+    // Record the pending deposit in the SpinWallet history (for transparency)
     spinWallet.deposits.push({
       amount_cents: amount * 100,
-      mpesa_checkout_request_id: checkoutRequestId,
-      mpesa_merchant_request_id: merchantRequestId,
+      mpesa_checkout_request_id: messageReference,
       mpesa_transaction_id: mpesaTransaction._id,
       mpesa_status: 'initiated',
       overall_status: 'pending',
@@ -165,16 +104,49 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
       phone_number: formattedPhone,
       created_at: new Date(),
     })
-
     await spinWallet.save()
 
-    console.log(`[SpinWallet] Deposit initiated — user: ${session.user.id}, checkoutRequestId: ${checkoutRequestId}`)
+    // Initiate Co-op Bank STK Push
+    const coopBank = createCoopBankService()
+    const stkResponse = await coopBank.initiateSTKPush(
+      formattedPhone,
+      amount,
+      `Spin - KES ${amount}`,
+      callbackUrl,
+      messageReference
+    )
+
+    if (stkResponse.ResponseCode !== '0') {
+      // Mark as failed
+      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_desc: stkResponse.ResponseDescription || 'STK Push rejected',
+      })
+
+      // Mark embedded deposit as failed
+      const wallet = await (SpinWallet as any).findOne({ user_id: session.user.id })
+      if (wallet) {
+        const dep = wallet.deposits.find(
+          (d: any) => d.mpesa_checkout_request_id === messageReference
+        )
+        if (dep) {
+          dep.status = 'failed'
+          dep.overall_status = 'failed'
+          dep.mpesa_status = 'failed'
+          await wallet.save()
+        }
+      }
+
+      return {
+        success: false,
+        message: stkResponse.ResponseDescription || 'Failed to initiate payment',
+      }
+    }
 
     return {
       success: true,
-      checkoutRequestId,          // always present now
-      merchantRequestId,
-      message: 'M-Pesa prompt sent. Please complete the payment on your phone.',
+      messageReference,
+      message: 'Co-op Bank payment prompt sent. Please complete the payment on your phone.',
     }
   } catch (error) {
     console.error('[SpinWallet] Error initiating spin deposit:', error)
@@ -185,15 +157,19 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
   }
 }
 
-export async function checkSpinDepositStatus(checkoutRequestId: string) {
+// ---------------------------------------------------------------------------
+// checkSpinDepositStatus
+// ---------------------------------------------------------------------------
+
+export async function checkSpinDepositStatus(messageReference: string) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return { success: false, message: 'Unauthorized' }
     }
 
-    if (!checkoutRequestId) {
-      return { success: false, message: 'Missing checkoutRequestId' }
+    if (!messageReference) {
+      return { success: false, message: 'Missing messageReference' }
     }
 
     await connectToDatabase()
@@ -204,79 +180,68 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
     }
 
     const deposit = spinWallet.deposits.find(
-      (d: any) => d.mpesa_checkout_request_id === checkoutRequestId
+      (d: any) => d.mpesa_checkout_request_id === messageReference
     )
 
     if (!deposit) {
       return { success: false, message: 'Deposit record not found' }
     }
 
-    // Already completed — return immediately, skip M-Pesa query
+    // Already completed — return immediately
     if (deposit.status === 'completed') {
       return {
         success: true,
         status: 'completed',
-        message: 'Payment already confirmed.',
-        balance: spinWallet.balance_cents,
+        message: 'Payment confirmed. Your spin credit has been added.',
+        spin_credits: spinWallet.spin_credits || 0,
       }
     }
 
-    // ========================================================================
-    // 🔒 IDEMPOTENCY CHECK: Check if M-Pesa callback has already processed this
-    // The callback sets metadata.callback_processed = true when it updates status.
-    // If already processed, just return the status - no polling, no writes.
-    // ========================================================================
+    // Check if the callback has already processed this transaction
     const mpesaTransaction = await (MpesaTransaction as any).findOne({
-      checkout_request_id: checkoutRequestId
+      checkout_request_id: messageReference,
     })
 
     if (mpesaTransaction?.metadata?.callback_processed === true) {
-      // Callback already processed - read the status from MpesaTransaction and sync to UI
-      // But do NOT write to database in this function
       return {
         success: mpesaTransaction.status === 'completed',
         status: mpesaTransaction.status,
-        message: mpesaTransaction.status === 'completed'
-          ? `Deposit successful! KES ${deposit.amount_cents / 100} added to your spin wallet.`
-          : `Payment ${mpesaTransaction.status}.`,
-        balance: spinWallet.balance_cents,
+        message:
+          mpesaTransaction.status === 'completed'
+            ? 'Payment confirmed. Your spin credit has been added.'
+            : `Payment ${mpesaTransaction.status}.`,
+        spin_credits: spinWallet.spin_credits || 0,
       }
     }
 
-    // ========================================================================
-    // Callback hasn't processed yet — query M-Pesa API for status
-    // NOTE: We only READ status here. We do NOT update SpinWallet or
-    // MpesaTransaction. The M-Pesa callback is the ONLY source of truth for updating.
-    // ========================================================================
-    const queryResult = await queryStkPushStatus(checkoutRequestId)
-    console.log(`[SpinWallet] STK status for ${checkoutRequestId}:`, queryResult)
+    // Callback not received yet — query Co-op Bank API
+    const coopBank = createCoopBankService()
+    const statusResponse = await coopBank.getTransactionStatus(messageReference)
+    const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode)
 
-    // Query M-Pesa API for status, but DO NOT write to any database
-    // The callback is the sole writer — polling is read-only
-    if (queryResult.success && queryResult.status === 'completed') {
-      // Payment completed according to M-Pesa, but callback hasn't processed yet
-      // Return 'processing' to UI — the callback will credit and complete
+    if (mappedStatus === 'completed') {
       return {
         success: true,
         status: 'processing',
-        message: 'Payment received! Processing your deposit...',
-        balance: spinWallet.balance_cents,
+        message: 'Payment received! Processing your spin credit...',
+        spin_credits: spinWallet.spin_credits || 0,
       }
-    } else if (queryResult.status === 'pending') {
+    }
+
+    if (mappedStatus === 'pending') {
       return {
         success: true,
         status: 'pending',
-        message: 'Payment still processing…',
-        balance: spinWallet.balance_cents,
+        message: 'Payment still processing...',
+        spin_credits: spinWallet.spin_credits || 0,
       }
-    } else {
-      // Handle failed, cancelled, or timeout statuses
-      return {
-        success: false,
-        status: queryResult.status || 'failed',
-        message: queryResult.resultDesc || 'Payment failed or was cancelled.',
-        balance: spinWallet.balance_cents,
-      }
+    }
+
+    return {
+      success: false,
+      status: mappedStatus,
+      message: statusResponse.ResponseDescription || 'Payment failed or was cancelled.',
+      spin_credits: spinWallet.spin_credits || 0,
     }
   } catch (error) {
     console.error('[SpinWallet] Error checking deposit status:', error)
@@ -286,6 +251,10 @@ export async function checkSpinDepositStatus(checkoutRequestId: string) {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// getSpinWalletBalance
+// ---------------------------------------------------------------------------
 
 export async function getSpinWalletBalance() {
   try {
@@ -305,13 +274,17 @@ export async function getSpinWalletBalance() {
         total_deposited_cents: 0,
         total_used_cents: 0,
         total_spins: 0,
+        spin_credits: 0,
       })
     }
 
     return {
       success: true,
+      // balance_cents = winnings/prizes owed to user
       balance_cents: spinWallet.balance_cents,
       balance_kes: (spinWallet.balance_cents / 100).toFixed(2),
+      // spin_credits = number of spins the user has purchased but not yet used
+      spin_credits: spinWallet.spin_credits || 0,
       total_deposited: spinWallet.total_deposited_cents,
       total_used: spinWallet.total_used_cents,
       total_spins: spinWallet.total_spins,
@@ -322,6 +295,10 @@ export async function getSpinWalletBalance() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// getSpinWalletHistory
+// ---------------------------------------------------------------------------
+
 export async function getSpinWalletHistory(limit: number = 20) {
   try {
     const session = await auth()
@@ -331,21 +308,20 @@ export async function getSpinWalletHistory(limit: number = 20) {
 
     await connectToDatabase()
 
-    // Sort in MongoDB query instead of JS
-    const spinWallet = await (SpinWallet as any)
-      .findOne({ user_id: session.user.id })
-      .lean()
+    const spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id }).lean()
 
     if (!spinWallet) {
       return { success: true, deposits: [] }
     }
 
-    const deposits = [...spinWallet.deposits]
-      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    const deposits = [...(spinWallet.deposits as any[])]
+      .sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
       .slice(0, limit)
-      .map((d: any) => ({
+      .map((d) => ({
         amount_kes: (d.amount_cents / 100).toFixed(2),
-        // Use overall_status if available (from callback), fallback to status for backward compatibility
         status: d.overall_status || d.status,
         date: d.created_at,
         receipt: d.mpesa_receipt_number,
@@ -357,6 +333,14 @@ export async function getSpinWalletHistory(limit: number = 20) {
     return { success: false, message: 'An error occurred' }
   }
 }
+
+// ---------------------------------------------------------------------------
+// transferMainToSpinWallet
+// ---------------------------------------------------------------------------
+// Transfer from user's main wallet to spin credits (internal — no payment).
+// The KES is moved from Profile.balance_cents to company revenue to keep
+// bookkeeping consistent.
+// ---------------------------------------------------------------------------
 
 export async function transferMainToSpinWallet(amountKes: number) {
   try {
@@ -372,12 +356,19 @@ export async function transferMainToSpinWallet(amountKes: number) {
     const MIN_TRANSFER = 30
     const MAX_TRANSFER = 70000
     if (amountKes < MIN_TRANSFER || amountKes > MAX_TRANSFER) {
-      return { success: false, message: `Transfer amount must be between KES ${MIN_TRANSFER} and KES ${MAX_TRANSFER}` }
+      return {
+        success: false,
+        message: `Transfer amount must be between KES ${MIN_TRANSFER} and KES ${MAX_TRANSFER}`,
+      }
+    }
+
+    // Spin must be paid in multiples of 30
+    if (amountKes % 30 !== 0) {
+      return { success: false, message: 'Transfer amount must be a multiple of KES 30' }
     }
 
     await connectToDatabase()
 
-    // Get user's main wallet balance
     const user = await (Profile as any).findById(session.user.id).lean()
     if (!user) {
       return { success: false, message: 'User not found' }
@@ -387,9 +378,13 @@ export async function transferMainToSpinWallet(amountKes: number) {
     if ((user as any).balance_cents < amountCents) {
       return {
         success: false,
-        message: `Insufficient main wallet balance. You have KES ${((user as any).balance_cents / 100).toFixed(2)} but need KES ${amountKes.toFixed(2)}`,
+        message: `Insufficient main wallet balance. You have KES ${(
+          (user as any).balance_cents / 100
+        ).toFixed(2)} but need KES ${amountKes.toFixed(2)}`,
       }
     }
+
+    const spinCreditsToAdd = Math.floor(amountKes / 30)
 
     // Get or create spin wallet
     let spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id })
@@ -400,45 +395,48 @@ export async function transferMainToSpinWallet(amountKes: number) {
         total_deposited_cents: 0,
         total_used_cents: 0,
         total_spins: 0,
+        spin_credits: 0,
       })
     }
 
-    // Deduct from main wallet
+    // Deduct from user's main wallet
     await (Profile as any).findByIdAndUpdate(session.user.id, {
       $inc: { balance_cents: -amountCents },
     })
 
-    // Add to spin wallet
-    spinWallet.balance_cents += amountCents
+    // Add spin credits (money goes to company, not to spin balance)
+    spinWallet.spin_credits = (spinWallet.spin_credits || 0) + spinCreditsToAdd
     spinWallet.total_deposited_cents += amountCents
     spinWallet.deposits.push({
       amount_cents: amountCents,
       status: 'completed',
       mpesa_status: 'main_wallet_transfer',
+      overall_status: 'completed',
       deposited_at: new Date(),
       created_at: new Date(),
     })
     await spinWallet.save()
 
-    // Create transaction record
+    // Record as company SPIN_COST revenue
     await (Transaction as any).create({
       user_id: session.user.id,
-      type: 'SPIN_DEPOSIT',
+      target_type: 'company',
+      type: 'SPIN_COST',
       amount_cents: amountCents,
       status: 'completed',
       source: 'main_wallet_transfer',
-      description: `Transfer to spin wallet - KES ${amountKes.toFixed(2)}`,
+      description: `Spin wallet transfer - KES ${amountKes.toFixed(2)} (${spinCreditsToAdd} spin credits)`,
       metadata: {
         transfer_type: 'main_to_spin',
+        spin_credits_added: spinCreditsToAdd,
+        revenue_target: 'company',
       },
     })
 
-    console.log(`[SpinWallet] Transfer completed — user: ${session.user.id}, amount: KES ${amountKes}`)
-
     return {
       success: true,
-      message: `Successfully transferred KES ${amountKes.toFixed(2)} to your spin wallet`,
-      spin_balance: spinWallet.balance_cents,
+      message: `Successfully transferred KES ${amountKes.toFixed(2)} — ${spinCreditsToAdd} spin credit(s) added`,
+      spin_credits: spinWallet.spin_credits,
       main_balance: (user as any).balance_cents - amountCents,
     }
   } catch (error) {
@@ -446,6 +444,10 @@ export async function transferMainToSpinWallet(amountKes: number) {
     return { success: false, message: 'An error occurred during transfer' }
   }
 }
+
+// ---------------------------------------------------------------------------
+// adminAddSpinBalance (admin credits user with spin credits — no payment)
+// ---------------------------------------------------------------------------
 
 export async function adminAddSpinBalance(userId: string, amountKes: number, reason: string) {
   try {
@@ -465,6 +467,13 @@ export async function adminAddSpinBalance(userId: string, amountKes: number, rea
       return { success: false, message: 'Admin access required' }
     }
 
+    // Must be a multiple of 30
+    if (amountKes % 30 !== 0) {
+      return { success: false, message: 'Amount must be a multiple of KES 30' }
+    }
+
+    const spinCreditsToAdd = Math.floor(amountKes / 30)
+
     let spinWallet = await (SpinWallet as any).findOne({ user_id: userId })
     if (!spinWallet) {
       spinWallet = await (SpinWallet as any).create({
@@ -473,20 +482,19 @@ export async function adminAddSpinBalance(userId: string, amountKes: number, rea
         total_deposited_cents: 0,
         total_used_cents: 0,
         total_spins: 0,
+        spin_credits: 0,
       })
     }
 
-    const amountCents = amountKes * 100
-    spinWallet.balance_cents += amountCents
-    spinWallet.total_deposited_cents += amountCents
+    spinWallet.spin_credits = (spinWallet.spin_credits || 0) + spinCreditsToAdd
     spinWallet.deposits.push({
-      amount_cents: amountCents,
+      amount_cents: amountKes * 100,
       status: 'completed',
       mpesa_status: 'admin_credit',
+      overall_status: 'completed',
       deposited_at: new Date(),
       created_at: new Date(),
     })
-
     await spinWallet.save()
 
     await (AdminAuditLog as any).create({
@@ -494,17 +502,28 @@ export async function adminAddSpinBalance(userId: string, amountKes: number, rea
       action: 'SPIN_WALLET_ADD',
       resource_type: 'spin_wallet',
       target_user_id: userId,
-      changes: { amount_kes: amountKes, reason },
+      changes: { amount_kes: amountKes, spin_credits_added: spinCreditsToAdd, reason },
       ip_address: '',
     })
 
     return {
       success: true,
-      message: `Added KES ${amountKes} to user's spin wallet`,
-      new_balance: spinWallet.balance_cents,
+      message: `Added ${spinCreditsToAdd} spin credit(s) to user's wallet`,
+      spin_credits: spinWallet.spin_credits,
     }
   } catch (error) {
     console.error('[SpinWallet] Error adding admin balance:', error)
     return { success: false, message: 'An error occurred' }
   }
 }
+
+/*
+ * =============================================================================
+ * FALLBACK: M-Pesa spin deposit (commented out — kept for quick rollback)
+ * =============================================================================
+ *
+ * To revert to M-Pesa, uncomment and replace the CoopBankService calls above
+ * with initiateStkPush / queryStkPushStatus from '@/app/lib/mpesa'.
+ *
+ * =============================================================================
+ */

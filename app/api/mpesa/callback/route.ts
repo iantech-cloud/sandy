@@ -551,11 +551,10 @@ export async function POST(request: NextRequest) {
     }).session(session || undefined);
 
     if (transaction) {
-      // For spin wallet deposits, update the transaction type and target_type for proper revenue tracking
+      // For spin wallet deposits, reclassify as SPIN_COST company revenue
       if (depositType === 'spin_wallet') {
-        transaction.type = 'SPIN_WALLET_DEPOSIT';
+        transaction.type = 'SPIN_COST';
         transaction.target_type = 'company';
-        transaction.target_id = 'company';
       }
 
       console.log('🔗 Found Associated Transaction:', {
@@ -583,30 +582,37 @@ export async function POST(request: NextRequest) {
 
         console.log(`✅ Transaction marked as completed (${transactionFlow})`);
 
-        // Handle spin wallet deposits - credit the SpinWallet balance
+        // Handle spin wallet deposits — add spin credits; money goes to COMPANY revenue.
+        // IMPORTANT: We do NOT credit SpinWallet.balance_cents here. That field is
+        // reserved for prize/win payouts from the company to the user.
         if (depositType === 'spin_wallet' && safeStatus === 'completed') {
           try {
             const { SpinWallet } = await import('@/app/lib/models');
             let spinWallet = await SpinWallet.findOne({ user_id: transaction.user_id }).session(session || undefined);
-            
+
+            const spinCreditsEarned = Math.floor(transaction.amount_cents / 3000); // KES 30 = 1 spin
+
             if (!spinWallet) {
-              spinWallet = await SpinWallet.create([{
+              await SpinWallet.create([{
                 user_id: transaction.user_id,
-                balance_cents: transaction.amount_cents,
+                balance_cents: 0,                         // NOT the deposit amount
                 total_deposited_cents: transaction.amount_cents,
                 total_used_cents: 0,
                 total_spins: 0,
+                spin_credits: spinCreditsEarned,
               }], { session: session || undefined });
             } else {
-              spinWallet.balance_cents += transaction.amount_cents;
-              spinWallet.total_deposited_cents += transaction.amount_cents;
+              // Do NOT touch balance_cents — only add spin credits
+              spinWallet.spin_credits = (spinWallet.spin_credits || 0) + spinCreditsEarned;
+              spinWallet.total_deposited_cents = (spinWallet.total_deposited_cents || 0) + transaction.amount_cents;
               await spinWallet.save({ session: session || undefined });
             }
-            console.log(`💳 Spin wallet credited: +KSh ${transaction.amount_cents / 100}. New balance: KSh ${spinWallet.balance_cents / 100}`);
+
+            console.log(`[Callback] SpinWallet: +${spinCreditsEarned} spin credit(s). Money recorded as company SPIN_COST revenue.`);
             transaction.balance_updated = true;
           } catch (spinError) {
-            console.error('❌ Failed to credit spin wallet:', spinError);
-            // Don't throw - mark balance_updated anyway to prevent retries
+            console.error('[Callback] Failed to update spin wallet credits:', spinError);
+            // Mark as updated to prevent reconciliation retries
             transaction.balance_updated = true;
           }
         }
@@ -693,34 +699,50 @@ export async function POST(request: NextRequest) {
       // ====================================================================
       if (depositType === 'spin_wallet' && safeStatus === 'completed') {
         try {
-          console.log('🆕 Creating Transaction record for spin wallet deposit (backup)');
-          
-          const transaction = new Transaction({
+          console.log('[Callback] Creating SPIN_COST company revenue transaction (backup — no pre-existing record)');
+
+          // Add spin credits to the wallet
+          const spinCreditsEarned = Math.floor(mpesaTransaction.amount_cents / 3000);
+          const { SpinWallet: SW } = await import('@/app/lib/models');
+          let sw = await SW.findOne({ user_id: mpesaTransaction.user_id }).session(session || undefined);
+          if (!sw) {
+            await SW.create([{
+              user_id: mpesaTransaction.user_id,
+              balance_cents: 0,
+              total_deposited_cents: mpesaTransaction.amount_cents,
+              total_used_cents: 0,
+              total_spins: 0,
+              spin_credits: spinCreditsEarned,
+            }], { session: session || undefined });
+          } else {
+            sw.spin_credits = (sw.spin_credits || 0) + spinCreditsEarned;
+            sw.total_deposited_cents = (sw.total_deposited_cents || 0) + mpesaTransaction.amount_cents;
+            await sw.save({ session: session || undefined });
+          }
+
+          // Record as company SPIN_COST revenue
+          const backupTxn = new Transaction({
             user_id: mpesaTransaction.user_id,
             amount_cents: mpesaTransaction.amount_cents,
-            type: 'SPIN_WALLET_DEPOSIT',
-            description: `Spin Wallet M-Pesa Deposit - KES ${mpesaTransaction.amount_cents / 100}`,
+            type: 'SPIN_COST',
+            description: `Spin Wallet Deposit (backup) - KES ${mpesaTransaction.amount_cents / 100}`,
             status: 'completed',
             mpesa_transaction_id: mpesaTransaction._id,
             target_type: 'company',
-            target_id: 'company',
             balance_updated: true,
             transaction_code: mpesaTransaction.mpesa_receipt_number,
             metadata: {
-              mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
-              phoneNumber: mpesaTransaction.phone_number,
-              transactionDate: mpesaTransaction.transaction_date,
-              transactionFlow: 'neutral',
+              receipt_number: mpesaTransaction.mpesa_receipt_number,
+              phone_number: mpesaTransaction.phone_number,
+              revenue_target: 'company',
               callbackProcessedAt: new Date().toISOString(),
-              reason: 'Transaction created via backup flow - no pre-existing record'
-            }
+              reason: 'backup flow — no pre-existing transaction record',
+            },
           });
-
-          await transaction.save({ session: session || undefined });
-          console.log('✅ Transaction record created for spin wallet deposit:', transaction._id);
+          await backupTxn.save({ session: session || undefined });
+          console.log('[Callback] Backup SPIN_COST transaction created:', backupTxn._id);
         } catch (txnError) {
-          console.error('❌ Failed to create Transaction record for spin wallet:', txnError);
-          // Don't throw - spin wallet was already credited above
+          console.error('[Callback] Failed to create backup SPIN_COST transaction:', txnError);
         }
       }
     }

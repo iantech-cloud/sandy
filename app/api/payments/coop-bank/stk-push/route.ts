@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate message reference
-    const messageReference = `SANDY${Date.now()}${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    // Generate message reference — used as idempotency key and callback lookup key
+    const messageReference = `SANDY${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
     // Create CoopBank service
     const coopBank = createCoopBankService();
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     // Callback URL for payment confirmation
     const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
-    // Initiate STK push
+    // Initiate STK push (PascalCase payload constructed inside the service)
     const stkResponse = await coopBank.initiateSTKPush(
       formattedPhone,
       amount,
@@ -81,31 +81,40 @@ export async function POST(request: NextRequest) {
       messageReference
     );
 
-    // Store transaction record
+    // Non-'0' ResponseCode means the bank rejected the initiation
+    if (stkResponse.ResponseCode !== '0') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: stkResponse.ResponseDescription || 'STK Push rejected by bank',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Store transaction record (checkout_request_id == messageReference for callback lookup)
     const mpesaTransaction = await MpesaTransaction.create({
       user_id: userId,
       amount_cents: Math.round(amount * 100),
       phone_number: formattedPhone,
       status: 'initiated',
       source: 'coop_bank',
-      merchant_request_id: stkResponse.operatorTxnID,
       checkout_request_id: messageReference,
       is_activation_payment: depositType === 'activation',
       metadata: {
         deposit_type: depositType,
         message_reference: messageReference,
-        operator_txn_id: stkResponse.operatorTxnID,
-        conversation_id: stkResponse.conversationID,
         payment_method: 'coop_bank_stk_push',
+        // For spin wallet: money goes to company, not user balance
+        revenue_target: depositType === 'spin_wallet' ? 'company' : 'user',
         initiated_at: new Date().toISOString(),
       },
     });
 
-    console.log('[API] STK Push initiated successfully:', {
+    console.log('[API] Co-op Bank STK Push initiated:', {
       userId,
       amount,
       messageReference,
-      operatorTxnID: stkResponse.operatorTxnID,
       transactionId: mpesaTransaction._id,
     });
 
@@ -113,13 +122,11 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         messageReference,
-        operatorTxnID: stkResponse.operatorTxnID,
-        conversationID: stkResponse.conversationID,
         transactionId: mpesaTransaction._id.toString(),
         amount,
         phoneNumber: formattedPhone,
       },
-      message: stkResponse.responseDescription || 'STK Push initiated. Please check your phone to complete the payment.',
+      message: stkResponse.ResponseDescription || 'STK Push initiated. Please check your phone to complete the payment.',
     });
   } catch (error) {
     console.error('[API] STK Push error:', error);

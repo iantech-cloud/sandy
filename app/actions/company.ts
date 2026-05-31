@@ -127,7 +127,16 @@ async function calculateActualFinancials() {
   // Get ALL completed revenue transactions for company
   const revenueTransactions = await Transaction.find({
     target_type: 'company',
-    status: 'completed'
+    status: 'completed',
+    type: {
+      $in: [
+        'ACTIVATION_FEE',
+        'ACCOUNT_ACTIVATION',
+        'SPIN_COST',
+        'COMPANY_REVENUE',
+        'UNCLAIMED_REFERRAL',
+      ],
+    },
   }).lean();
 
   // Get ALL completed expense transactions (company paying users)
@@ -148,19 +157,23 @@ async function calculateActualFinancials() {
 
   for (const txn of revenueTransactions) {
     const amount = txn.amount_cents;
-    
+
     switch (txn.type) {
       case 'ACTIVATION_FEE':
       case 'ACCOUNT_ACTIVATION':
         activationRevenue += amount;
         break;
-      
+
       case 'SPIN_COST':
+        // Spin wallet deposits: user pays KES 30 per spin → company revenue
         spinCostRevenue += amount;
         break;
-      
+
+      case 'UNCLAIMED_REFERRAL':
+        unclaimedReferralRevenue += amount;
+        break;
+
       case 'COMPANY_REVENUE':
-        // Check metadata to determine subcategory
         if (txn.metadata?.source === 'unclaimed_referral') {
           unclaimedReferralRevenue += amount;
         } else if (txn.metadata?.source === 'content_payment') {
@@ -169,7 +182,7 @@ async function calculateActualFinancials() {
           otherRevenue += amount;
         }
         break;
-      
+
       default:
         otherRevenue += amount;
     }
@@ -271,7 +284,9 @@ export async function syncCompanyFinancials(): Promise<ApiResponse<{
     company.activation_revenue_cents = actualFinancials.activationRevenue;
     company.unclaimed_referral_revenue_cents = actualFinancials.unclaimedReferralRevenue;
     company.content_payment_revenue_cents = actualFinancials.contentPaymentRevenue;
-    company.other_revenue_cents = actualFinancials.otherRevenue + actualFinancials.spinCostRevenue;
+    // spin_cost_revenue is stored in other_revenue_cents if no dedicated field exists
+    company.other_revenue_cents =
+      actualFinancials.otherRevenue + actualFinancials.spinCostRevenue;
 
     await company.save();
 
@@ -366,9 +381,11 @@ export async function getCompanyProfile(): Promise<ApiResponse<{
           $match: {
             target_type: 'company',
             status: 'completed',
-            type: { $in: ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'SPIN_COST'] },
-            created_at: { $gte: todayStart }
-          }
+            type: {
+              $in: ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'SPIN_COST', 'UNCLAIMED_REFERRAL'],
+            },
+            created_at: { $gte: todayStart },
+          },
         },
         { $group: { _id: null, total: { $sum: '$amount_cents' } } }
       ]),
@@ -378,9 +395,11 @@ export async function getCompanyProfile(): Promise<ApiResponse<{
           $match: {
             target_type: 'company',
             status: 'completed',
-            type: { $in: ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'SPIN_COST'] },
-            created_at: { $gte: weekStart }
-          }
+            type: {
+              $in: ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'SPIN_COST', 'UNCLAIMED_REFERRAL'],
+            },
+            created_at: { $gte: weekStart },
+          },
         },
         { $group: { _id: null, total: { $sum: '$amount_cents' } } }
       ]),
@@ -390,9 +409,11 @@ export async function getCompanyProfile(): Promise<ApiResponse<{
           $match: {
             target_type: 'company',
             status: 'completed',
-            type: { $in: ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'SPIN_COST'] },
-            created_at: { $gte: monthStart }
-          }
+            type: {
+              $in: ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'SPIN_COST', 'UNCLAIMED_REFERRAL'],
+            },
+            created_at: { $gte: monthStart },
+          },
         },
         { $group: { _id: null, total: { $sum: '$amount_cents' } } }
       ]),
@@ -474,17 +495,20 @@ export async function createCompanyRevenueTransaction(
       }
     });
     
-    // Update company balance (but transactions are still source of truth)
+    // Update company balance (transactions are still the source of truth)
     company.wallet_balance_cents = balanceAfter;
     company.total_revenue_cents += amountCents;
-    
-    // Update specific revenue category
-    if (type === 'ACTIVATION_FEE' || type === 'COMPANY_REVENUE') {
-      company.activation_revenue_cents += amountCents;
+
+    // Update the relevant revenue category
+    if (type === 'ACTIVATION_FEE' || type === 'ACCOUNT_ACTIVATION') {
+      company.activation_revenue_cents = (company.activation_revenue_cents || 0) + amountCents;
     } else if (type === 'UNCLAIMED_REFERRAL') {
-      company.unclaimed_referral_revenue_cents += amountCents;
+      company.unclaimed_referral_revenue_cents = (company.unclaimed_referral_revenue_cents || 0) + amountCents;
     } else if (type === 'SPIN_COST') {
-      company.other_revenue_cents += amountCents;
+      // Spin wallet deposits — stored in other_revenue_cents (no dedicated field yet)
+      company.other_revenue_cents = (company.other_revenue_cents || 0) + amountCents;
+    } else {
+      company.other_revenue_cents = (company.other_revenue_cents || 0) + amountCents;
     }
     
     await company.save();
@@ -506,7 +530,7 @@ export async function createCompanyRevenueTransaction(
     };
     
   } catch (error) {
-    console.error('❌ Company transaction error:', error);
+    console.error('�� Company transaction error:', error);
     return { success: false, error: 'Failed to create company transaction' };
   }
 }

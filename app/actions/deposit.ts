@@ -1,36 +1,15 @@
 // app/actions/deposit.ts
 'use server';
 
-// V5 Migration: Use the unified `auth` function from your Auth.js setup
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
 import { connectToDatabase, Profile, MpesaTransaction, Transaction } from '../lib/models';
 import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '../lib/utils/phoneFormatter';
+import { createCoopBankService, CoopBankService } from '../lib/services/coop-bank';
 
-// M-Pesa configuration matching transactions.ts
-const MPESA_CONFIG = {
-    consumerKey: process.env.MPESA_CONSUMER_KEY!,
-    consumerSecret: process.env.MPESA_CONSUMER_SECRET!,
-    shortCode: process.env.MPESA_SHORTCODE!,
-    passkey: process.env.MPESA_PASSKEY!,
-    callbackURL: process.env.MPESA_CALLBACK_URL!,
-    environment: process.env.MPESA_ENVIRONMENT || 'sandbox',
-};
-
-// Type definitions for M-Pesa responses
-interface MpesaSTKPushResponse {
-    ResponseCode: string;
-    ResponseDescription: string;
-    CustomerMessage: string;
-    CheckoutRequestID?: string;
-    MerchantRequestID?: string;
-}
-
-interface MpesaQueryResponse {
-    ResultCode: string;
-    ResultDesc: string;
-    MpesaReceiptNumber?: string;
-}
+// ---------------------------------------------------------------------------
+// Type definitions
+// ---------------------------------------------------------------------------
 
 interface DepositHistoryItem {
     id: string;
@@ -40,7 +19,7 @@ interface DepositHistoryItem {
     date: string;
     status: string;
     transaction_code?: string;
-    mpesaReceiptNumber?: string;
+    receiptNumber?: string;
 }
 
 interface UserBalance {
@@ -84,7 +63,10 @@ interface BalanceResponse {
     message: string;
 }
 
+// ---------------------------------------------------------------------------
 // Session type guard
+// ---------------------------------------------------------------------------
+
 interface SessionWithUser {
     user: {
         email?: string | null;
@@ -99,189 +81,93 @@ function isValidSession(session: unknown): session is SessionWithUser {
         session !== null &&
         typeof session === 'object' &&
         'user' in session &&
-        session.user !== null &&
-        typeof session.user === 'object' &&
-        'email' in session.user &&
-        typeof session.user.email === 'string' &&
-        session.user.email.length > 0
+        (session as any).user !== null &&
+        typeof (session as any).user === 'object' &&
+        'email' in (session as any).user &&
+        typeof (session as any).user.email === 'string' &&
+        (session as any).user.email.length > 0
     );
 }
 
-/**
- * Generate M-Pesa access token
- */
-async function getMpesaAccessToken(): Promise<string> {
-    const auth = Buffer.from(`${MPESA_CONFIG.consumerKey}:${MPESA_CONFIG.consumerSecret}`).toString('base64');
-    
-    const response = await fetch(
-        MPESA_CONFIG.environment === 'sandbox'     
-            ? 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
-            : 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
-        {
-            method: 'GET',
-            headers: {
-                'Authorization': `Basic ${auth}`,
-            },
-        }
-    );
-
-    if (!response.ok) {
-        throw new Error('Failed to get M-Pesa access token');
-    }
-
-    const data = await response.json();
-    return data.access_token;
-}
+// ---------------------------------------------------------------------------
+// Validation helpers
+// ---------------------------------------------------------------------------
 
 /**
- * Generate correct M-Pesa timestamp
- */
-function generateMpesaTimestamp(): string {
-    const now = new Date();
-    
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    
-    return `${year}${month}${day}${hours}${minutes}${seconds}`;
-}
-
-/**
- * Generate M-Pesa password
- */
-function generateMpesaPassword(timestamp: string): string {
-    const password = Buffer.from(`${MPESA_CONFIG.shortCode}${MPESA_CONFIG.passkey}${timestamp}`).toString('base64');
-    return password;
-}
-
-/**
- * Validate deposit parameters
+ * Validate deposit parameters before calling the payment API.
  */
 async function validateDeposit(
-    userId: string, 
-    amount: number, 
+    userId: string,
+    amount: number,
     phoneNumber: string
 ): Promise<ValidationResult> {
     if (amount < 10 || amount > 70000) {
         return { valid: false, message: 'Amount must be between KES 10 and KES 70,000' };
     }
 
-    // Validate and format phone number
     if (!isValidPhoneNumber(phoneNumber)) {
-        return { valid: false, message: 'Invalid phone number format. Use 791406285, 0791406285, 254791406285, or +254791406285' };
+        return { valid: false, message: 'Invalid phone number format. Use 07XXXXXXXX, 2547XXXXXXXX, or +2547XXXXXXXX' };
     }
 
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    const mpesaPhone = getMpesaPhoneFormat(formattedPhone);
+    const formattedPhone = getMpesaPhoneFormat(formatPhoneNumber(phoneNumber));
 
     await connectToDatabase();
-    const user = await (Profile as any).findOne({ _id: userId });
+    const user = await (Profile as any).findById(userId);
     if (!user) {
         return { valid: false, message: 'User not found' };
     }
 
-    // CRITICAL: Verify that the phone number matches the user's registered phone
-    if (!phoneNumbersMatch(mpesaPhone, user.phone_number)) {
-        console.error('[v0] Phone number mismatch:', {
-            providedPhone: mpesaPhone,
-            registeredPhone: user.phone_number,
-            userId: userId
-        });
-        return { valid: false, message: 'Phone number does not match your registered phone number. Deposits can only be made from your registered phone number.' };
+    // Phone must match the user's registered number
+    if (!phoneNumbersMatch(formattedPhone, user.phone_number)) {
+        return {
+            valid: false,
+            message: 'Phone number does not match your registered phone number. Deposits can only be made from your registered phone number.',
+        };
     }
 
-    // Only block if there is a *recent* in-flight wallet deposit (within the
-    // last 3 minutes). Stale 'initiated'/'pending' records left behind by failed
-    // spin-wallet or activation deposits must not prevent new wallet deposits.
+    // Block if there is already an in-flight wallet deposit within the last 3 minutes
     const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
-    const pendingMpesaTransaction = await (MpesaTransaction as any).findOne({
+    const pending = await (MpesaTransaction as any).findOne({
         user_id: userId,
         status: { $in: ['initiated', 'pending'] },
-        phone_number: mpesaPhone,
+        phone_number: formattedPhone,
         source: 'wallet',
         created_at: { $gte: threeMinutesAgo },
     });
 
-    if (pendingMpesaTransaction) {
-        return { valid: false, message: 'You have a pending M-Pesa deposit in progress. Please wait for it to complete before starting another.' };
+    if (pending) {
+        return {
+            valid: false,
+            message: 'You have a pending deposit in progress. Please wait for it to complete before starting another.',
+        };
     }
 
-    return { valid: true, message: 'Validation passed', data: { formattedPhone: mpesaPhone } };
+    return { valid: true, message: 'Validation passed', data: { formattedPhone } };
 }
 
-/**
- * Map M-Pesa result codes to VALID database enum values
- */
-function mapMpesaResultCode(resultCode: string): number {
-    const code = parseInt(resultCode);
-    
-    const validSchemaCodes = [
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 20, 26, 1032, 1037, 2001
-    ];
-    
-    if (validSchemaCodes.includes(code)) {
-        return code;
-    }
-    
-    if (code === 0 || (code > 0 && code < 1000)) {
-        return 11;
-    }
-    
-    if (code >= 1000 && code <= 1999) {
-        return 1032;
-    }
-    
-    if (code >= 2000 && code <= 2999) {
-        return 2001;
-    }
-    
-    return 11;
-}
+// ---------------------------------------------------------------------------
+// Transaction record sync (status only — no wallet credits here)
+// ---------------------------------------------------------------------------
 
-/**
- * Map M-Pesa API status codes to VALID database status enum values
- */
-function mapMpesaStatus(resultCode: string): string {
-    const statusMap: { [key: string]: string } = {
-        '0': 'completed',
-        '1': 'failed',
-        '1032': 'cancelled',
-        '1037': 'timeout',
-        '2001': 'failed',
-        '1026': 'initiated',
-        '1031': 'initiated',
-        '4999': 'initiated',
-    };
-
-    return statusMap[resultCode] || 'failed';
-}
-
-/**
- * Update Transaction record to match M-Pesa transaction status
- * 🔧 FIXED: Now properly sets target_type and target_id
- */
-async function syncTransactionWithMpesaStatus(
-    mpesaTransactionId: any, 
-    status: string, 
-    resultCode: number, 
+async function syncTransactionStatus(
+    mpesaTransactionId: any,
+    status: string,
+    resultCode: number,
     resultDesc: string,
-    mpesaReceiptNumber?: string
+    receiptNumber?: string
 ): Promise<void> {
     try {
         const updateData: any = {
-            status: status,
+            status,
             metadata: {
                 result_code: resultCode,
                 result_desc: resultDesc,
-                status_updated_at: new Date().toISOString()
-            }
+                status_updated_at: new Date().toISOString(),
+            },
         };
 
-        if (status === 'completed' && mpesaReceiptNumber) {
-            updateData.metadata.mpesa_receipt_number = mpesaReceiptNumber;
+        if (status === 'completed' && receiptNumber) {
+            updateData.metadata.receipt_number = receiptNumber;
             updateData.metadata.completed_at = new Date().toISOString();
         }
 
@@ -293,46 +179,31 @@ async function syncTransactionWithMpesaStatus(
             { mpesa_transaction_id: mpesaTransactionId },
             updateData
         );
-
-        console.log(`🔄 Successfully synced Transaction status to: ${status}`);
     } catch (error) {
-        console.error('❌ Failed to sync Transaction status:', error);
+        console.error('[Deposit] Failed to sync Transaction status:', error);
         throw error;
     }
 }
 
-/**
- * Update user balance for completed transactions
- */
-async function updateUserBalance(userId: string, amountCents: number): Promise<void> {
-    try {
-        const user = await (Profile as any).findById(userId);
-        if (user) {
-            user.balance_cents += amountCents;
-            await user.save();
-            console.log('💰 Updated user balance:', user.balance_cents);
-            revalidatePath('/dashboard/wallet');
-            revalidatePath('/dashboard');
-        }
-    } catch (error) {
-        console.error('❌ Failed to update user balance:', error);
-        throw error;
-    }
-}
+// ---------------------------------------------------------------------------
+// Main exported action: initiate a wallet deposit via Co-op Bank STK Push
+// ---------------------------------------------------------------------------
 
 /**
- * Process M-Pesa deposit with STK Push
- * 🔧 FIXED: Now includes target_type and target_id in transaction creation
+ * Process a wallet deposit by sending a Co-op Bank STK Push to the user's phone.
+ * On success returns a messageReference that the client polls with
+ * `checkCoopDepositStatus`.
+ *
+ * NOTE: wallet balance is credited ONLY in the Co-op Bank callback route
+ * (/api/payments/coop-bank/callback) — never here.
  */
 export async function processMpesaDeposit(depositData: {
     amount: number;
     phoneNumber: string;
 }): Promise<ProcessDepositResponse> {
     try {
-        console.log('🎯 Starting M-Pesa deposit process:', depositData);
-
         const session = await auth();
-        
+
         if (!isValidSession(session)) {
             return { success: false, message: 'User not authenticated' };
         }
@@ -344,156 +215,130 @@ export async function processMpesaDeposit(depositData: {
             return { success: false, message: 'User profile not found' };
         }
 
-        const validationResult = await validateDeposit(currentUser._id.toString(), depositData.amount, depositData.phoneNumber);
-        if (!validationResult.valid) {
-            return { success: false, message: validationResult.message };
-        }
-
-        const formattedPhone = validationResult.data?.formattedPhone || depositData.phoneNumber;
-
-        console.log('🔐 Getting M-Pesa access token...');
-        const accessToken = await getMpesaAccessToken();
-        
-        const timestamp = generateMpesaTimestamp();
-        const password = generateMpesaPassword(timestamp);
-        
-        const amountCents = Math.round(depositData.amount * 100);
-
-        const stkPushPayload = {
-            BusinessShortCode: MPESA_CONFIG.shortCode,
-            Password: password,
-            Timestamp: timestamp,
-            TransactionType: 'CustomerPayBillOnline',
-            Amount: depositData.amount,
-            PartyA: formattedPhone,
-            PartyB: MPESA_CONFIG.shortCode,
-            PhoneNumber: formattedPhone,
-            CallBackURL: MPESA_CONFIG.callbackURL,
-            AccountReference: `DEPOSIT-${currentUser._id.toString().slice(-8).toUpperCase()}`,
-            TransactionDesc: `Wallet deposit - ${currentUser.username}`
-        };
-
-        console.log('📦 STK Push Payload:', {
-            ...stkPushPayload,
-            Password: '***'
-        });
-
-        console.log('🚀 Initiating STK Push...');
-        const stkResponse = await fetch(
-            MPESA_CONFIG.environment === 'sandbox'
-                ? 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
-                : 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(stkPushPayload),
-            }
+        const validation = await validateDeposit(
+            currentUser._id.toString(),
+            depositData.amount,
+            depositData.phoneNumber
         );
 
-        if (!stkResponse.ok) {
-            const errorData = await stkResponse.text();
-            console.error('❌ M-Pesa STK Push error:', errorData);
-            return { success: false, message: 'Failed to initiate M-Pesa payment. Please try again.' };
+        if (!validation.valid) {
+            return { success: false, message: validation.message };
         }
 
-        const stkData: MpesaSTKPushResponse = await stkResponse.json();
-        console.log('📨 STK Push response:', stkData);
+        const formattedPhone = validation.data!.formattedPhone;
+        const amountCents = Math.round(depositData.amount * 100);
 
-        if (stkData.ResponseCode === '0') {
-            const mpesaTransaction = await (MpesaTransaction as any).create({
-                user_id: currentUser._id,
-                amount_cents: amountCents,
-                phone_number: formattedPhone,
-                account_reference: stkPushPayload.AccountReference,
-                transaction_desc: stkPushPayload.TransactionDesc,
-                checkout_request_id: stkData.CheckoutRequestID,
-                merchant_request_id: stkData.MerchantRequestID,
-                status: 'initiated',
-                stk_push_response: stkData,
-                result_code: 1032,
-                result_desc: 'STK Push initiated successfully',
-                source: 'wallet',
-                metadata: {
-                    user_username: currentUser.username,
-                    deposit_type: 'wallet',
-                    initiated_at: new Date().toISOString(),
-                    callback_url: MPESA_CONFIG.callbackURL
-                }
+        // Generate a unique message reference
+        const messageReference = `SANDY${Date.now()}${Math.random()
+            .toString(36)
+            .substring(2, 8)
+            .toUpperCase()}`;
+
+        const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
+
+        // Create the MpesaTransaction record BEFORE calling the API so the
+        // callback always finds a matching record even if the API response is slow.
+        const mpesaTransaction = await (MpesaTransaction as any).create({
+            user_id: currentUser._id,
+            amount_cents: amountCents,
+            phone_number: formattedPhone,
+            account_reference: `DEPOSIT-${currentUser._id.toString().slice(-8).toUpperCase()}`,
+            transaction_desc: `Wallet deposit - ${currentUser.username}`,
+            checkout_request_id: messageReference, // used as the lookup key in the callback
+            status: 'initiated',
+            source: 'wallet',
+            metadata: {
+                user_username: currentUser.username,
+                deposit_type: 'wallet',
+                payment_method: 'coop_bank_stk_push',
+                initiated_at: new Date().toISOString(),
+                callback_url: callbackUrl,
+            },
+        });
+
+        // Create a pending Transaction record so the wallet history is visible immediately
+        const transaction = await (Transaction as any).create({
+            user_id: currentUser._id,
+            amount_cents: amountCents,
+            type: 'DEPOSIT',
+            description: `Co-op Bank deposit from ${formattedPhone}`,
+            status: 'pending',
+            mpesa_transaction_id: mpesaTransaction._id,
+            target_type: 'user',
+            target_id: currentUser._id.toString(),
+            metadata: {
+                phoneNumber: formattedPhone,
+                provider: 'coop_bank',
+                messageReference,
+                initiated_at: new Date().toISOString(),
+            },
+        });
+
+        // Now call the Co-op Bank STK Push API
+        const coopBank = createCoopBankService();
+
+        const stkResponse = await coopBank.initiateSTKPush(
+            formattedPhone,
+            depositData.amount,
+            `Wallet deposit - ${currentUser.username}`,
+            callbackUrl,
+            messageReference
+        );
+
+        // Non-'0' ResponseCode means the bank rejected the initiation
+        if (stkResponse.ResponseCode !== '0') {
+            // Mark the pre-created records as failed
+            await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+                status: 'failed',
+                result_desc: stkResponse.ResponseDescription || 'STK Push rejected by bank',
             });
+            await (Transaction as any).findByIdAndUpdate(transaction._id, { status: 'failed' });
 
-            // 🔧 FIXED: Now includes target_type and target_id
-            const transaction = await (Transaction as any).create({
-                user_id: currentUser._id,
-                amount_cents: amountCents,
-                type: 'DEPOSIT',
-                description: `M-Pesa deposit from ${formattedPhone}`,
-                status: 'pending',
-                mpesa_transaction_id: mpesaTransaction._id,
-                
-                // ✅ ADD THESE REQUIRED FIELDS
-                target_type: 'user',
-                target_id: currentUser._id.toString(),
-                
-                metadata: {
-                    phoneNumber: formattedPhone,
-                    provider: 'mpesa',
-                    checkoutRequestID: stkData.CheckoutRequestID,
-                    merchantRequestID: stkData.MerchantRequestID,
-                    accountReference: stkPushPayload.AccountReference,
-                    initiated_at: new Date().toISOString()
-                }
-            });
-
-            console.log('✅ M-Pesa transaction created:', mpesaTransaction._id);
-            console.log('✅ Transaction record created:', transaction._id);
-
-            revalidatePath('/dashboard/wallet');
-            revalidatePath('/dashboard');
-
-            return {
-                success: true,
-                data: {
-                    CheckoutRequestID: stkData.CheckoutRequestID,
-                    MerchantRequestID: stkData.MerchantRequestID,
-                    ResponseDescription: stkData.ResponseDescription,
-                    CustomerMessage: stkData.CustomerMessage,
-                    Amount: depositData.amount,
-                    PhoneNumber: formattedPhone,
-                    AccountReference: stkPushPayload.AccountReference,
-                    transactionId: transaction._id.toString(),
-                    mpesaTransactionId: mpesaTransaction._id.toString()
-                },
-                message: stkData.CustomerMessage || 'STK Push initiated successfully. Please check your phone for the prompt.'
-            };
-        } else {
-            console.error('❌ STK Push failed with code:', stkData.ResponseCode);
             return {
                 success: false,
-                message: stkData.ResponseDescription || 'Failed to initiate M-Pesa payment. Please try again.'
+                message: stkResponse.ResponseDescription || 'Failed to initiate payment. Please try again.',
             };
         }
 
+        revalidatePath('/dashboard/wallet');
+        revalidatePath('/dashboard');
+
+        return {
+            success: true,
+            data: {
+                messageReference,
+                ResponseDescription: stkResponse.ResponseDescription,
+                Amount: depositData.amount,
+                PhoneNumber: formattedPhone,
+                transactionId: transaction._id.toString(),
+                mpesaTransactionId: mpesaTransaction._id.toString(),
+            },
+            message:
+                stkResponse.ResponseDescription ||
+                'Payment prompt sent. Please check your phone to complete the payment.',
+        };
+
     } catch (error) {
-        console.error('💥 Process M-Pesa deposit error:', error);
-        return { 
-            success: false, 
-            message: 'An error occurred while processing your deposit. Please try again.' 
+        console.error('[Deposit] processCoopDeposit error:', error);
+        return {
+            success: false,
+            message: 'An error occurred while processing your deposit. Please try again.',
         };
     }
 }
 
-/**
- * Check M-Pesa payment status
- */
-export async function checkMpesaPaymentStatus(checkoutRequestId: string): Promise<PaymentStatusResponse> {
-    try {
-        console.log('🔍 Checking M-Pesa payment status:', checkoutRequestId);
+// ---------------------------------------------------------------------------
+// Poll deposit status via Co-op Bank Enquiry API
+// ---------------------------------------------------------------------------
 
+/**
+ * Check the status of a Co-op Bank wallet deposit.
+ * Wallet crediting is NEVER done here — only in the callback route.
+ */
+export async function checkMpesaPaymentStatus(messageReference: string): Promise<PaymentStatusResponse> {
+    try {
         const session = await auth();
-        
+
         if (!isValidSession(session)) {
             return { success: false, message: 'User not authenticated' };
         }
@@ -501,218 +346,140 @@ export async function checkMpesaPaymentStatus(checkoutRequestId: string): Promis
         await connectToDatabase();
 
         const mpesaTransaction = await (MpesaTransaction as any).findOne({
-            checkout_request_id: checkoutRequestId
+            checkout_request_id: messageReference,
         });
 
         if (!mpesaTransaction) {
             return { success: false, message: 'Transaction not found' };
         }
 
-        if (['completed', 'failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status)) {
+        // Terminal state — return immediately without hitting the API
+        const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
+        if (terminalStatuses.includes(mpesaTransaction.status)) {
             return {
                 success: true,
                 data: {
                     status: mpesaTransaction.status,
-                    resultCode: mpesaTransaction.result_code,
-                    resultDesc: mpesaTransaction.result_desc,
-                    mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+                    receiptNumber: mpesaTransaction.mpesa_receipt_number,
                     amount: mpesaTransaction.amount_cents,
                     completedAt: mpesaTransaction.completed_at,
                     failedAt: mpesaTransaction.failed_at,
-                    source: 'database'
+                    source: 'database',
                 },
-                message: `Payment status: ${mpesaTransaction.status}`
+                message: `Payment status: ${mpesaTransaction.status}`,
             };
         }
 
-        console.log('📡 Querying M-Pesa API for status...');
-        const accessToken = await getMpesaAccessToken();
-        const timestamp = generateMpesaTimestamp();
-        const password = generateMpesaPassword(timestamp);
-
-        const queryPayload = {
-            BusinessShortCode: MPESA_CONFIG.shortCode,
-            Password: password,
-            Timestamp: timestamp,
-            CheckoutRequestID: checkoutRequestId
-        };
-
-        const queryResponse = await fetch(
-            MPESA_CONFIG.environment === 'sandbox'
-                ? 'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query'
-                : 'https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query',
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(queryPayload),
-            }
-        );
-
-        if (!queryResponse.ok) {
-            const errorText = await queryResponse.text();
-            console.error('❌ M-Pesa query API error:', errorText);
+        // Callback already processed — sync status only
+        if (mpesaTransaction.metadata?.callback_processed) {
             return {
                 success: true,
                 data: {
                     status: mpesaTransaction.status,
-                    resultCode: mpesaTransaction.result_code,
-                    resultDesc: mpesaTransaction.result_desc,
-                    source: 'database_fallback'
-                },
-                message: 'Using last known status'
-            };
-        }
-
-        const queryData: MpesaQueryResponse = await queryResponse.json();
-        console.log('📨 M-Pesa query response:', queryData);
-
-        const safeResultCode = mapMpesaResultCode(queryData.ResultCode);
-        const safeStatus = mapMpesaStatus(queryData.ResultCode);
-
-        mpesaTransaction.status = safeStatus;
-        mpesaTransaction.result_code = safeResultCode;
-        mpesaTransaction.result_desc = queryData.ResultDesc || 'No description provided';
-
-        if (safeStatus === 'completed') {
-            mpesaTransaction.mpesa_receipt_number = queryData.MpesaReceiptNumber;
-            mpesaTransaction.completed_at = new Date();
-        } else if (['failed', 'cancelled', 'timeout'].includes(safeStatus)) {
-            mpesaTransaction.failed_at = new Date();
-        }
-
-        try {
-            await mpesaTransaction.save();
-            console.log('💾 Successfully updated M-Pesa transaction with safe status:', safeStatus);
-        } catch (saveError) {
-            console.error('❌ CRITICAL: Failed to save M-Pesa transaction:', saveError);
-            
-            return {
-                success: true,
-                data: {
-                    status: safeStatus,
-                    resultCode: safeResultCode,
-                    resultDesc: queryData.ResultDesc,
-                    mpesaReceiptNumber: queryData.MpesaReceiptNumber,
                     amount: mpesaTransaction.amount_cents,
-                    source: 'api_unsaved'
+                    source: 'callback_processed',
                 },
-                message: `Payment status: ${safeStatus} (database update failed)`
+                message: `Payment ${mpesaTransaction.status}`,
             };
         }
 
-        if (['completed', 'failed', 'cancelled', 'timeout'].includes(safeStatus)) {
-            try {
-                // Only sync the Transaction record status. Wallet crediting is
-                // exclusively handled by the M-Pesa callback route to prevent
-                // multi-credit from repeated polling cycles.
-                await syncTransactionWithMpesaStatus(
-                    mpesaTransaction._id,
-                    safeStatus,
-                    safeResultCode,
-                    queryData.ResultDesc,
-                    queryData.MpesaReceiptNumber
-                );
-            } catch (updateError) {
-                console.error('❌ Failed to sync transaction status:', updateError);
-            }
+        // Query Co-op Bank Enquiry API
+        const coopBank = createCoopBankService();
+        const statusResponse = await coopBank.getTransactionStatus(messageReference);
+
+        const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+
+        if (terminalStatuses.includes(mappedStatus)) {
+            // Update the MpesaTransaction record status (wallet credit still via callback)
+            await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+                status: mappedStatus,
+                result_desc: statusResponse.ResponseDescription || '',
+                ...(mappedStatus === 'completed' ? { completed_at: new Date() } : { failed_at: new Date() }),
+            });
+
+            await syncTransactionStatus(
+                mpesaTransaction._id,
+                mappedStatus,
+                0,
+                statusResponse.ResponseDescription || '',
+                undefined
+            );
         }
 
         return {
             success: true,
             data: {
-                status: mpesaTransaction.status,
-                resultCode: mpesaTransaction.result_code,
-                resultDesc: mpesaTransaction.result_desc,
-                mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+                status: mappedStatus,
                 amount: mpesaTransaction.amount_cents,
-                completedAt: mpesaTransaction.completed_at,
-                failedAt: mpesaTransaction.failed_at,
-                source: 'api'
+                source: 'api',
+                responseCode: statusResponse.ResponseCode,
+                responseDescription: statusResponse.ResponseDescription,
             },
-            message: `Payment status: ${mpesaTransaction.status}`
+            message: `Payment status: ${mappedStatus}`,
         };
 
     } catch (error) {
-        console.error('💥 Check M-Pesa payment status error:', error);
-        return { 
-            success: false, 
-            message: 'Failed to check payment status. Please try again.' 
-        };
+        console.error('[Deposit] checkCoopDepositStatus error:', error);
+        return { success: false, message: 'Failed to check payment status. Please try again.' };
     }
 }
 
-/**
- * Sync transaction status with M-Pesa transaction status
- */
-export async function syncTransactionStatus(transactionId: string): Promise<PaymentStatusResponse> {
-    try {
-        console.log('🔄 Syncing transaction status for:', transactionId);
+// ---------------------------------------------------------------------------
+// Sync transaction status helper (called by admin/debug tooling)
+// ---------------------------------------------------------------------------
 
+export async function syncTransactionStatusAction(transactionId: string): Promise<PaymentStatusResponse> {
+    try {
         await connectToDatabase();
-        
+
         const transaction = await (Transaction as any).findById(transactionId);
         if (!transaction || !transaction.mpesa_transaction_id) {
-            return { success: false, message: 'Transaction not found or not linked to M-Pesa' };
+            return { success: false, message: 'Transaction not found or not linked to a payment' };
         }
 
         const mpesaTransaction = await (MpesaTransaction as any).findById(transaction.mpesa_transaction_id);
         if (!mpesaTransaction) {
-            return { success: false, message: 'M-Pesa transaction not found' };
+            return { success: false, message: 'Payment transaction not found' };
         }
 
-        if (transaction.status !== mpesaTransaction.status && 
-            ['completed', 'failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status)) {
-            
-            await syncTransactionWithMpesaStatus(
+        const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
+        if (
+            transaction.status !== mpesaTransaction.status &&
+            terminalStatuses.includes(mpesaTransaction.status)
+        ) {
+            await syncTransactionStatus(
                 mpesaTransaction._id,
                 mpesaTransaction.status,
                 mpesaTransaction.result_code,
                 mpesaTransaction.result_desc,
                 mpesaTransaction.mpesa_receipt_number
             );
-
-            if (mpesaTransaction.status === 'completed') {
-                const user = await (Profile as any).findById(mpesaTransaction.user_id);
-                if (user && user.balance_cents < mpesaTransaction.amount_cents) { 
-                    await updateUserBalance(mpesaTransaction.user_id, mpesaTransaction.amount_cents);
-                }
-            }
-
-            console.log(`✅ Successfully synced transaction ${transactionId} from ${transaction.status} to ${mpesaTransaction.status}`);
         }
-
-        const updatedTransaction = await (Transaction as any).findById(transactionId);
 
         return {
             success: true,
             data: {
-                transactionStatus: updatedTransaction.status,
-                mpesaStatus: mpesaTransaction.status,
-                synced: updatedTransaction.status === mpesaTransaction.status,
-                previousStatus: transaction.status
+                transactionStatus: transaction.status,
+                paymentStatus: mpesaTransaction.status,
+                synced: transaction.status === mpesaTransaction.status,
             },
-            message: `Transaction status: ${updatedTransaction.status}`
+            message: `Transaction status: ${transaction.status}`,
         };
 
     } catch (error) {
-        console.error('💥 Sync transaction status error:', error);
-        return { 
-            success: false, 
-            message: 'Failed to sync transaction status' 
-        };
+        console.error('[Deposit] syncTransactionStatusAction error:', error);
+        return { success: false, message: 'Failed to sync transaction status' };
     }
 }
 
-/**
- * Get deposit history
- */
+// ---------------------------------------------------------------------------
+// Deposit history
+// ---------------------------------------------------------------------------
+
 export async function getDepositHistory(limit: number = 20, page: number = 1): Promise<DepositHistoryResponse> {
     try {
         const session = await auth();
-        
+
         if (!isValidSession(session)) {
             return { success: false, message: 'User not authenticated' };
         }
@@ -726,58 +493,50 @@ export async function getDepositHistory(limit: number = 20, page: number = 1): P
 
         const skip = (page - 1) * limit;
 
-        const deposits = await (Transaction as any).find({
-            user_id: currentUser._id,
-        })
-        .sort({ created_at: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
+        const [deposits, total] = await Promise.all([
+            (Transaction as any).find({ user_id: currentUser._id })
+                .sort({ created_at: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            (Transaction as any).countDocuments({ user_id: currentUser._id }),
+        ]);
 
-        const total = await (Transaction as any).countDocuments({
-            user_id: currentUser._id,
-        });
-
-        const transformedDeposits: DepositHistoryItem[] = deposits.map((deposit: any) => ({
-            id: deposit._id?.toString(),
-            type: deposit.type,
-            amount: deposit.amount_cents / 100,
-            description: deposit.description,
-            date: deposit.created_at?.toISOString() || new Date().toISOString(),
-            status: deposit.status,
-            transaction_code: deposit.transaction_code,
-            mpesaReceiptNumber: deposit.metadata?.mpesa_receipt_number || deposit.metadata?.mpesaReceiptNumber
+        const transformed: DepositHistoryItem[] = deposits.map((d: any) => ({
+            id: d._id?.toString(),
+            type: d.type,
+            amount: d.amount_cents / 100,
+            description: d.description,
+            date: d.created_at?.toISOString() || new Date().toISOString(),
+            status: d.status,
+            transaction_code: d.transaction_code,
+            receiptNumber:
+                d.metadata?.receipt_number ||
+                d.metadata?.mpesa_receipt_number ||
+                d.metadata?.receiptNumber,
         }));
 
         return {
             success: true,
-            data: transformedDeposits,
-            pagination: {
-                page,
-                limit,
-                total,
-                pages: Math.ceil(total / limit)
-            },
-            message: 'Deposit history fetched successfully'
+            data: transformed,
+            pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+            message: 'Deposit history fetched successfully',
         };
 
     } catch (error) {
-        console.error('Get deposit history error:', error);
-        return {
-            success: false,
-            message: 'Failed to fetch deposit history',
-            data: []
-        };
+        console.error('[Deposit] getDepositHistory error:', error);
+        return { success: false, message: 'Failed to fetch deposit history', data: [] };
     }
 }
 
-/**
- * Get user balance
- */
+// ---------------------------------------------------------------------------
+// User balance
+// ---------------------------------------------------------------------------
+
 export async function getUserBalance(): Promise<BalanceResponse> {
     try {
         const session = await auth();
-        
+
         if (!isValidSession(session)) {
             return { success: false, message: 'User not authenticated' };
         }
@@ -789,52 +548,56 @@ export async function getUserBalance(): Promise<BalanceResponse> {
             return { success: false, message: 'User not found' };
         }
 
-        const balanceInKes = (currentUser.balance_cents || 0) / 100;
-        console.log('[v0] getUserBalance debug:', {
-          balance_cents: currentUser.balance_cents || 0,
-          balance_kes: balanceInKes,
-          formula: `${(currentUser.balance_cents || 0)} / 100 = ${balanceInKes}`
-        });
+        const balanceCents = currentUser.balance_cents || 0;
+
         return {
             success: true,
             data: {
-                balance: balanceInKes,
-                balance_cents: currentUser.balance_cents || 0
+                balance: balanceCents / 100,
+                balance_cents: balanceCents,
             },
-            message: 'Balance fetched successfully'
+            message: 'Balance fetched successfully',
         };
 
     } catch (error) {
-        console.error('Get user balance error:', error);
-        return {
-            success: false,
-            message: 'Failed to fetch user balance',
-            data: { balance: 0, balance_cents: 0 }
-        };
+        console.error('[Deposit] getUserBalance error:', error);
+        return { success: false, message: 'Failed to fetch user balance', data: { balance: 0, balance_cents: 0 } };
     }
 }
 
-/**
- * Validate deposit amount
+// ---------------------------------------------------------------------------
+// Validate deposit amount
+// ---------------------------------------------------------------------------
+
+export async function validateDepositAmount(amount: number): Promise<{ valid: boolean; message: string }> {
+    if (amount < 10 || amount > 70000) {
+        return { valid: false, message: 'Amount must be between KES 10 and KES 70,000' };
+    }
+    return { valid: true, message: 'Amount is valid' };
+}
+
+/*
+ * =============================================================================
+ * FALLBACK: M-Pesa implementation (commented out — kept for quick rollback)
+ * =============================================================================
+ *
+ * To revert to M-Pesa:
+ *   1. Uncomment the functions below.
+ *   2. In processMpesaDeposit, replace the CoopBankService call with initiateStkPush.
+ *   3. In checkMpesaPaymentStatus, replace the CoopBankService call with queryStkPushStatus.
+ *
+ * const MPESA_CONFIG = {
+ *   consumerKey: process.env.MPESA_CONSUMER_KEY!,
+ *   consumerSecret: process.env.MPESA_CONSUMER_SECRET!,
+ *   shortCode: process.env.MPESA_SHORTCODE!,
+ *   passkey: process.env.MPESA_PASSKEY!,
+ *   callbackURL: process.env.MPESA_CALLBACK_URL!,
+ *   environment: process.env.MPESA_ENVIRONMENT || 'sandbox',
+ * };
+ *
+ * async function getMpesaAccessToken(): Promise<string> { ... }
+ * async function initiateMpesaSTKPush(amount, phone, ref, desc): Promise<...> { ... }
+ * async function queryMpesaStatus(checkoutRequestId): Promise<...> { ... }
+ *
+ * =============================================================================
  */
-export async function validateDepositAmount(amount: number): Promise<ValidationResult> {
-    try {
-        if (amount < 10 || amount > 70000) {
-            return {
-                valid: false,
-                message: 'Amount must be between KES 10 and KES 70,000'
-            };
-        }
-
-        return {
-            valid: true,
-            message: 'Amount is valid'
-        };
-    } catch (error) {
-        console.error('Validate deposit amount error:', error);
-        return {
-            valid: false,
-            message: 'Error validating deposit amount'
-        };
-    }
-}
