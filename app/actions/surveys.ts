@@ -665,7 +665,7 @@ export async function getSurveyHistory(): Promise<{
       return { success: false, message: "User profile not found." }
     }
 
-    const surveyHistory = (await (SurveyResponse.aggregate([
+    const surveyHistory = (await SurveyResponse.aggregate([
       {
         $match: { user_id: user._id },
       },

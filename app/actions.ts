@@ -88,7 +88,7 @@ export async function directApiFetch<T = any>(
   options: RequestInit = {}
 ): Promise<{ success: boolean; data?: T; message?: string }> {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     
     if (!session) {
       return {

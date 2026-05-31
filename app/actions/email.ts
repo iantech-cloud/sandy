@@ -620,60 +620,6 @@ export async function sendWelcomeEmail(email: string, username: string) {
         </body>
         </html>
       `,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Welcome to HustleHub Africa</title>
-        </head>
-        <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f9fafb;">
-            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
-                <div style="background: linear-gradient(135deg, #4F46E5, #7E22CE); padding: 30px; text-align: center; color: white;">
-                    <h1 style="margin: 0; font-size: 28px; font-weight: bold;">HustleHub Africa</h1>
-                    <p style="margin: 5px 0 0 0; opacity: 0.9;">Welcome to Our Community!</p>
-                </div>
-
-                <div style="padding: 30px;">
-                    <h2 style="color: #1f2937; margin-bottom: 20px;">Hello ${username}!</h2>
-                    <p style="color: #6b7280; line-height: 1.6; margin-bottom: 25px;">
-                        Your email has been successfully verified! Welcome to Africa's premier earning platform.
-                    </p>
-
-                    ${antiPhishingSection}
-
-                    <p style="color: #6b7280; line-height: 1.6; margin-bottom: 20px;">
-                        Get ready to start earning through:
-                    </p>
-                    <ul style="color: #6b7280; line-height: 1.6; margin-bottom: 25px;">
-                        <li>💼 Surveys and market research</li>
-                        <li>📝 Content creation opportunities</li>
-                        <li>👥 Referral commissions</li>
-                        <li>🎯 Various earning tasks</li>
-                    </ul>
-
-                    <div style="text-align: center; margin: 30px 0;">
-                        <a href="${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/dashboard" 
-                          style="background-color: #4F46E5; color: white; padding: 14px 32px; 
-                                 text-decoration: none; border-radius: 8px; display: inline-block;
-                                 font-weight: bold; font-size: 16px; border: none; cursor: pointer;
-                                 box-shadow: 0 4px 6px rgba(79, 70, 229, 0.3);">
-                            Go to Dashboard
-                        </a>
-                    </div>
-                </div>
-
-                <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
-                    <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                        © 2024 HustleHub Africa. All rights reserved.<br>
-                        Building Africa's Premier Earning Platform
-                    </p>
-                </div>
-            </div>
-        </body>
-        </html>
-      `,
     });
 
     if (result.error) {
