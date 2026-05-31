@@ -885,7 +885,7 @@ export async function bulkApproveWithdrawals(
 
     let approved = 0;
     let failed = 0;
-    const errorMessages: string[] = [];
+    const errorMessage: string[] = [];
 
     // Process withdrawals sequentially to avoid race conditions
     for (const id of withdrawalIds) {
@@ -1593,7 +1593,7 @@ export async function bulkRejectWithdrawals(
 
     let rejected = 0;
     let failed = 0;
-    const errorMessages: string[] = [];
+    const errorMessage: string[] = [];
 
     // Process withdrawals sequentially
     for (const id of withdrawalIds) {

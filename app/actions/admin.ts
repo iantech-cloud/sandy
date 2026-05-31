@@ -9,7 +9,8 @@ import {
   Company,
   Referral,
   AdminAuditLog,
-  SpinSettings
+  SpinSettings,
+  Earning,
 } from '../lib/models';
 import { auth } from '@/auth'; 
 
@@ -709,7 +710,7 @@ export async function approveUser(userId: string, approvalNotes?: string): Promi
             await referralTransaction.save();
 
             // Create earning record
-            const earning = new (Earning as any)({
+            const earning = new Earning({
               user_id: referrer._id,
               amount_cents: REFERRAL_BONUS_CENTS,
               type: 'REFERRAL',
