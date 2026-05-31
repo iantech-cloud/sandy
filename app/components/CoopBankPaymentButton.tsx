@@ -72,7 +72,6 @@ export function CoopBankPaymentButton({
         onClick={handlePayment}
         disabled={loading}
         className={className}
-        size="lg"
       >
         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {loading ? 'Processing...' : `Pay KES ${amount.toLocaleString()}`}
