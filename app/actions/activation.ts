@@ -73,6 +73,8 @@ interface MpesaStatusData {
   failedAt?: Date;
   source?: string;
   callbackUrl?: string;
+  message?: string;
+  fallbackReason?: string;
 }
 
 interface MpesaSTKPushResult {
@@ -459,10 +461,12 @@ async function queryMpesaTransactionStatus(checkoutRequestId: string): Promise<A
  * Get or create company profile
  */
 async function getOrCreateCompany() {
-  let company = await Company.findOne({ email: 'company@hustlehubafrica.com' });
-  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let company = await (Company as any).findOne({ email: 'company@hustlehubafrica.com' });
+
   if (!company) {
-    company = await Company.create({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    company = await (Company as any).create({
       name: 'HustleHub Africa Ltd',
       email: 'company@hustlehubafrica.com',
       phone_number: '+254700000000',
