@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useCoopBankPayment } from '@/hooks/useCoopBankPayment';
+import { useCoopBankPayment } from '@/app/hooks/useCoopBankPayment';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 

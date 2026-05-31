@@ -461,7 +461,7 @@ export async function getCompanyProfile(): Promise<ApiResponse<{
  */
 export async function createCompanyRevenueTransaction(
   amountCents: number,
-  type: 'COMPANY_REVENUE' | 'ACTIVATION_FEE' | 'UNCLAIMED_REFERRAL' | 'SPIN_COST',
+  type: 'COMPANY_REVENUE' | 'ACTIVATION_FEE' | 'ACCOUNT_ACTIVATION' | 'UNCLAIMED_REFERRAL' | 'SPIN_COST',
   description: string,
   metadata?: any,
   relatedUserId?: string

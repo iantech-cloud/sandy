@@ -281,7 +281,6 @@ export async function POST(request: NextRequest) {
 
           try {
             await completeActivationAfterPayment(
-              mpesaTransaction.user_id.toString(),
               activationPayment._id.toString()
             );
           } catch (activationError) {
