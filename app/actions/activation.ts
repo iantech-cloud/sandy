@@ -389,70 +389,21 @@ export async function checkActivationStatus(): Promise<ApiResponse<ActivationSta
 }
 
 /**
- * Check user activation status using correct schema fields.
+ * Co-op Bank does not use C2B URL registration (that was Safaricom-only).
+ * This function is kept as a no-op so callers such as verifyUrlRegistration
+ * continue to compile and return a stable response.
  */
 export async function registerMpesaUrls(): Promise<ApiResponse<UrlRegistrationData>> {
-  try {
-    console.log('🔗 Registering M-Pesa URLs...');
-
-    const BusinessShortCode = process.env.MPESA_SHORTCODE;
-    const Environment = process.env.MPESA_ENVIRONMENT || 'sandbox';
-    const baseUrl = process.env.NEXTAUTH_URL || process.env.MPESA_CALLBACK_URL?.replace('/api/mpesa/callback', '');
-
-    if (!BusinessShortCode || !baseUrl) {
-      throw new Error('MPESA_SHORTCODE or base URL not found');
-    }
-
-    const accessToken = await getMpesaAccessToken();
-
-    const c2bPayload = {
-      ShortCode: BusinessShortCode,
-      ResponseType: 'Completed',
-      ConfirmationURL: `${baseUrl}/api/mpesa/confirmation`,
-      ValidationURL: `${baseUrl}/api/mpesa/validation`
-    };
-
-    const c2bApiUrl = Environment === 'production' 
-      ? 'https://api.safaricom.co.ke/mpesa/c2b/v1/registerurl'
-      : 'https://sandbox.safaricom.co.ke/mpesa/c2b/v1/registerurl';
-
-    const response = await fetch(c2bApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      body: JSON.stringify(c2bPayload)
-    });
-
-    const data = await response.json();
-
-    if (data.ResponseCode === '0') {
-      console.log('✅ M-Pesa URLs registered successfully');
-      
-      return { 
-        success: true, 
-        message: 'URLs registered successfully',
-        data: {
-          confirmationUrl: c2bPayload.ConfirmationURL,
-          validationUrl: c2bPayload.ValidationURL,
-          callbackUrl: `${baseUrl}/api/mpesa/callback`
-        }
-      };
-    } else {
-      console.error('❌ M-Pesa URL registration failed:', data.ResponseDescription);
-      return { 
-        success: false, 
-        error: data.ResponseDescription || 'Failed to register URLs' 
-      };
-    }
-  } catch (error) {
-    console.error('💥 M-Pesa URL registration error:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to register M-Pesa URLs' 
-    };
-  }
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || '';
+  return {
+    success: true,
+    message: 'Co-op Bank STK Push does not require C2B URL registration',
+    data: {
+      confirmationUrl: `${baseUrl}/api/coop/callback`,
+      validationUrl: `${baseUrl}/api/coop/callback`,
+      callbackUrl: `${baseUrl}/api/coop/callback`,
+    },
+  };
 }
 
 /**
