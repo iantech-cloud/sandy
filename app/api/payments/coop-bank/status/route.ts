@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectToDatabase, MpesaTransaction } from '@/app/lib/models';
-import { createCoopBankService } from '@/app/lib/services/coop-bank';
+import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank';
 
-/**
- * GET /api/payments/coop-bank/status/:messageReference
- * Checks the status of a transaction via Co-operative Bank API
- */
-export async function GET(request: NextRequest) {
+// ---------------------------------------------------------------------------
+// Shared handler — resolves a message reference from either a GET query param
+// or a POST JSON body, then returns the transaction status.
+// ---------------------------------------------------------------------------
+
+async function handleStatusCheck(request: NextRequest, messageReferenceFromPath?: string) {
   try {
     await connectToDatabase();
 
-    // Get authenticated user
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json(
@@ -20,18 +20,39 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Extract message reference from query params
-    const { searchParams } = new URL(request.url);
-    const messageReference = searchParams.get('messageReference');
+    // Resolve the message reference from the request
+    let messageReference: string | null = messageReferenceFromPath || null;
+
+    if (!messageReference) {
+      if (request.method === 'POST') {
+        try {
+          const body = await request.json();
+          messageReference = body?.MessageReference || body?.messageReference || null;
+        } catch {
+          // Body parse failed — fall through to check query params
+        }
+      }
+    }
+
+    if (!messageReference) {
+      const { searchParams } = new URL(request.url);
+      messageReference =
+        searchParams.get('MessageReference') ||
+        searchParams.get('messageReference') ||
+        null;
+    }
 
     if (!messageReference) {
       return NextResponse.json(
-        { success: false, error: 'messageReference query parameter is required' },
+        {
+          success: false,
+          error: 'messageReference is required (query param or JSON body field "MessageReference")',
+        },
         { status: 400 }
       );
     }
 
-    // Find transaction
+    // Find transaction — scoped to the authenticated user
     const mpesaTransaction = await MpesaTransaction.findOne({
       checkout_request_id: messageReference,
       user_id: session.user.id,
@@ -44,11 +65,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // If transaction is already in terminal state, return cached status
+    // Terminal state — return cached status immediately (avoid unnecessary API call)
     const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
-    if (terminalStatuses.includes(mpesaTransaction.status) && mpesaTransaction.metadata?.callback_processed) {
-      console.log('[Status] Transaction already in terminal state:', mpesaTransaction.status);
-
+    if (
+      terminalStatuses.includes(mpesaTransaction.status) &&
+      mpesaTransaction.metadata?.callback_processed
+    ) {
       return NextResponse.json({
         success: true,
         data: {
@@ -56,28 +78,31 @@ export async function GET(request: NextRequest) {
           status: mpesaTransaction.status,
           amount: mpesaTransaction.amount_cents / 100,
           cached: true,
-          lastCheckedAt: mpesaTransaction.callback_received_at || mpesaTransaction.created_at,
+          lastCheckedAt:
+            mpesaTransaction.callback_received_at || mpesaTransaction.created_at,
         },
       });
     }
 
-    // Query Co-op Bank API for live status
+    // Not yet terminal — query Co-op Bank Enquiry API
+    // POST /Enquiry/STK/1.0.0/ with body { MessageReference }
     try {
       const coopBank = createCoopBankService();
       const statusResponse = await coopBank.getTransactionStatus(messageReference);
 
-      console.log('[Status] Live status from Co-op Bank:', {
-        messageReference,
-        ResponseCode: statusResponse.ResponseCode,
-        ResponseDescription: statusResponse.ResponseDescription,
-      });
+      // Use the canonical mapping from the service (consistent with the callback route)
+      const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
 
-      // Map Co-op Bank ResponseCode to our internal status
-      let mappedStatus: 'completed' | 'pending' | 'failed' = 'pending';
-      if (statusResponse.ResponseCode === '0') {
-        mappedStatus = 'completed';
-      } else if (statusResponse.ResponseCode === '2002' || statusResponse.ResponseCode === '2001') {
-        mappedStatus = 'failed';
+      // Persist the updated status if we got a terminal result
+      if (terminalStatuses.includes(mappedStatus)) {
+        await MpesaTransaction.findByIdAndUpdate(mpesaTransaction._id, {
+          status: mappedStatus,
+          result_code: parseInt(statusResponse.ResponseCode || '1', 10),
+          result_desc: statusResponse.ResponseDescription || '',
+          ...(mappedStatus === 'completed'
+            ? { completed_at: new Date() }
+            : { failed_at: new Date() }),
+        });
       }
 
       return NextResponse.json({
@@ -95,9 +120,9 @@ export async function GET(request: NextRequest) {
         },
       });
     } catch (apiError) {
-      console.error('[Status] Error querying Co-op Bank API:', apiError);
+      console.error('[CoopStatus] Co-op Bank API error:', apiError);
 
-      // Fall back to database status if API fails
+      // Fallback to cached DB status when the API is unreachable
       return NextResponse.json({
         success: true,
         data: {
@@ -106,14 +131,14 @@ export async function GET(request: NextRequest) {
           amount: mpesaTransaction.amount_cents / 100,
           cached: true,
           fallback: true,
-          message: 'Using cached status due to API unavailability',
-          lastCheckedAt: mpesaTransaction.callback_received_at || mpesaTransaction.created_at,
+          message: 'Using cached status — Co-op Bank API temporarily unavailable',
+          lastCheckedAt:
+            mpesaTransaction.callback_received_at || mpesaTransaction.created_at,
         },
       });
     }
   } catch (error) {
-    console.error('[Status] Error checking transaction status:', error);
-
+    console.error('[CoopStatus] Error:', error);
     return NextResponse.json(
       {
         success: false,
@@ -122,4 +147,17 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// GET  /api/payments/coop-bank/status?messageReference=<ref>
+// POST /api/payments/coop-bank/status   body: { "MessageReference": "<ref>" }
+// ---------------------------------------------------------------------------
+
+export async function GET(request: NextRequest) {
+  return handleStatusCheck(request);
+}
+
+export async function POST(request: NextRequest) {
+  return handleStatusCheck(request);
 }

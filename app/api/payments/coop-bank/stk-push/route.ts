@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectToDatabase, MpesaTransaction } from '@/app/lib/models';
-import { createCoopBankService } from '@/app/lib/services/coop-bank';
+import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank';
 
 /**
  * POST /api/payments/coop-bank/stk-push
@@ -39,24 +39,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Normalize phone number
-    let formattedPhone = phoneNumber;
-    if (phoneNumber.startsWith('254')) {
-      formattedPhone = phoneNumber;
-    } else if (phoneNumber.startsWith('0')) {
-      formattedPhone = `254${phoneNumber.substring(1)}`;
-    } else if (phoneNumber.startsWith('+254')) {
-      formattedPhone = phoneNumber.substring(1);
-    } else if (phoneNumber.startsWith('01')) {
-      formattedPhone = `254${phoneNumber.substring(1)}`;
-    } else {
-      formattedPhone = `254${phoneNumber}`;
-    }
+    // Normalize phone number — delegate to the service helper for consistency
+    const formattedPhone = CoopBankService.normalisePhone(phoneNumber);
 
-    // Validate phone format
-    if (!/^254[17]\d{8}$/.test(formattedPhone)) {
+    // Validate: must be 254 followed by exactly 9 digits (any KE network)
+    if (!/^254\d{9}$/.test(formattedPhone)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid phone number format. Use Kenyan format (07... or 2547...)' },
+        {
+          success: false,
+          error: 'Invalid phone number. Use a Kenyan number: 07XXXXXXXX, 2547XXXXXXXX, or +2547XXXXXXXX',
+        },
         { status: 400 }
       );
     }
