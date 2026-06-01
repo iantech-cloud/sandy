@@ -98,7 +98,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           console.log('[v0] Auth attempt for email:', email);
 
-          const user = await Profile.findOne({ email }).select('+password');
+          // Use case-insensitive query so emails stored with any casing are matched
+          const user = await Profile.findOne({
+            email: { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+          }).select('+password');
           
           if (!user) {
             console.warn('[v0] Auth failed: User not found for email:', email);
