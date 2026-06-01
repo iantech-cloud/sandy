@@ -8,26 +8,27 @@ import { auth } from '@/auth';
 
 // --- USER PROFILE FETCHING ---
 
-export async function getUserProfile(): Promise<{ 
-  success: boolean; 
-  data?: any; 
-  message: string 
+export async function getUserProfile(): Promise<{ 
+  success: boolean; 
+  data?: any; 
+  message: string 
 }> {
-  try {
-    // NextAuth v5 (Auth.js) way to get the session in Server Actions
-    const session = await auth();
-    
-    if (!session?.user?.email) {
-      return { success: false, message: 'Unauthorized' };
-    }
+  try {
+    // NextAuth v5 (Auth.js) way to get the session in Server Actions
+    const session = await auth();
+    
+    const sessionId = (session?.user as any)?.id || (session?.user as any)?.userId;
+    if (!session?.user || (!sessionId && !session.user.email)) {
+      return { success: false, message: 'Unauthorized' };
+    }
 
     await connectToDatabase();
 
-    // Use the session user id when available (most reliable), fall back to
-    // case-insensitive email lookup so mixed-casing in older documents is handled.
+    // Look up by _id first (string type in this schema — use findOne not findById
+    // to avoid Mongoose's ObjectId cast), then fall back to case-insensitive email.
     let user: any = null;
-    if ((session.user as any).id) {
-      user = await Profile.findById((session.user as any).id).lean();
+    if (sessionId) {
+      user = await Profile.findOne({ _id: sessionId }).lean();
     }
     if (!user && session.user.email) {
       const emailPattern = new RegExp(
@@ -38,6 +39,7 @@ export async function getUserProfile(): Promise<{ 
     }
 
     if (!user) {
+      console.error('[getUserProfile] User not found. sessionId:', sessionId, 'email:', session.user.email);
       return { success: false, message: 'User not found' };
     }
 
@@ -88,13 +90,14 @@ export async function updateUserProfile(updates: {
 
     await connectToDatabase();
     
-    // Build a case-insensitive email filter so mixed-casing documents are matched.
+    // Use findOne({ _id }) instead of findById to respect the string _id type.
+    const sessionId = (session.user as any).id || (session.user as any).userId;
     const emailPattern = session.user.email
       ? new RegExp(`^${session.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
       : null;
 
-    const filter = (session.user as any).id
-      ? { _id: (session.user as any).id }
+    const filter = sessionId
+      ? { _id: sessionId }
       : emailPattern
         ? { email: { $regex: emailPattern } }
         : null;
