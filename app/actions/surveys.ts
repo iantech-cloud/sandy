@@ -699,9 +699,9 @@ export async function getSurveyHistory(): Promise<{
       {
         $sort: { completed_at: -1 },
       },
-    ]) as Query<any, any>).exec()) as any[]
+    ]) as any).exec() as any[];
 
-    const serializedHistory = surveyHistory.map(serializeDocument)
+    const serializedHistory = surveyHistory.map(serializeDocument);
 
     return {
       success: true,
