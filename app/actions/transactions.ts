@@ -262,7 +262,7 @@ export async function handleMpesaCallback(callbackData: any): Promise<{ success:
       const phoneItem = metadata.find((item: any) => item.Name === 'PhoneNumber');
 
       await MpesaTransaction.findByIdAndUpdate(mpesaTransaction._id, {
-      �� status: 'completed',
+        status: 'completed',
         result_code: ResultCode,
         result_desc: ResultDesc,
         mpesa_receipt_number: receiptItem?.Value,
