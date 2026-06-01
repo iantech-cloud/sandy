@@ -37,11 +37,11 @@ function prizeByType(type: string) {
   return PRIZES.find(p => p.type === type) ?? PRIZES[PRIZES.length - 1]
 }
 
-// Extract checkoutRequestId from deposit response — handles all casing variants.
-// Confirmed from server logs: your mpesa.ts returns `checkoutRequestID` (capital I, lowercase d)
-function extractCheckoutId(data: any): string | undefined {
+// Extract messageReference from Co-op Bank deposit response
+function extractMessageReference(data: any): string | undefined {
   return (
-    data?.checkoutRequestID ||  // confirmed: your mpesa.ts wrapper
+    data?.messageReference ||
+    data?.checkoutRequestID ||  // Legacy M-Pesa fallback
     data?.checkoutRequestId ||  // camelCase fallback
     data?.CheckoutRequestID ||  // PascalCase fallback
     undefined
@@ -329,10 +329,10 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
         return
       }
 
-      const checkoutId = extractCheckoutId(data.data)
+      const messageReference = extractMessageReference(data.data)
 
-      if (!checkoutId) {
-        console.error('[SpinWheel] No checkoutId in deposit response:', data)
+      if (!messageReference) {
+        console.error('[SpinWheel] No messageReference in deposit response:', data)
         setDeposit({
           phase:   'failed',
           message: 'Payment sent but tracking ID missing. Check your M-Pesa — if charged, contact support.',
@@ -347,7 +347,7 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
       for (let i = 0; i < maxAttempts; i++) {
         await sleep(4000)
         try {
-          const statusData = await checkSpinDepositMpesaStatus(checkoutId)
+          const statusData = await checkSpinDepositMpesaStatus(messageReference)
 
           console.log('[SpinWheel] Poll result:', statusData)
 
@@ -659,7 +659,7 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
             {(deposit.phase === 'idle' || deposit.phase === 'failed') && (
               <div className="space-y-1.5">
                 <label htmlFor="mpesa-phone" className="block text-sm font-medium text-gray-300">
-                  M-Pesa phone number
+                  Co-op Bank phone number
                 </label>
                 <input
                   id="mpesa-phone"
@@ -670,7 +670,7 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
                   maxLength={15}
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-transparent"
                 />
-                <p className="text-xs text-gray-600">Enter the number registered with M-Pesa</p>
+                <p className="text-xs text-gray-600">Enter your registered phone number</p>
               </div>
             )}
 
@@ -720,7 +720,7 @@ export default function SpinWheel({ userId, mainWalletBalance = 0, onSpinComplet
                     disabled={depositBusy || phone.replace(/\D/g, '').length < 9}
                     className="flex-1 py-2.5 rounded-xl bg-white text-gray-950 font-bold text-sm hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
-                    {depositBusy ? 'Processing…' : 'Request M-Pesa STK'}
+                    {depositBusy ? 'Processing…' : 'Request Co-op Bank STK'}
                   </button>
                   <button
                     onClick={closeDeposit}
