@@ -25,7 +25,6 @@ export interface CoopBankConfig {
   clientId: string;
   clientSecret: string;
   operatorCode: string;
-  environment: 'sandbox' | 'production';
 }
 
 interface TokenResponse {
@@ -264,14 +263,12 @@ export function createCoopBankService(): CoopBankService {
   const clientId = process.env.COOP_BANK_CLIENT_ID;
   const clientSecret = process.env.COOP_BANK_CLIENT_SECRET;
   const operatorCode = process.env.COOP_BANK_OPERATOR_CODE;
-  const environment =
-    (process.env.COOP_BANK_ENVIRONMENT as 'sandbox' | 'production') || 'production';
 
   if (!clientId) throw new Error('Missing env var: COOP_BANK_CLIENT_ID');
   if (!clientSecret) throw new Error('Missing env var: COOP_BANK_CLIENT_SECRET');
   if (!operatorCode) throw new Error('Missing env var: COOP_BANK_OPERATOR_CODE');
 
-  return new CoopBankService({ clientId, clientSecret, operatorCode, environment });
+  return new CoopBankService({ clientId, clientSecret, operatorCode });
 }
 
 /*
