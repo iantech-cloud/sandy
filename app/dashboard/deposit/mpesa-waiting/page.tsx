@@ -28,11 +28,10 @@ export default function MpesaWaitingPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
-  const checkoutRequestId = searchParams.get('checkoutRequestId');
+  // Co-op Bank uses messageReference as the transaction key
+  const messageReference = searchParams.get('messageReference');
   const amount = searchParams.get('amount');
   const phoneNumber = searchParams.get('phoneNumber');
-  const merchantRequestId = searchParams.get('merchantRequestId');
-  const accountReference = searchParams.get('accountReference');
   const source = searchParams.get('source');
   
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({ 
@@ -44,20 +43,17 @@ export default function MpesaWaitingPage() {
 
   // Poll for payment status using server action
   const pollPaymentStatus = useCallback(async () => {
-    if (!checkoutRequestId || !isPolling) return;
+    if (!messageReference || !isPolling) return;
 
-    try {
-      console.log(`🔄 Polling payment status (attempt ${pollingCount + 1})...`);
-      
-      const result = await checkMpesaPaymentStatus(checkoutRequestId);
+    try {      
+      const result = await checkMpesaPaymentStatus(messageReference);
       setPollingCount(prev => prev + 1);
 
       if (result.success && result.data) {
         const { status, resultCode, resultDesc, mpesaReceiptNumber, source } = result.data;
 
-        // Only update status for definitive results
-        // Ignore processing/pending responses from API
-        if (status === 'success' || status === 'completed') {
+        // Map terminal statuses
+        if (status === 'completed') {
           setPaymentStatus({
             status: 'success',
             resultCode,
@@ -67,19 +63,16 @@ export default function MpesaWaitingPage() {
             source
           });
           setIsPolling(false);
-          console.log(`✅ Payment successful - Stopped polling`);
         } else if (status === 'cancelled') {
           setPaymentStatus({
             status: 'cancelled',
             resultCode,
-            resultDesc: 'You cancelled the M-Pesa payment request',
+            resultDesc: 'You cancelled the payment request',
             amount: Number(amount),
             source
           });
           setIsPolling(false);
-          console.log(`❌ Payment cancelled - Stopped polling`);
         } else if (status === 'failed' && resultCode && resultCode !== 11) {
-          // Only mark as failed if we have a definitive failure code (not code 11)
           setPaymentStatus({
             status: 'failed',
             resultCode,
@@ -88,20 +81,27 @@ export default function MpesaWaitingPage() {
             source
           });
           setIsPolling(false);
-          console.log(`❌ Payment failed - Stopped polling`);
+        } else if (status === 'timeout') {
+          setPaymentStatus({
+            status: 'timeout',
+            resultCode,
+            resultDesc: resultDesc || 'Payment request timed out',
+            amount: Number(amount),
+            source
+          });
+          setIsPolling(false);
         }
-        // For processing/pending/code 11, do nothing - keep polling
+        // For initiated/pending, keep polling
       }
     } catch (error) {
       console.error('Error polling payment status:', error);
       // Don't stop polling on network errors
     }
-  }, [checkoutRequestId, amount, pollingCount, isPolling]);
+  }, [messageReference, amount, pollingCount, isPolling]);
 
   // Timer countdown
   useEffect(() => {
     if (timeLeft <= 0) {
-      // Only set timeout when timer actually reaches 0 AND still processing
       if (paymentStatus.status === 'processing' && isPolling) {
         setPaymentStatus({
           status: 'timeout',
@@ -109,7 +109,6 @@ export default function MpesaWaitingPage() {
           resultDesc: 'Payment request timed out. Please try again.'
         });
         setIsPolling(false);
-        console.log('⏰ Timer expired - Payment timeout');
       }
       return;
     }
@@ -131,22 +130,21 @@ export default function MpesaWaitingPage() {
 
   // Initial poll
   useEffect(() => {
-    if (checkoutRequestId && isPolling) {
-      // Initial poll after a short delay
+    if (messageReference && isPolling) {
       const initialPollTimer = setTimeout(() => {
         pollPaymentStatus();
       }, 2000);
       
       return () => clearTimeout(initialPollTimer);
     }
-  }, [checkoutRequestId, pollPaymentStatus, isPolling]);
+  }, [messageReference, pollPaymentStatus, isPolling]);
 
-  // Redirect if no checkoutRequestId
+  // Redirect if no messageReference
   useEffect(() => {
-    if (!checkoutRequestId) {
+    if (!messageReference) {
       router.push('/dashboard/wallet');
     }
-  }, [checkoutRequestId, router]);
+  }, [messageReference, router]);
 
   // Format time for display
   const formatTime = (seconds: number) => {
@@ -216,7 +214,7 @@ export default function MpesaWaitingPage() {
     pollPaymentStatus();
   };
 
-  if (!checkoutRequestId) {
+  if (!messageReference) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white border-2 border-red-200 rounded-2xl p-8 shadow-lg text-center">
@@ -273,21 +271,13 @@ export default function MpesaWaitingPage() {
               </div>
             </div>
             
-            {/* Additional transaction info */}
-            {(accountReference || merchantRequestId) && (
+            {/* Message reference */}
+            {messageReference && (
               <div className="mt-3 pt-3 border-t border-gray-200">
-                {accountReference && (
-                  <div className="text-left text-xs">
-                    <span className="text-gray-500">Reference:</span>
-                    <div className="font-mono">{accountReference}</div>
-                  </div>
-                )}
-                {merchantRequestId && process.env.NODE_ENV === 'development' && (
-                  <div className="text-left text-xs mt-1">
-                    <span className="text-gray-500">Request ID:</span>
-                    <div className="font-mono truncate">{merchantRequestId}</div>
-                  </div>
-                )}
+                <div className="text-left text-xs">
+                  <span className="text-gray-500">Reference:</span>
+                  <div className="font-mono truncate">{messageReference}</div>
+                </div>
               </div>
             )}
           </div>
@@ -329,13 +319,13 @@ export default function MpesaWaitingPage() {
                 <div className="text-sm text-blue-800 text-left">
                   <div className="font-semibold mb-2">What to do:</div>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>Check your phone for M-Pesa STK Push prompt</li>
+                    <li>Check your phone for the Co-op Bank STK Push prompt</li>
                     <li>Enter your M-Pesa PIN when prompted</li>
                     <li>Wait for automatic confirmation</li>
                     <li>Do not close this page - it will update automatically</li>
                   </ul>
                   <div className="mt-3 text-xs text-blue-700">
-                    ⏱️ This page automatically checks for payment status every 4 seconds
+                    This page automatically checks for payment status every 4 seconds
                   </div>
                 </div>
               </div>
@@ -408,7 +398,7 @@ export default function MpesaWaitingPage() {
           {process.env.NODE_ENV === 'development' && (
             <div className="mt-6 p-3 bg-gray-100 rounded-lg">
               <div className="text-xs text-gray-600 text-left space-y-1">
-                <div><strong>CheckoutRequestID:</strong> {checkoutRequestId}</div>
+                <div><strong>MessageReference:</strong> {messageReference}</div>
                 <div><strong>Status:</strong> {paymentStatus.status}</div>
                 <div><strong>Result Code:</strong> {paymentStatus.resultCode}</div>
                 <div><strong>Polling Count:</strong> {pollingCount}</div>

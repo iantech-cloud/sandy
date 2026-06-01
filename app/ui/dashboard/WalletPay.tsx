@@ -161,21 +161,13 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
     try {
       const formattedPhone = formatPhoneForAPI(phoneNumber);
       
-      console.log('Initiating M-Pesa deposit:', {
-        amount: depositAmount,
-        phoneNumber: formattedPhone
-      });
-
-      // Use the server action for deposit
       const result = await processMpesaDeposit({
         amount: depositAmount,
         phoneNumber: formattedPhone
       });
 
-      console.log('M-Pesa STK Push response:', result);
-
-      if (result.success && result.data?.CheckoutRequestID) {
-        // Close deposit modal and open M-Pesa waiting modal
+      if (result.success && result.data?.messageReference) {
+        // Close deposit modal and open Co-op Bank waiting modal
         setShowDepositModal(false);
         setShowMpesaModal(true);
         
@@ -192,14 +184,12 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
           onDepositSuccess();
         }
 
-        // Redirect to M-Pesa waiting page after a short delay
+        // Redirect to waiting page after a short delay
         setTimeout(() => {
           const params = new URLSearchParams({
-            checkoutRequestId: result.data.CheckoutRequestID,
+            messageReference: result.data.messageReference,
             amount: depositAmount.toString(),
             phoneNumber: formattedPhone,
-            merchantRequestId: result.data.MerchantRequestID || '',
-            accountReference: result.data.AccountReference || '',
             source: 'walletpay'
           });
           
@@ -207,7 +197,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
         }, 2000);
         
       } else {
-        setMessage(result.message || 'Failed to initiate M-Pesa payment. Please try again.');
+        setMessage(result.message || 'Failed to initiate Co-op Bank payment. Please try again.');
         setMessageType('error');
       }
     } catch (error) {
@@ -230,7 +220,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
       }`}
     >
       <DollarSign className="mr-2" size={compact ? 16 : 20} />
-      Deposit via M-Pesa
+      Deposit via Co-op Bank
     </button>
   );
 
@@ -239,7 +229,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
       <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
           <DollarSign className="mr-2 text-green-500" size={18} />
-          Quick Deposit
+          Quick Deposit via Co-op Bank
         </h3>
         
         <DepositButton />
@@ -249,7 +239,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-800">Deposit via M-Pesa</h3>
+                <h3 className="text-lg font-semibold text-gray-800">Deposit via Co-op Bank</h3>
                 <button
                   onClick={handleCloseDepositModal}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -312,7 +302,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
                 {/* Phone Number Input */}
                 <div>
                   <label htmlFor="phoneNumber-modal" className="block text-sm font-medium text-gray-700 mb-2">
-                    M-Pesa Phone Number *
+                    Co-op Bank Phone Number *
                   </label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -377,7 +367,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
                 </div>
                 
                 <h3 className="text-xl font-semibold text-gray-800 mb-2">
-                  M-Pesa Payment Initiated
+                  Co-op Bank Payment Initiated
                 </h3>
                 
                 <p className="text-gray-600 mb-4">
@@ -406,7 +396,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
     <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
       <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
         <DollarSign className="mr-2 text-green-500" />
-        Deposit via M-Pesa
+        Deposit via Co-op Bank
       </h3>
 
       <DepositButton />
@@ -418,10 +408,10 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
           How to deposit:
         </h4>
         <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
-          <li>Click "Deposit via M-Pesa" button</li>
-          <li>Enter amount and your M-Pesa phone number in the modal</li>
+          <li>Click "Deposit via Co-op Bank" button</li>
+          <li>Enter amount and your registered phone number in the modal</li>
           <li>Click "Continue" to initiate payment</li>
-          <li>Check your phone for STK Push prompt</li>
+          <li>Check your phone for the Co-op Bank STK Push prompt</li>
           <li>Enter your M-Pesa PIN to complete</li>
           <li>Wait for confirmation</li>
           <li>Funds will be added to your wallet instantly</li>
@@ -434,7 +424,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
           <CheckCircle className="text-green-600 mt-0.5 flex-shrink-0" size={16} />
           <div>
             <p className="text-sm font-medium text-green-800">Secure & Instant</p>
-            <p className="text-xs text-green-700">Your payment is processed securely via M-Pesa. Funds are added instantly upon confirmation.</p>
+            <p className="text-xs text-green-700">Your payment is processed securely via Co-op Bank STK Push. Funds are added instantly upon confirmation.</p>
           </div>
         </div>
       </div>
@@ -444,7 +434,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">Deposit via M-Pesa</h3>
+              <h3 className="text-lg font-semibold text-gray-800">Deposit via Co-op Bank</h3>
               <button
                 onClick={handleCloseDepositModal}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -507,7 +497,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
               {/* Phone Number Input */}
               <div>
                 <label htmlFor="phoneNumber-modal" className="block text-sm font-medium text-gray-700 mb-2">
-                  M-Pesa Phone Number *
+                  Co-op Bank Phone Number *
                 </label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -526,7 +516,7 @@ export default function WalletPay({ onDepositSuccess, compact = false }: WalletP
                 <div className="mt-1 flex items-start space-x-1">
                   <Info className="text-gray-400 mt-0.5 flex-shrink-0" size={14} />
                   <p className="text-xs text-gray-500">
-                    Enter your M-Pesa registered phone number. Supported formats: 07XXXXXXXX, 2547XXXXXXXX, +2547XXXXXXXX
+                    Enter your registered phone number. Supported formats: 07XXXXXXXX, 2547XXXXXXXX, +2547XXXXXXXX
                   </p>
                 </div>
               </div>

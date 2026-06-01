@@ -17,6 +17,8 @@ import {
   UserContent,
   SpinWallet,
 } from "../lib/models"
+import { createCoopBankService, CoopBankService } from "@/app/lib/services/coop-bank"
+import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from "@/app/lib/utils/phoneFormatter"
 
 // --- TYPE DEFINITIONS ---
 interface SpinSettingsLean {
@@ -576,110 +578,6 @@ export async function initializeSpinSystem(): Promise<{ success: boolean; messag
 }
 
 /**
- * M-Pesa configuration for spin wallet deposits
- */
-const MPESA_CONFIG = {
-  consumerKey: process.env.MPESA_CONSUMER_KEY!,
-  consumerSecret: process.env.MPESA_CONSUMER_SECRET!,
-  shortCode: process.env.MPESA_SHORTCODE!,
-  passkey: process.env.MPESA_PASSKEY!,
-  callbackURL: process.env.MPESA_CALLBACK_URL!,
-  environment: process.env.MPESA_ENVIRONMENT || 'sandbox',
-};
-
-/**
- * Get M-Pesa Access Token for spin wallet deposits
- */
-async function getMpesaAccessToken(): Promise<string> {
-  const auth = Buffer.from(`${MPESA_CONFIG.consumerKey}:${MPESA_CONFIG.consumerSecret}`).toString('base64');
-  
-  const response = await fetch(
-    MPESA_CONFIG.environment === 'sandbox'     
-      ? 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
-      : 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
-    {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error('Failed to get M-Pesa access token');
-  }
-
-  const data = await response.json();
-  return data.access_token;
-}
-
-/**
- * Generate M-Pesa timestamp
- */
-function generateMpesaTimestamp(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  
-  return `${year}${month}${day}${hours}${minutes}${seconds}`;
-}
-
-/**
- * Generate M-Pesa password
- */
-function generateMpesaPassword(timestamp: string): string {
-  const password = Buffer.from(`${MPESA_CONFIG.shortCode}${MPESA_CONFIG.passkey}${timestamp}`).toString('base64');
-  return password;
-}
-
-/**
- * Map M-Pesa result codes to valid database values
- */
-function mapMpesaResultCode(resultCode: string): number {
-  const code = parseInt(resultCode);
-  
-  const validSchemaCodes = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 20, 26, 1032, 1037, 2001
-  ];
-  
-  if (validSchemaCodes.includes(code)) {
-    return code;
-  }
-  
-  if (code >= 1000 && code <= 1999) {
-    return 1032;
-  }
-  
-  if (code >= 2000 && code <= 2999) {
-    return 2001;
-  }
-  
-  return 11;
-}
-
-/**
- * Map M-Pesa status codes to database status values
- */
-function mapMpesaStatus(resultCode: string): string {
-  const statusMap: { [key: string]: string } = {
-    '0': 'completed',
-    '1': 'failed',
-    '1032': 'cancelled',
-    '1037': 'timeout',
-    '2001': 'failed',
-    '1026': 'initiated',
-    '1031': 'initiated',
-    '4999': 'initiated',
-  };
-
-  return statusMap[resultCode] || 'failed';
-}
-
-/**
  * Update SpinWallet balance for completed deposits
  */
 async function updateSpinWallet(userId: string, amountCents: number): Promise<void> {
@@ -803,18 +701,16 @@ async function validateSpinDeposit(
 }
 
 /**
- * Deposit to spin wallet via M-Pesa
- * Follows the exact pattern from deposit.ts processMpesaDeposit()
+ * Deposit to spin wallet via Co-op Bank STK Push.
+ * Mirrors the pattern of processMpesaDeposit() in deposit.ts.
  */
 export async function depositSpinWalletViaMpesa(depositData: {
   amount: number;
   phoneNumber: string;
 }): Promise<{ success: boolean; data?: any; message: string }> {
   try {
-    console.log('🎯 Starting spin wallet M-Pesa deposit process:', depositData);
-
     const session = await auth();
-    
+
     if (!session?.user?.id) {
       return { success: false, message: 'User not authenticated' };
     }
@@ -826,155 +722,120 @@ export async function depositSpinWalletViaMpesa(depositData: {
       return { success: false, message: 'User profile not found' };
     }
 
-    const validationResult = await validateSpinDeposit(currentUser._id.toString(), depositData.amount, depositData.phoneNumber);
+    const validationResult = await validateSpinDeposit(
+      currentUser._id.toString(),
+      depositData.amount,
+      depositData.phoneNumber
+    );
     if (!validationResult.valid) {
       return { success: false, message: validationResult.message };
     }
 
     const formattedPhone = validationResult.data?.formattedPhone || depositData.phoneNumber;
-
-    console.log('🔐 Getting M-Pesa access token...');
-    const accessToken = await getMpesaAccessToken();
-    
-    const timestamp = generateMpesaTimestamp();
-    const password = generateMpesaPassword(timestamp);
-    
     const amountCents = Math.round(depositData.amount * 100);
 
-    const stkPushPayload = {
-      BusinessShortCode: MPESA_CONFIG.shortCode,
-      Password: password,
-      Timestamp: timestamp,
-      TransactionType: 'CustomerPayBillOnline',
-      Amount: depositData.amount,
-      PartyA: formattedPhone,
-      PartyB: MPESA_CONFIG.shortCode,
-      PhoneNumber: formattedPhone,
-      CallBackURL: MPESA_CONFIG.callbackURL,
-      AccountReference: `SPINDEP-${currentUser._id.toString().slice(-8).toUpperCase()}`,
-      TransactionDesc: `Spin wallet deposit for ${currentUser.username}`
-    };
+    // Generate a unique message reference (same pattern as deposit.ts)
+    const messageReference = `SPINDY${Date.now()}${Math.random()
+      .toString(36)
+      .substring(2, 8)
+      .toUpperCase()}`;
 
-    console.log('📦 STK Push Payload:', { ...stkPushPayload, Password: '***' });
+    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
-    console.log('🚀 Initiating STK Push...');
-    const stkResponse = await fetch(
-      MPESA_CONFIG.environment === 'sandbox'
-        ? 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
-        : 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(stkPushPayload),
-      }
+    // Create MpesaTransaction BEFORE calling the API
+    const mpesaTransaction = await (MpesaTransaction as any).create({
+      user_id: currentUser._id,
+      amount_cents: amountCents,
+      phone_number: formattedPhone,
+      account_reference: `SPINDEP-${currentUser._id.toString().slice(-8).toUpperCase()}`,
+      transaction_desc: `Spin wallet deposit for ${currentUser.username}`,
+      checkout_request_id: messageReference,
+      status: 'initiated',
+      source: 'wallet',
+      metadata: {
+        user_username: currentUser.username,
+        deposit_type: 'spin_wallet',
+        payment_method: 'coop_bank_stk_push',
+        initiated_at: new Date().toISOString(),
+        callback_url: callbackUrl,
+      },
+    });
+
+    // Create a pending Transaction record
+    const transaction = await (Transaction as any).create({
+      user_id: currentUser._id,
+      amount_cents: amountCents,
+      type: 'SPIN_WALLET_DEPOSIT',
+      description: `Co-op Bank spin wallet deposit from ${formattedPhone}`,
+      status: 'pending',
+      mpesa_transaction_id: mpesaTransaction._id,
+      target_type: 'company',
+      target_id: 'company',
+      metadata: {
+        phoneNumber: formattedPhone,
+        provider: 'coop_bank',
+        messageReference,
+        initiated_at: new Date().toISOString(),
+      },
+    });
+
+    // Initiate Co-op Bank STK Push
+    const coopBank = createCoopBankService();
+    const stkResponse = await coopBank.initiateSTKPush(
+      formattedPhone,
+      depositData.amount,
+      `Spin wallet deposit - ${currentUser.username}`,
+      callbackUrl,
+      messageReference
     );
 
-    if (!stkResponse.ok) {
-      const errorData = await stkResponse.text();
-      console.error('❌ M-Pesa STK Push error:', errorData);
-      return { success: false, message: 'Failed to initiate M-Pesa payment. Please try again.' };
-    }
-
-    const stkData = await stkResponse.json();
-    console.log('📨 STK Push response:', stkData);
-
-    if (stkData.ResponseCode === '0') {
-      const mpesaTransaction = await (MpesaTransaction as any).create({
-        user_id: currentUser._id,
-        amount_cents: amountCents,
-        phone_number: formattedPhone,
-        account_reference: stkPushPayload.AccountReference,
-        transaction_desc: stkPushPayload.TransactionDesc,
-        checkout_request_id: stkData.CheckoutRequestID,
-        merchant_request_id: stkData.MerchantRequestID,
-        status: 'initiated',
-        stk_push_response: stkData,
-        result_code: 1032,
-        result_desc: 'STK Push initiated successfully',
-        source: 'wallet',
-        metadata: {
-          user_username: currentUser.username,
-          deposit_type: 'spin_wallet',
-          initiated_at: new Date().toISOString(),
-          callback_url: MPESA_CONFIG.callbackURL
-        }
+    if (stkResponse.ResponseCode !== '0') {
+      // Mark records as failed
+      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_desc: stkResponse.ResponseDescription || 'STK Push rejected by bank',
       });
+      await (Transaction as any).findByIdAndUpdate(transaction._id, { status: 'failed' });
 
-      const transaction = await (Transaction as any).create({
-        user_id: currentUser._id,
-        amount_cents: amountCents,
-        // Use 'SPIN_WALLET_DEPOSIT' to properly track spin wallet deposits as company revenue
-        type: 'SPIN_WALLET_DEPOSIT',
-        description: `M-Pesa spin wallet deposit from ${formattedPhone}`,
-        status: 'pending',
-        mpesa_transaction_id: mpesaTransaction._id,
-
-        // Set target_type to 'company' to track as company revenue/income
-        // This ensures spin wallet deposits are recorded in the admin transactions 
-        // page as income for proper financial tracking and reporting.
-        target_type: 'company',
-        target_id: 'company',
-        
-        metadata: {
-          phoneNumber: formattedPhone,
-          provider: 'mpesa',
-          checkoutRequestID: stkData.CheckoutRequestID,
-          merchantRequestID: stkData.MerchantRequestID,
-          accountReference: stkPushPayload.AccountReference,
-          initiated_at: new Date().toISOString()
-        }
-      });
-
-      console.log('✅ M-Pesa transaction created:', mpesaTransaction._id);
-      console.log('✅ Transaction record created:', transaction._id);
-
-      revalidatePath('/dashboard');
-
-      return {
-        success: true,
-        data: {
-          CheckoutRequestID: stkData.CheckoutRequestID,
-          MerchantRequestID: stkData.MerchantRequestID,
-          ResponseDescription: stkData.ResponseDescription,
-          CustomerMessage: stkData.CustomerMessage,
-          Amount: depositData.amount,
-          PhoneNumber: formattedPhone,
-          AccountReference: stkPushPayload.AccountReference,
-          transactionId: transaction._id.toString(),
-          mpesaTransactionId: mpesaTransaction._id.toString()
-        },
-        message: stkData.CustomerMessage || 'STK Push initiated successfully. Please check your phone for the prompt.'
-      };
-    } else {
-      console.error('❌ STK Push failed with code:', stkData.ResponseCode);
       return {
         success: false,
-        message: stkData.ResponseDescription || 'Failed to initiate M-Pesa payment. Please try again.'
+        message: stkResponse.ResponseDescription || 'Failed to initiate payment. Please try again.',
       };
     }
 
+    revalidatePath('/dashboard');
+
+    return {
+      success: true,
+      data: {
+        messageReference,
+        checkoutRequestID: messageReference, // alias for backward compat
+        ResponseDescription: stkResponse.ResponseDescription,
+        Amount: depositData.amount,
+        PhoneNumber: formattedPhone,
+        transactionId: transaction._id.toString(),
+        mpesaTransactionId: mpesaTransaction._id.toString(),
+      },
+      message: stkResponse.ResponseDescription || 'Payment prompt sent. Please check your phone.',
+    };
+
   } catch (error) {
-    console.error('💥 Spin wallet M-Pesa deposit error:', error);
-    return { 
-      success: false, 
-      message: 'An error occurred while processing your spin wallet deposit. Please try again.' 
+    console.error('[Spin] depositSpinWalletViaMpesa error:', error);
+    return {
+      success: false,
+      message: 'An error occurred while processing your spin wallet deposit. Please try again.',
     };
   }
 }
 
 /**
- * Check spin wallet M-Pesa deposit status
- * Replicates the exact pattern from deposit.ts checkMpesaPaymentStatus()
+ * Check spin wallet deposit status via Co-op Bank Enquiry API.
+ * Mirrors the pattern of checkMpesaPaymentStatus() in deposit.ts.
  */
-export async function checkSpinDepositMpesaStatus(checkoutRequestId: string): Promise<{ success: boolean; data?: any; message: string }> {
+export async function checkSpinDepositMpesaStatus(messageReference: string): Promise<{ success: boolean; data?: any; message: string }> {
   try {
-    console.log('🔍 Checking spin deposit M-Pesa status:', checkoutRequestId);
-
     const session = await auth();
-    
+
     if (!session?.user?.id) {
       return { success: false, message: 'User not authenticated' };
     }
@@ -982,14 +843,16 @@ export async function checkSpinDepositMpesaStatus(checkoutRequestId: string): Pr
     await connectToDatabase();
 
     const mpesaTransaction = await (MpesaTransaction as any).findOne({
-      checkout_request_id: checkoutRequestId
+      checkout_request_id: messageReference,
     });
 
     if (!mpesaTransaction) {
       return { success: false, message: 'Transaction not found' };
     }
 
-    if (['completed', 'failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status)) {
+    // Terminal state — no need to hit the API
+    const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
+    if (terminalStatuses.includes(mpesaTransaction.status)) {
       return {
         success: true,
         data: {
@@ -1000,139 +863,65 @@ export async function checkSpinDepositMpesaStatus(checkoutRequestId: string): Pr
           amount: mpesaTransaction.amount_cents,
           completedAt: mpesaTransaction.completed_at,
           failedAt: mpesaTransaction.failed_at,
-          source: 'database'
+          source: 'database',
         },
-        message: `Payment status: ${mpesaTransaction.status}`
+        message: `Payment status: ${mpesaTransaction.status}`,
       };
     }
 
-    console.log('📡 Querying M-Pesa API for spin deposit status...');
-    const accessToken = await getMpesaAccessToken();
-    const timestamp = generateMpesaTimestamp();
-    const password = generateMpesaPassword(timestamp);
-
-    const queryPayload = {
-      BusinessShortCode: MPESA_CONFIG.shortCode,
-      Password: password,
-      Timestamp: timestamp,
-      CheckoutRequestID: checkoutRequestId
-    };
-
-    const queryResponse = await fetch(
-      MPESA_CONFIG.environment === 'sandbox'
-        ? 'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query'
-        : 'https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(queryPayload),
-      }
-    );
-
-    if (!queryResponse.ok) {
-      const errorText = await queryResponse.text();
-      console.error('❌ M-Pesa query API error:', errorText);
+    // Callback already processed
+    if (mpesaTransaction.metadata?.callback_processed) {
       return {
         success: true,
         data: {
           status: mpesaTransaction.status,
-          resultCode: mpesaTransaction.result_code,
-          resultDesc: mpesaTransaction.result_desc,
-          source: 'database_fallback'
-        },
-        message: 'Using last known status'
-      };
-    }
-
-    const queryData = await queryResponse.json();
-    console.log('📨 M-Pesa query response:', queryData);
-
-    const safeResultCode = mapMpesaResultCode(queryData.ResultCode);
-    const safeStatus = mapMpesaStatus(queryData.ResultCode);
-
-    mpesaTransaction.status = safeStatus;
-    mpesaTransaction.result_code = safeResultCode;
-    mpesaTransaction.result_desc = queryData.ResultDesc || 'No description provided';
-
-    if (safeStatus === 'completed') {
-      mpesaTransaction.mpesa_receipt_number = queryData.MpesaReceiptNumber;
-      mpesaTransaction.completed_at = new Date();
-    } else if (['failed', 'cancelled', 'timeout'].includes(safeStatus)) {
-      mpesaTransaction.failed_at = new Date();
-    }
-
-    try {
-      await mpesaTransaction.save();
-      console.log('💾 Successfully updated M-Pesa transaction with status:', safeStatus);
-    } catch (saveError) {
-      console.error('❌ Failed to save M-Pesa transaction:', saveError);
-      
-      return {
-        success: true,
-        data: {
-          status: safeStatus,
-          resultCode: safeResultCode,
-          resultDesc: queryData.ResultDesc,
-          mpesaReceiptNumber: queryData.MpesaReceiptNumber,
           amount: mpesaTransaction.amount_cents,
-          source: 'api_unsaved'
+          source: 'callback_processed',
         },
-        message: `Payment status: ${safeStatus} (database update failed)`
+        message: `Payment ${mpesaTransaction.status}`,
       };
     }
 
-    if (['completed', 'failed', 'cancelled', 'timeout'].includes(safeStatus)) {
-      try {
-        await syncSpinDepositTransactionWithMpesaStatus(
-          mpesaTransaction._id,
-          safeStatus,
-          safeResultCode,
-          queryData.ResultDesc,
-          queryData.MpesaReceiptNumber
-        );
+    // Query Co-op Bank Enquiry API (read-only — wallet credit only via callback)
+    const coopBank = createCoopBankService();
+    const statusResponse = await coopBank.getTransactionStatus(messageReference);
 
-        // 🔒 CRITICAL: Polling ONLY reads M-Pesa status, it does NOT credit wallets.
-        // The M-Pesa callback is the SOLE source of truth for crediting SpinWallet.
-        // This prevents race conditions and double-crediting.
-        console.log('📊 Polling synchronized transaction status with M-Pesa (read-only, no credits)');
-      } catch (updateError) {
-        console.error('❌ Failed to sync transaction status:', updateError);
-      }
+    const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+
+    if (terminalStatuses.includes(mappedStatus)) {
+      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+        status: mappedStatus,
+        result_desc: statusResponse.ResponseDescription || '',
+        ...(mappedStatus === 'completed'
+          ? { completed_at: new Date() }
+          : { failed_at: new Date() }),
+      });
+
+      // Sync the linked Transaction record status
+      await syncSpinDepositTransactionWithMpesaStatus(
+        mpesaTransaction._id,
+        mappedStatus,
+        0,
+        statusResponse.ResponseDescription || '',
+        undefined
+      );
     }
-
-    // For completed payments waiting for callback to credit, show "processing" to UI
-    // The callback is the source of truth for wallet credits
-    const displayStatus = (
-      mpesaTransaction.status === 'completed' && 
-      mpesaTransaction.metadata?.callback_processed !== true
-    ) ? 'processing' : mpesaTransaction.status;
 
     return {
-      success: displayStatus === 'completed' || displayStatus === 'processing',
+      success: true,
       data: {
-        status: displayStatus,
-        resultCode: mpesaTransaction.result_code,
-        resultDesc: mpesaTransaction.result_desc,
-        mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+        status: mappedStatus,
         amount: mpesaTransaction.amount_cents,
-        completedAt: mpesaTransaction.completed_at,
-        failedAt: mpesaTransaction.failed_at,
-        source: 'api'
+        source: 'api',
+        responseCode: statusResponse.ResponseCode,
+        responseDescription: statusResponse.ResponseDescription,
       },
-      message: displayStatus === 'processing' 
-        ? 'Payment received! Processing your deposit...' 
-        : `Payment status: ${mpesaTransaction.status}`
+      message: `Payment status: ${mappedStatus}`,
     };
 
   } catch (error) {
-    console.error('💥 Check spin deposit M-Pesa status error:', error);
-    return { 
-      success: false, 
-      message: 'Failed to check spin deposit status. Please try again.' 
-    };
+    console.error('[Spin] checkSpinDepositMpesaStatus error:', error);
+    return { success: false, message: 'Failed to check spin deposit status. Please try again.' };
   }
 }
 
