@@ -21,12 +21,25 @@ export async function getUserProfile(): Promise<{ 
       return { success: false, message: 'Unauthorized' };
     }
 
-    await connectToDatabase();
-    const user = await Profile.findOne({ email: session.user.email }).lean();
+    await connectToDatabase();
 
-    if (!user) {
-      return { success: false, message: 'User not found' };
-    }
+    // Use the session user id when available (most reliable), fall back to
+    // case-insensitive email lookup so mixed-casing in older documents is handled.
+    let user: any = null;
+    if ((session.user as any).id) {
+      user = await Profile.findById((session.user as any).id).lean();
+    }
+    if (!user && session.user.email) {
+      const emailPattern = new RegExp(
+        `^${session.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+        'i'
+      );
+      user = await Profile.findOne({ email: { $regex: emailPattern } }).lean();
+    }
+
+    if (!user) {
+      return { success: false, message: 'User not found' };
+    }
 
     // Transform user data
     const userData = {
@@ -73,13 +86,28 @@ export async function updateUserProfile(updates: {
       return { success: false, message: 'Unauthorized' };
     }
 
-    await connectToDatabase();
-    
-    const user = await Profile.findOneAndUpdate(
-      { email: session.user.email },
-      { $set: updates },
-      { new: true }
-    );
+    await connectToDatabase();
+    
+    // Build a case-insensitive email filter so mixed-casing documents are matched.
+    const emailPattern = session.user.email
+      ? new RegExp(`^${session.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+      : null;
+
+    const filter = (session.user as any).id
+      ? { _id: (session.user as any).id }
+      : emailPattern
+        ? { email: { $regex: emailPattern } }
+        : null;
+
+    if (!filter) {
+      return { success: false, message: 'Cannot identify user' };
+    }
+
+    const user = await Profile.findOneAndUpdate(
+      filter,
+      { $set: updates },
+      { new: true }
+    );
 
     if (!user) {
       return { success: false, message: 'User not found' };
