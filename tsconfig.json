@@ -31,5 +31,10 @@
   ],
   "exclude": [
     "node_modules"
-  ]
+  ],
+  "ts-node": {
+    "esm": true,
+    "experimentalEsm": true,
+    "moduleResolution": "bundler"
+  }
 }
