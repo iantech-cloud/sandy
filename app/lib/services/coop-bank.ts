@@ -25,6 +25,10 @@ export interface CoopBankConfig {
   clientId: string;
   clientSecret: string;
   operatorCode: string;
+  baseUrl?: string;
+  tokenUrl?: string;
+  stkPushUrl?: string;
+  stkStatusUrl?: string;
 }
 
 interface TokenResponse {
@@ -61,13 +65,23 @@ export interface TransactionStatusResponse {
 
 export class CoopBankService {
   private config: CoopBankConfig;
-  /** Production base URL — Co-op Bank only exposes one endpoint set */
-  private readonly baseUrl = 'https://openapi.co-opbank.co.ke';
+  /** Base URL — read from env or use production default */
+  private readonly baseUrl: string;
+  /** Token endpoint */
+  private readonly tokenUrl: string;
+  /** STK Push endpoint */
+  private readonly stkPushUrl: string;
+  /** STK Status endpoint */
+  private readonly stkStatusUrl: string;
   /** In-memory token cache */
   private tokenCache: { token: string; expiresAt: number } | null = null;
 
   constructor(config: CoopBankConfig) {
     this.config = config;
+    this.baseUrl = config.baseUrl || 'https://openapi.co-opbank.co.ke';
+    this.tokenUrl = config.tokenUrl || `${this.baseUrl}/token`;
+    this.stkPushUrl = config.stkPushUrl || `${this.baseUrl}/FT/stk/1.0.0`;
+    this.stkStatusUrl = config.stkStatusUrl || `${this.baseUrl}/Enquiry/STK/1.0.0/`;
   }
 
   // -------------------------------------------------------------------------
@@ -87,7 +101,7 @@ export class CoopBankService {
       `${this.config.clientId}:${this.config.clientSecret}`
     ).toString('base64');
 
-    const response = await fetch(`${this.baseUrl}/token`, {
+    const response = await fetch(this.tokenUrl, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${credentials}`,
@@ -163,7 +177,7 @@ export class CoopBankService {
       ],
     };
 
-    const response = await fetch(`${this.baseUrl}/FT/stk/1.0.0`, {
+    const response = await fetch(this.stkPushUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -197,7 +211,7 @@ export class CoopBankService {
   async getTransactionStatus(messageReference: string): Promise<TransactionStatusResponse> {
     const token = await this.getAccessToken();
 
-    const response = await fetch(`${this.baseUrl}/Enquiry/STK/1.0.0/`, {
+    const response = await fetch(this.stkStatusUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -260,15 +274,27 @@ export class CoopBankService {
 // ---------------------------------------------------------------------------
 
 export function createCoopBankService(): CoopBankService {
-  const clientId = process.env.COOP_BANK_CLIENT_ID;
-  const clientSecret = process.env.COOP_BANK_CLIENT_SECRET;
-  const operatorCode = process.env.COOP_BANK_OPERATOR_CODE;
+  const clientId = process.env.COOP_CLIENT_ID;
+  const clientSecret = process.env.COOP_CLIENT_SECRET;
+  const operatorCode = process.env.COOP_OPERATOR_CODE;
+  const baseUrl = process.env.COOP_BASE_URL;
+  const tokenUrl = process.env.COOP_TOKEN_URL;
+  const stkPushUrl = process.env.COOP_STK_PUSH_URL;
+  const stkStatusUrl = process.env.COOP_STK_STATUS_URL;
 
-  if (!clientId) throw new Error('Missing env var: COOP_BANK_CLIENT_ID');
-  if (!clientSecret) throw new Error('Missing env var: COOP_BANK_CLIENT_SECRET');
-  if (!operatorCode) throw new Error('Missing env var: COOP_BANK_OPERATOR_CODE');
+  if (!clientId) throw new Error('Missing env var: COOP_CLIENT_ID');
+  if (!clientSecret) throw new Error('Missing env var: COOP_CLIENT_SECRET');
+  if (!operatorCode) throw new Error('Missing env var: COOP_OPERATOR_CODE');
 
-  return new CoopBankService({ clientId, clientSecret, operatorCode });
+  return new CoopBankService({
+    clientId,
+    clientSecret,
+    operatorCode,
+    baseUrl,
+    tokenUrl,
+    stkPushUrl,
+    stkStatusUrl,
+  });
 }
 
 /*
