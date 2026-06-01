@@ -63,9 +63,9 @@ export default function ActivateComponent() {
     try {
       const result = await initiateActivationPayment(phoneNumber);
 
-      if (result.success && result.data?.checkoutRequestId) {
+      if (result.success && result.data?.messageReference) {
         const params = new URLSearchParams({
-          checkoutRequestId: result.data.checkoutRequestId,
+          messageReference: result.data.messageReference,
           amount: (result.data.amount / 100).toString(),
           phoneNumber: result.data.phoneNumber,
           activation: 'true',
@@ -158,7 +158,7 @@ export default function ActivateComponent() {
         <form onSubmit={handlePayment}>
           <div className="mb-6">
             <label className="block font-medium mb-2 text-gray-700">
-              M-Pesa Phone Number
+              Phone Number (Co-op Bank M-Pesa)
             </label>
             <div className="relative">
               <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -190,7 +190,7 @@ export default function ActivateComponent() {
                 Processing...
               </>
             ) : (
-              'Pay KES 90 via M-Pesa'
+              'Pay KES 90 via Co-op Bank'
             )}
           </button>
         </form>
@@ -200,7 +200,7 @@ export default function ActivateComponent() {
           <ol className="text-sm text-blue-700 list-decimal list-inside space-y-1">
             <li>Enter your M-Pesa registered phone number</li>
             <li>Click the pay button above</li>
-            <li>You will receive an M-Pesa prompt on your phone</li>
+            <li>You will receive a Co-op Bank STK push on your phone</li>
             <li>Enter your M-Pesa PIN to complete the payment</li>
             <li>Your account will be activated after successful payment</li>
           </ol>

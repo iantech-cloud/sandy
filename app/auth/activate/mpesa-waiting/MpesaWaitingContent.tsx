@@ -19,7 +19,7 @@ export default function MpesaWaitingContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
-  const checkoutRequestId = searchParams.get('checkoutRequestId');
+  const messageReference = searchParams.get('messageReference');
   const amount = searchParams.get('amount');
   const phoneNumber = searchParams.get('phoneNumber');
   const activationPaymentId = searchParams.get('activationPaymentId');
@@ -37,12 +37,10 @@ export default function MpesaWaitingContent() {
 
   // Poll for payment status using server action with fixed intervals
   const pollPaymentStatus = useCallback(async () => {
-    if (!checkoutRequestId) return;
+    if (!messageReference) return;
 
     try {
-      // Assuming checkActivationPaymentStatus returns:
-      // { success: true, data: { status: 'completed' | 'cancelled' | 'timeout' | 'failed' | 'pending', ... } }
-      const result = await checkActivationPaymentStatus(checkoutRequestId);
+      const result = await checkActivationPaymentStatus(messageReference);
       setPollingCount(prev => prev + 1);
 
       if (result.success && result.data) {
@@ -107,7 +105,7 @@ export default function MpesaWaitingContent() {
     } catch (error) {
       console.error('[v0] Error polling payment status:', error);
     }
-  }, [checkoutRequestId, activationPaymentId]);
+  }, [messageReference, activationPaymentId]);
 
   // Activate user account after successful payment using server action
   const activateAccount = async () => {
@@ -175,17 +173,17 @@ export default function MpesaWaitingContent() {
 
   // Initial poll
   useEffect(() => {
-    if (checkoutRequestId) {
+    if (messageReference) {
       pollPaymentStatus();
     }
-  }, [checkoutRequestId, pollPaymentStatus]);
+  }, [messageReference, pollPaymentStatus]);
 
-  // Redirect if no checkoutRequestId
+  // Redirect if no messageReference
   useEffect(() => {
-    if (!checkoutRequestId) {
+    if (!messageReference) {
       router.push('/auth/activate');
     }
-  }, [checkoutRequestId, router]);
+  }, [messageReference, router]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -197,7 +195,7 @@ export default function MpesaWaitingContent() {
     const baseConfig = {
       processing: {
         icon: <Loader2 className="animate-spin h-12 w-12 text-blue-500" />,
-        title: 'Waiting for M-Pesa Response',
+        title: 'Waiting for Co-op Bank Response',
         description: 'Please check your phone and enter your M-Pesa PIN to complete the activation payment.',
         color: 'text-blue-600',
         bgColor: 'bg-blue-50',
@@ -254,7 +252,7 @@ export default function MpesaWaitingContent() {
 
   const statusConfig = getStatusConfig(paymentStatus.status);
 
-  if (!checkoutRequestId) {
+  if (!messageReference) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
@@ -324,7 +322,7 @@ export default function MpesaWaitingContent() {
           {paymentStatus.status === 'success' && paymentStatus.mpesaReceiptNumber && (
             <div className="bg-green-100 border border-green-300 rounded-lg p-4 mb-6">
               <div className="text-sm text-green-800">
-                <div className="font-semibold">M-Pesa Receipt:</div>
+                  <div className="font-semibold">Payment Receipt:</div>
                 <div>{paymentStatus.mpesaReceiptNumber}</div>
                 {activationPaymentId && (
                   <div className="mt-2 text-xs">
@@ -353,7 +351,7 @@ export default function MpesaWaitingContent() {
                 <div className="text-sm text-blue-800 text-left">
                   <div className="font-semibold mb-1">What to do:</div>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>Check your phone for M-Pesa prompt</li>
+                    <li>Check your phone for Co-op Bank STK push prompt</li>
                     <li>Enter your M-Pesa PIN when prompted</li>
                     <li>Wait for confirmation</li>
                     <li>Do not close this page</li>
@@ -438,7 +436,7 @@ export default function MpesaWaitingContent() {
           {process.env.NODE_ENV === 'development' && (
             <div className="mt-6 p-3 bg-gray-100 rounded-lg">
               <div className="text-xs text-gray-600 text-left">
-                <div>CheckoutRequestID: {checkoutRequestId}</div>
+                <div>MessageReference: {messageReference}</div>
                 <div>ActivationPaymentID: {activationPaymentId}</div>
                 <div>Status: {paymentStatus.status}</div>
                 <div>Result Code: {paymentStatus.resultCode}</div>
