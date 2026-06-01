@@ -289,7 +289,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               sub: userId,
               id: userId,
               userId: userId,
-              email: profile.email || '',
+              email: (profile.email || '').toLowerCase(),
               name: profile.username || '',
               role: profile.role || 'user',
               dashboardRoute: dashboardRoute,
