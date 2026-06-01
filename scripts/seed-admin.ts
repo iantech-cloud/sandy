@@ -20,7 +20,7 @@ dotenv.config({ path: '.env' });
 // Admin configuration - CHANGE THESE VALUES BEFORE RUNNING
 const ADMIN_CONFIG = {
   username: 'Scholine',
-  email: 'Scholinesandra1@gmail.com',
+  email: 'scholinesandra1@gmail.com',
   phone_number: '254707871154',
   password: 'Admin@123456',
   referral_id: 'SANDY001', // The referral code others will use to join
@@ -173,7 +173,7 @@ async function seedAdmin() {
     // Check if admin already exists
     const existingAdmin = await (Profile as any).findOne({
       $or: [
-        { email: ADMIN_CONFIG.email },
+        { email: { $regex: new RegExp(`^${ADMIN_CONFIG.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
         { username: ADMIN_CONFIG.username },
         { referral_id: ADMIN_CONFIG.referral_id }
       ]
@@ -203,7 +203,7 @@ async function seedAdmin() {
     const adminUser = await (Profile as any).create({
       _id: adminId,
       username: ADMIN_CONFIG.username,
-      email: ADMIN_CONFIG.email,
+      email: ADMIN_CONFIG.email.toLowerCase(),
       phone_number: ADMIN_CONFIG.phone_number,
       password: hashedPassword,
       referral_id: ADMIN_CONFIG.referral_id,
