@@ -97,9 +97,19 @@ export class CoopBankService {
       return this.tokenCache.token;
     }
 
-    const credentials = Buffer.from(
-      `${this.config.clientId}:${this.config.clientSecret}`
-    ).toString('base64');
+    // Debug: Log raw credentials before encoding
+    console.log('[v0] getAccessToken - credentials:');
+    console.log('[v0]   clientId length:', this.config.clientId.length, 'value:', this.config.clientId);
+    console.log('[v0]   clientSecret length:', this.config.clientSecret.length, 'value:', this.config.clientSecret?.substring(0, 20) + '...');
+
+    const authString = `${this.config.clientId}:${this.config.clientSecret}`;
+    console.log('[v0]   authString length:', authString.length, 'value:', authString?.substring(0, 50) + '...');
+
+    const credentials = Buffer.from(authString).toString('base64');
+    console.log('[v0]   Base64 credentials length:', credentials.length);
+    console.log('[v0]   Base64 credentials:', credentials);
+    console.log('[v0]   Expected Base64: MktETXRDZnpfSHZscUYzc1NBemxjUmQxTFdVYTpVVkM3ZGM0NDhKZWxtZXBoT3ZuZnpWMFZBbGNh');
+    console.log('[v0]   Match?', credentials === 'MktETXRDZnpfSHZscUYzc1NBemxjUmQxTFdVYTpVVkM3ZGM0NDhKZWxtZXBoT3ZuZnpWMFZBbGNh');
 
     const response = await fetch(this.tokenUrl, {
       method: 'POST',
@@ -281,6 +291,13 @@ export function createCoopBankService(): CoopBankService {
   const tokenUrl = process.env.COOP_TOKEN_URL;
   const stkPushUrl = process.env.COOP_STK_PUSH_URL;
   const stkStatusUrl = process.env.COOP_STK_STATUS_URL;
+
+  // Debug: Log env vars being read
+  console.log('[v0] createCoopBankService - reading env vars:');
+  console.log('[v0]   COOP_CLIENT_ID length:', clientId?.length, 'value:', clientId);
+  console.log('[v0]   COOP_CLIENT_SECRET length:', clientSecret?.length, 'value:', clientSecret?.substring(0, 20) + '...');
+  console.log('[v0]   COOP_OPERATOR_CODE:', operatorCode);
+  console.log('[v0]   COOP_TOKEN_URL:', tokenUrl);
 
   if (!clientId) throw new Error('Missing env var: COOP_CLIENT_ID');
   if (!clientSecret) throw new Error('Missing env var: COOP_CLIENT_SECRET');
