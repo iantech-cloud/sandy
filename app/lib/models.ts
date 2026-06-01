@@ -7,7 +7,7 @@ import { connectToDatabase } from './mongoose';
 const UserRoles = ['user', 'support', 'admin'];
 const ApprovalStatuses = ['pending', 'approved', 'rejected'];
 const UserStatuses = ['active', 'inactive', 'suspended', 'banned', 'pending'];
-const PaymentProviders = ['mpesa', 'card', 'bank'];
+const PaymentProviders = ['mpesa', 'card', 'bank', 'coop_bank'];
 const PaymentStatuses = ['pending', 'completed', 'failed', 'refunded'];
 const TicketStatuses = ['open', 'in_progress', 'resolved', 'closed'];
 const TicketPriorities = ['low', 'medium', 'high', 'urgent'];
