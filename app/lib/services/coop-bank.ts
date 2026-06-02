@@ -100,6 +100,13 @@ export class CoopBankService {
     const authString = `${this.config.clientId}:${this.config.clientSecret}`;
     const credentials = Buffer.from(authString).toString('base64');
 
+    console.log('[v0] Co-op Bank Token Request Debug:');
+    console.log('[v0]   Token URL:', this.tokenUrl);
+    console.log('[v0]   Client ID length:', this.config.clientId?.length);
+    console.log('[v0]   Client Secret length:', this.config.clientSecret?.length);
+    console.log('[v0]   Auth String length:', authString.length);
+    console.log('[v0]   Base64 Credentials length:', credentials.length);
+
     const response = await fetch(this.tokenUrl, {
       method: 'POST',
       headers: {
@@ -112,6 +119,11 @@ export class CoopBankService {
 
     if (!response.ok) {
       const error = await response.text();
+      console.log('[v0] Token request failed:', {
+        status: response.status,
+        error,
+        tokenUrl: this.tokenUrl,
+      });
       throw new Error(`Co-op Bank token request failed (${response.status}): ${error}`);
     }
 
@@ -280,6 +292,13 @@ export function createCoopBankService(): CoopBankService {
   const tokenUrl = process.env.COOP_TOKEN_URL;
   const stkPushUrl = process.env.COOP_STK_PUSH_URL;
   const stkStatusUrl = process.env.COOP_STK_STATUS_URL;
+
+  console.log('[v0] createCoopBankService - Environment vars:');
+  console.log('[v0]   COOP_CLIENT_ID exists:', !!clientId, 'length:', clientId?.length);
+  console.log('[v0]   COOP_CLIENT_SECRET exists:', !!clientSecret, 'length:', clientSecret?.length);
+  console.log('[v0]   COOP_OPERATOR_CODE exists:', !!operatorCode);
+  console.log('[v0]   Token URL:', tokenUrl);
+  console.log('[v0]   STK Push URL:', stkPushUrl);
 
   if (!clientId) throw new Error('Missing env var: COOP_CLIENT_ID');
   if (!clientSecret) throw new Error('Missing env var: COOP_CLIENT_SECRET');
