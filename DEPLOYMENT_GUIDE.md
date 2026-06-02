@@ -1,11 +1,15 @@
-# HustleHub Deployment & PM2 Setup Guide
+# HustleHub External Server Deployment Guide
 
-## The Problem You Were Facing
+## Overview
+This application is configured for deployment on external servers (NOT Vercel) with Co-operative Bank M-Pesa STK push as the primary payment gateway. The Next.js application is built as a standalone executable suitable for Docker, PM2, systemd, or traditional servers.
 
-When you run `pm2 start app.config.js`, Next.js tries to start with `next start` but fails because:
-1. The `.next` build directory doesn't exist
-2. Node modules may be incomplete or corrupted
-3. PM2 needs to run `next build` first before `next start`
+## Critical: Environment Variables
+Before deployment, ensure these Co-operative Bank variables are set with the EXACT names:
+- `COOP_CLIENT_ID` (NOT `COOP_BANK_CLIENT_ID`)
+- `COOP_CLIENT_SECRET` (NOT `COOP_BANK_CLIENT_SECRET`)
+- `COOP_OPERATOR_CODE` (NOT `COOP_BANK_OPERATOR_CODE`)
+
+Using incorrect names will cause payments to fail with "Missing env var" errors.
 
 ## Solution: Complete Deployment Setup
 
