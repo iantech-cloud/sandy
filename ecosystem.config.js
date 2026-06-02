@@ -1,30 +1,136 @@
+/**
+ * PM2 Ecosystem Configuration for External Server Deployment
+ * 
+ * This file configures how PM2 will manage the Next.js application on production servers.
+ * 
+ * Usage:
+ *   pm2 start ecosystem.config.js --env production
+ *   pm2 start ecosystem.config.js --env staging
+ *   pm2 start ecosystem.config.js --env development
+ * 
+ * ⚠️  CRITICAL: Ensure .env.local or .env.production.local has correct variable names:
+ *   - COOP_CLIENT_ID (not COOP_BANK_CLIENT_ID)
+ *   - COOP_CLIENT_SECRET (not COOP_BANK_CLIENT_SECRET)
+ *   - COOP_OPERATOR_CODE (not COOP_BANK_OPERATOR_CODE)
+ */
+
 module.exports = {
   apps: [
     {
-      name: 'hustlehub',
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 5000 -H 0.0.0.0',
+      // ===================================================================
+      // Application Metadata
+      // ===================================================================
+      name: 'sandy-app',
+      description: 'HustleHub Africa - Payment & Content Platform',
+      
+      // ===================================================================
+      // Execution & Startup
+      // ===================================================================
+      script: './node_modules/.bin/next',
+      args: 'start',
+      
+      // ===================================================================
+      // Working Directory (update to your server path)
+      // ===================================================================
+      cwd: process.env.APP_DIR || '/var/www/sandy',
 
-      cwd: '/var/www/hustlehub',
-
-      instances: 1,
-      exec_mode: 'fork',
-
+      // ===================================================================
+      // Process Management
+      // ===================================================================
+      instances: 1,              // Single instance
+      exec_mode: 'fork',         // Single fork mode
+      watch: false,              // Don't watch files in production
+      
+      // ===================================================================
+      // Environment Configuration
+      // ===================================================================
       env: {
         NODE_ENV: 'production',
         PORT: 5000,
+        HOSTNAME: '0.0.0.0',
+      },
+      env_development: {
+        NODE_ENV: 'development',
+        PORT: 3000,
+        HOSTNAME: 'localhost',
+      },
+      env_staging: {
+        NODE_ENV: 'staging',
+        PORT: 5000,
+        HOSTNAME: '0.0.0.0',
       },
 
-      error_file: '/var/log/hustlehub-error.log',
-      out_file: '/var/log/hustlehub-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-
-      restart_delay: 5000,
+      // ===================================================================
+      // Restart & Recovery Policies
+      // ===================================================================
+      autorestart: true,
       max_restarts: 10,
       min_uptime: '10s',
-      kill_timeout: 5000,
+      restart_delay: 5000,
+      max_memory_restart: '500M',  // Restart if exceeds 500MB
 
-      merge_logs: true,
+      // ===================================================================
+      // Logging
+      // ===================================================================
+      error_file: '/var/log/sandy/error.log',
+      out_file: '/var/log/sandy/out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: false,
+
+      // ===================================================================
+      // Graceful Shutdown
+      // ===================================================================
+      kill_timeout: 30000,        // 30 seconds for graceful shutdown
+
+      // ===================================================================
+      // Environment Files (PM2 will read in order)
+      // ===================================================================
+      env_file: [
+        '.env.local',
+        '.env.production.local',
+        '.env',
+      ],
+
+      // ===================================================================
+      // Node.js Options
+      // ===================================================================
+      node_args: [
+        '--max-old-space-size=2048',  // 2GB memory allocation
+      ],
+
+      // ===================================================================
+      // File Watching (Ignored paths)
+      // ===================================================================
+      ignore_watch: [
+        'node_modules',
+        '.next',
+        'dist',
+        'logs',
+        '.git',
+      ],
     },
   ],
+
+  // ======================================================================
+  // Deploy Configuration (for PM2 Deploy)
+  // ======================================================================
+  deploy: {
+    production: {
+      user: 'appuser',
+      host: 'your.production.server',
+      ref: 'origin/main',
+      repo: 'git@github.com:iantech-cloud/sandy.git',
+      path: '/var/www/sandy',
+      'pre-deploy-local': 'echo "Deploying Sandy app..."',
+      'post-deploy': 'pnpm install && pnpm run build && pm2 startOrRestart ecosystem.config.js --env production',
+    },
+    staging: {
+      user: 'appuser',
+      host: 'staging.server',
+      ref: 'origin/staging',
+      repo: 'git@github.com:iantech-cloud/sandy.git',
+      path: '/var/www/sandy-staging',
+      'post-deploy': 'pnpm install && pnpm run build && pm2 startOrRestart ecosystem.config.js --env staging',
+    },
+  },
 };
