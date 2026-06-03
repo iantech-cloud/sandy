@@ -3,15 +3,16 @@
  *
  * Based on official Postman collection (SANDRA OTIENO SCHOLINE):
  *   Token:  POST https://openapi.co-opbank.co.ke/token
- *           Header: Authorization: Basic <base64(clientId:clientSecret)>
+ *           Header: Authorization: Basic <COOP_BANK_BASIC_AUTH>
  *           Body (raw text): grant_type=client_credentials
+ *           Returns: Bearer token for subsequent API calls
  *
  *   STK Push: POST https://openapi.co-opbank.co.ke/FT/stk/1.0.0
- *           Header: Authorization: Bearer <token>
+ *           Header: Authorization: Bearer <token from Token endpoint>
  *           Body (JSON, PascalCase keys)
  *
  *   Status: POST https://openapi.co-opbank.co.ke/Enquiry/STK/1.0.0/
- *           Header: Authorization: Bearer <token>
+ *           Header: Authorization: Bearer <token from Token endpoint>
  *           Body: { "MessageReference": "<ref>" }
  *
  * M-Pesa implementation is kept below but commented out as a fallback.
@@ -22,8 +23,7 @@
 // ---------------------------------------------------------------------------
 
 export interface CoopBankConfig {
-  clientId: string;
-  clientSecret: string;
+  basicAuth: string; // Pre-encoded Basic auth string (e.g., "Basic MktETXRDZnpfSHZscUYzaFNBemxjUmQx...")
   operatorCode: string;
   baseUrl?: string;
   tokenUrl?: string;
@@ -79,9 +79,25 @@ export class CoopBankService {
   constructor(config: CoopBankConfig) {
     this.config = config;
     this.baseUrl = config.baseUrl || 'https://openapi.co-opbank.co.ke';
-    this.tokenUrl = config.tokenUrl || `${this.baseUrl}/token`;
-    this.stkPushUrl = config.stkPushUrl || `${this.baseUrl}/FT/stk/1.0.0`;
-    this.stkStatusUrl = config.stkStatusUrl || `${this.baseUrl}/Enquiry/STK/1.0.0/`;
+    
+    // Handle both full URLs and path-only formats
+    this.tokenUrl = this.normalizeUrl(config.tokenUrl, '/token');
+    this.stkPushUrl = this.normalizeUrl(config.stkPushUrl, '/FT/stk/1.0.0');
+    this.stkStatusUrl = this.normalizeUrl(config.stkStatusUrl, '/Enquiry/STK/1.0.0/');
+  }
+
+  /**
+   * Normalize URL to handle both full URLs and path-only formats.
+   * If url starts with /, prepend baseUrl. Otherwise use as-is.
+   */
+  private normalizeUrl(url: string | undefined, defaultPath: string): string {
+    if (!url) {
+      return `${this.baseUrl}${defaultPath}`;
+    }
+    if (url.startsWith('/')) {
+      return `${this.baseUrl}${url}`;
+    }
+    return url; // Assume it's a full URL
   }
 
   // -------------------------------------------------------------------------
@@ -90,27 +106,23 @@ export class CoopBankService {
 
   /**
    * Obtain an OAuth2 access token using client-credentials grant.
-   * Caches the token with a 5-minute buffer before expiry.
+   * Uses Bearer Token authentication with pre-encoded Basic auth credentials.
+   * Caches the token with a 60-second buffer before expiry (as per documentation).
    */
   async getAccessToken(): Promise<string> {
     if (this.tokenCache && this.tokenCache.expiresAt > Date.now()) {
       return this.tokenCache.token;
     }
 
-    const authString = `${this.config.clientId}:${this.config.clientSecret}`;
-    const credentials = Buffer.from(authString).toString('base64');
-
-    console.log('[v0] Co-op Bank Token Request Debug:');
+    console.log('[v0] Co-op Bank Token Request:');
     console.log('[v0]   Token URL:', this.tokenUrl);
-    console.log('[v0]   Client ID length:', this.config.clientId?.length);
-    console.log('[v0]   Client Secret length:', this.config.clientSecret?.length);
-    console.log('[v0]   Auth String length:', authString.length);
-    console.log('[v0]   Base64 Credentials length:', credentials.length);
+    console.log('[v0]   Using Bearer Token auth with Authorization header');
 
     const response = await fetch(this.tokenUrl, {
       method: 'POST',
       headers: {
-        Authorization: `Basic ${credentials}`,
+        // Pre-encoded Basic auth string from environment
+        Authorization: this.config.basicAuth,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       // Must be sent as raw text — not JSON and not form-encoded key=value object
@@ -119,7 +131,7 @@ export class CoopBankService {
 
     if (!response.ok) {
       const error = await response.text();
-      console.log('[v0] Token request failed:', {
+      console.error('[v0] Token request failed:', {
         status: response.status,
         error,
         tokenUrl: this.tokenUrl,
@@ -133,11 +145,13 @@ export class CoopBankService {
       throw new Error('Co-op Bank returned a token response with no access_token');
     }
 
-    // Cache with 5-minute safety buffer
+    // Cache with 60-second safety buffer before expiry (as per documentation)
     this.tokenCache = {
       token: data.access_token,
-      expiresAt: Date.now() + (data.expires_in - 300) * 1000,
+      expiresAt: Date.now() + (data.expires_in - 60) * 1000,
     };
+
+    console.log('[v0] Token obtained successfully, expires in:', data.expires_in, 'seconds');
 
     return data.access_token;
   }
@@ -285,28 +299,25 @@ export class CoopBankService {
 // ---------------------------------------------------------------------------
 
 export function createCoopBankService(): CoopBankService {
-  const clientId = process.env.COOP_CLIENT_ID;
-  const clientSecret = process.env.COOP_CLIENT_SECRET;
-  const operatorCode = process.env.COOP_OPERATOR_CODE;
-  const baseUrl = process.env.COOP_BASE_URL;
-  const tokenUrl = process.env.COOP_TOKEN_URL;
-  const stkPushUrl = process.env.COOP_STK_PUSH_URL;
-  const stkStatusUrl = process.env.COOP_STK_STATUS_URL;
+  const basicAuth = process.env.COOP_BANK_BASIC_AUTH;
+  const operatorCode = process.env.COOP_BANK_OPERATOR_CODE;
+  const baseUrl = process.env.COOP_BANK_BASE_URL;
+  const tokenUrl = process.env.COOP_BANK_TOKEN_ENDPOINT;
+  const stkPushUrl = process.env.COOP_BANK_STK_PUSH_ENDPOINT;
+  const stkStatusUrl = process.env.COOP_BANK_STK_STATUS_ENDPOINT;
 
   console.log('[v0] createCoopBankService - Environment vars:');
-  console.log('[v0]   COOP_CLIENT_ID exists:', !!clientId, 'length:', clientId?.length);
-  console.log('[v0]   COOP_CLIENT_SECRET exists:', !!clientSecret, 'length:', clientSecret?.length);
-  console.log('[v0]   COOP_OPERATOR_CODE exists:', !!operatorCode);
+  console.log('[v0]   COOP_BANK_BASIC_AUTH exists:', !!basicAuth, 'starts with Basic:', basicAuth?.startsWith('Basic'));
+  console.log('[v0]   COOP_BANK_OPERATOR_CODE:', operatorCode);
   console.log('[v0]   Token URL:', tokenUrl);
   console.log('[v0]   STK Push URL:', stkPushUrl);
+  console.log('[v0]   STK Status URL:', stkStatusUrl);
 
-  if (!clientId) throw new Error('Missing env var: COOP_CLIENT_ID');
-  if (!clientSecret) throw new Error('Missing env var: COOP_CLIENT_SECRET');
-  if (!operatorCode) throw new Error('Missing env var: COOP_OPERATOR_CODE');
+  if (!basicAuth) throw new Error('Missing env var: COOP_BANK_BASIC_AUTH (must be "Basic <base64...>")');
+  if (!operatorCode) throw new Error('Missing env var: COOP_BANK_OPERATOR_CODE');
 
   return new CoopBankService({
-    clientId,
-    clientSecret,
+    basicAuth,
     operatorCode,
     baseUrl,
     tokenUrl,

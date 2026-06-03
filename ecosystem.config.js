@@ -9,9 +9,11 @@
  *   pm2 start ecosystem.config.js --env development
  * 
  * ⚠️  CRITICAL: Ensure .env.local or .env.production.local has correct variable names:
- *   - COOP_CLIENT_ID (not COOP_BANK_CLIENT_ID)
- *   - COOP_CLIENT_SECRET (not COOP_BANK_CLIENT_SECRET)
- *   - COOP_OPERATOR_CODE (not COOP_BANK_OPERATOR_CODE)
+ *   - COOP_BANK_BASIC_AUTH (Pre-encoded "Basic <base64...>" auth header)
+ *   - COOP_BANK_OPERATOR_CODE (Operator code like "SANDRA")
+ *   - COOP_BANK_TOKEN_ENDPOINT (Token endpoint path)
+ *   - COOP_BANK_STK_PUSH_ENDPOINT (STK push endpoint path)
+ *   - COOP_BANK_STK_STATUS_ENDPOINT (Status check endpoint path)
  */
 
 module.exports = {

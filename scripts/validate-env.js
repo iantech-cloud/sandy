@@ -20,10 +20,9 @@ const REQUIRED_VARS = {
   NEXTAUTH_URL: { type: 'url' },
   MONGODB_URI: { type: 'mongodb-uri' },
 
-  // Co-operative Bank (PRIMARY PAYMENT GATEWAY) - ⚠️ CRITICAL NAMES
-  COOP_CLIENT_ID: { type: 'string', minLength: 10 },
-  COOP_CLIENT_SECRET: { type: 'string', minLength: 20 },
-  COOP_OPERATOR_CODE: { type: 'string', minLength: 3 },
+  // Co-operative Bank OAuth2 Bearer Token (PRIMARY PAYMENT GATEWAY) - ⚠️ CRITICAL NAMES
+  COOP_BANK_BASIC_AUTH: { type: 'string', minLength: 50 }, // "Basic <base64...>"
+  COOP_BANK_OPERATOR_CODE: { type: 'string', minLength: 3 },
 
   // Public URLs
   NEXT_PUBLIC_BASE_URL: { type: 'url' },
@@ -32,20 +31,23 @@ const REQUIRED_VARS = {
 const OPTIONAL_VARS = {
   PORT: { type: 'number', default: 5000 },
   HOSTNAME: { type: 'string', default: '0.0.0.0' },
-  COOP_BASE_URL: { type: 'url', default: 'https://openapi.co-opbank.co.ke' },
-  COOP_TOKEN_URL: { type: 'url', default: 'https://openapi.co-opbank.co.ke/token' },
-  COOP_STK_PUSH_URL: { type: 'url', default: 'https://openapi.co-opbank.co.ke/FT/stk/1.0.0' },
-  COOP_STK_STATUS_URL: { type: 'url', default: 'https://openapi.co-opbank.co.ke/Enquiry/STK/1.0.0/' },
+  COOP_BANK_BASE_URL: { type: 'url', default: 'https://openapi.co-opbank.co.ke' },
+  COOP_BANK_TOKEN_ENDPOINT: { type: 'string', default: '/token' },
+  COOP_BANK_STK_PUSH_ENDPOINT: { type: 'string', default: '/FT/stk/1.0.0' },
+  COOP_BANK_STK_STATUS_ENDPOINT: { type: 'string', default: '/Enquiry/STK/1.0.0/' },
   RESEND_API_KEY: { type: 'string', minLength: 10 },
   EMAIL_FROM_ADDRESS: { type: 'email' },
   API_BASE_URL: { type: 'url' },
 };
 
 const COMMON_MISTAKES = {
-  COOP_BANK_CLIENT_ID: 'Should be COOP_CLIENT_ID (without _BANK_)',
-  COOP_BANK_CLIENT_SECRET: 'Should be COOP_CLIENT_SECRET (without _BANK_)',
-  COOP_BANK_OPERATOR_CODE: 'Should be COOP_OPERATOR_CODE (without _BANK_)',
-  COOP_BANK_ENVIRONMENT: 'Not needed - remove it',
+  COOP_CLIENT_ID: 'Old format - use COOP_BANK_BASIC_AUTH instead',
+  COOP_CLIENT_SECRET: 'Old format - use COOP_BANK_BASIC_AUTH instead',
+  COOP_OPERATOR_CODE: 'Should be COOP_BANK_OPERATOR_CODE (with _BANK_)',
+  COOP_BASE_URL: 'Should be COOP_BANK_BASE_URL (with _BANK_)',
+  COOP_TOKEN_URL: 'Should be COOP_BANK_TOKEN_ENDPOINT (with _BANK_)',
+  COOP_STK_PUSH_URL: 'Should be COOP_BANK_STK_PUSH_ENDPOINT (with _BANK_)',
+  COOP_STK_STATUS_URL: 'Should be COOP_BANK_STK_STATUS_ENDPOINT (with _BANK_)',
 };
 
 // ============================================================================
@@ -172,16 +174,19 @@ for (const [name, rules] of Object.entries(OPTIONAL_VARS)) {
 // Co-operative Bank Specific Checks
 // ============================================================================
 
-console.log('\n💳 Co-operative Bank Configuration:\n');
+console.log('\n💳 Co-operative Bank OAuth2 Configuration:\n');
 
-const coopVars = ['COOP_CLIENT_ID', 'COOP_CLIENT_SECRET', 'COOP_OPERATOR_CODE'];
+const coopVars = ['COOP_BANK_BASIC_AUTH', 'COOP_BANK_OPERATOR_CODE'];
 const coopReady = coopVars.every(v => process.env[v]);
 
 if (coopReady) {
-  console.log('  ✓ All Co-op Bank credentials are configured');
-  console.log(`  ✓ Base URL: ${process.env.COOP_BASE_URL || 'https://openapi.co-opbank.co.ke'}`);
-  console.log(`  ✓ Token endpoint: ${process.env.COOP_TOKEN_URL || 'https://openapi.co-opbank.co.ke/token'}`);
-  console.log(`  ✓ STK Push endpoint: ${process.env.COOP_STK_PUSH_URL || 'https://openapi.co-opbank.co.ke/FT/stk/1.0.0'}`);
+  console.log('  ✓ All Co-op Bank OAuth2 credentials are configured');
+  console.log(`  ✓ Basic Auth: ${process.env.COOP_BANK_BASIC_AUTH?.substring(0, 20)}...`);
+  console.log(`  ✓ Operator Code: ${process.env.COOP_BANK_OPERATOR_CODE}`);
+  console.log(`  ✓ Base URL: ${process.env.COOP_BANK_BASE_URL || 'https://openapi.co-opbank.co.ke'}`);
+  console.log(`  ✓ Token endpoint: ${process.env.COOP_BANK_TOKEN_ENDPOINT || '/token'}`);
+  console.log(`  ✓ STK Push endpoint: ${process.env.COOP_BANK_STK_PUSH_ENDPOINT || '/FT/stk/1.0.0'}`);
+  console.log(`  ✓ Status endpoint: ${process.env.COOP_BANK_STK_STATUS_ENDPOINT || '/Enquiry/STK/1.0.0/'}`);
 } else {
   console.log('  ✗ Co-op Bank credentials incomplete - payments will FAIL');
   allValid = false;
