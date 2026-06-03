@@ -219,7 +219,15 @@ export async function checkSpinDepositStatus(messageReference: string) {
     const statusResponse = await coopBank.getTransactionStatus(messageReference)
     const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode)
 
+    console.log('[SpinWallet] Payment status check:', {
+      messageReference,
+      responseCode: statusResponse.ResponseCode,
+      mappedStatus,
+      description: statusResponse.ResponseDescription,
+    });
+
     if (mappedStatus === 'completed') {
+      console.log('[SpinWallet] ✅ Payment completed - processing spin credit');
       return {
         success: true,
         status: 'processing',
@@ -229,6 +237,7 @@ export async function checkSpinDepositStatus(messageReference: string) {
     }
 
     if (mappedStatus === 'pending') {
+      console.log('[SpinWallet] ⏳ Payment still pending - continue polling');
       return {
         success: true,
         status: 'pending',
@@ -237,6 +246,7 @@ export async function checkSpinDepositStatus(messageReference: string) {
       }
     }
 
+    console.log('[SpinWallet] ❌ Payment failed with status:', mappedStatus);
     return {
       success: false,
       status: mappedStatus,

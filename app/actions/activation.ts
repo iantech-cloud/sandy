@@ -91,29 +91,8 @@ interface ActivationCompletionData {
 // HELPER FUNCTIONS
 // =============================================================================
 
-interface StatusMapping {
-  status: string;
-  description: string;
-}
-
-/**
- * Map a Co-op Bank ResponseCode to our internal status enum.
- * ResponseCode '0' === success; everything else is a failure/pending.
- */
-function mapCoopResponseCode(responseCode: string): StatusMapping {
-  switch (responseCode) {
-    case '0':
-      return { status: 'completed', description: 'Payment completed successfully' };
-    case '2002':
-      return { status: 'cancelled', description: 'Request cancelled by user' };
-    case '2001':
-      return { status: 'timeout', description: 'Request timed out — no response from user' };
-    case '1':
-      return { status: 'pending', description: 'Transaction in progress' };
-    default:
-      return { status: 'failed', description: 'Transaction failed' };
-  }
-}
+// NOTE: Use CoopBankService.mapResponseCode() from the service layer instead
+// Do NOT use local mapping functions - maintain single source of truth
 
 /**
  * Get or create company profile
@@ -289,18 +268,29 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
     try {
       const coopBank = createCoopBankService();
       const statusResponse = await coopBank.getTransactionStatus(messageReference);
-      const mapped = mapCoopResponseCode(statusResponse.ResponseCode);
+      
+      // Use centralized mapping from CoopBankService (single source of truth)
+      const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+
+      console.log('[Activation] Status check:', {
+        messageReference,
+        responseCode: statusResponse.ResponseCode,
+        mappedStatus,
+        description: statusResponse.ResponseDescription,
+      });
 
       // Persist status update
       await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
-        status: mapped.status,
-        result_desc: statusResponse.ResponseDescription || mapped.description,
-        ...(mapped.status === 'completed' ? { completed_at: new Date() } : {}),
-        ...((['failed', 'cancelled', 'timeout'].includes(mapped.status)) ? { failed_at: new Date() } : {}),
+        status: mappedStatus,
+        result_code: parseInt(statusResponse.ResponseCode || '1', 10),
+        result_desc: statusResponse.ResponseDescription || '',
+        ...(mappedStatus === 'completed' ? { completed_at: new Date() } : {}),
+        ...((['failed', 'cancelled', 'timeout'].includes(mappedStatus)) ? { failed_at: new Date() } : {}),
       });
 
       // If completed via poll (callback missed), run activation logic
-      if (mapped.status === 'completed') {
+      if (mappedStatus === 'completed') {
+        console.log('[Activation] Activation triggered from status poll');
         const activationPayment = await (ActivationPayment as any).findOne({
           checkout_request_id: messageReference,
         });
@@ -315,13 +305,13 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
       return {
         success: true,
         data: {
-          status: mapped.status,
+          status: mappedStatus,
           resultCode: statusResponse.ResponseCode,
-          resultDesc: statusResponse.ResponseDescription || mapped.description,
+          resultDesc: statusResponse.ResponseDescription || '',
           isActivationPayment: true,
           source: 'coop_api',
         },
-        message: `Payment status: ${mapped.status}`,
+        message: `Payment status: ${mappedStatus}`,
       };
     } catch (apiError) {
       console.error('[Activation] Co-op Bank API error, returning DB status:', apiError);

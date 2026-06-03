@@ -389,10 +389,18 @@ export async function checkMpesaPaymentStatus(messageReference: string): Promise
 
         const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
 
+        console.log('[Deposit] Payment status check:', {
+          messageReference,
+          responseCode: statusResponse.ResponseCode,
+          mappedStatus,
+          description: statusResponse.ResponseDescription,
+        });
+
         if (terminalStatuses.includes(mappedStatus)) {
             // Update the MpesaTransaction record status (wallet credit still via callback)
             await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
                 status: mappedStatus,
+                result_code: parseInt(statusResponse.ResponseCode || '1', 10),
                 result_desc: statusResponse.ResponseDescription || '',
                 ...(mappedStatus === 'completed' ? { completed_at: new Date() } : { failed_at: new Date() }),
             });
@@ -400,7 +408,7 @@ export async function checkMpesaPaymentStatus(messageReference: string): Promise
             await syncTransactionStatus(
                 mpesaTransaction._id,
                 mappedStatus,
-                0,
+                parseInt(statusResponse.ResponseCode || '1', 10),
                 statusResponse.ResponseDescription || '',
                 undefined
             );
@@ -410,6 +418,8 @@ export async function checkMpesaPaymentStatus(messageReference: string): Promise
             success: true,
             data: {
                 status: mappedStatus,
+                resultCode: statusResponse.ResponseCode,
+                resultDesc: statusResponse.ResponseDescription || '',
                 amount: mpesaTransaction.amount_cents,
                 source: 'api',
                 responseCode: statusResponse.ResponseCode,
