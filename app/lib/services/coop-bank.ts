@@ -38,25 +38,42 @@ interface TokenResponse {
 }
 
 export interface STKPushResponse {
+  // Standard response fields (after mapping)
   ResponseCode: string;
   ResponseDescription: string;
   MessageReference?: string;
+  
   // The Co-op Bank API returns these identifiers on success
   OperatorTxnID?: string;
   ConversationID?: string;
   OriginatorConversationID?: string;
+  
   // Field names differ slightly across environments — keep all variants
   operatorTxnID?: string;
   conversationID?: string;
+  
+  // ⚠️  Co-op Bank STK Push API uses these field names
+  // We map MessageCode -> ResponseCode and MessageDescription -> ResponseDescription
+  MessageCode?: string;
+  MessageDescription?: string;
+  MessageDateTime?: string;
 }
 
 export interface TransactionStatusResponse {
+  // Standard response fields (after mapping)
   ResponseCode: string;
   ResponseDescription: string;
   MessageReference?: string;
   Status?: string;
+  
   // Possible status values from the API
   status?: string;
+  
+  // ⚠️  Co-op Bank Status API might use these field names
+  // We map MessageCode -> ResponseCode and MessageDescription -> ResponseDescription
+  MessageCode?: string;
+  MessageDescription?: string;
+  MessageDateTime?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,8 +255,27 @@ export class CoopBankService {
 
     console.log('[v0] STK Push Success Response:', JSON.stringify(result, null, 2));
 
+    // ⚠️  CRITICAL: Normalize response fields
+    // Co-op Bank STK Push API returns MessageCode/MessageDescription,
+    // but our code expects ResponseCode/ResponseDescription
+    // Map the fields for consistency across all endpoints
+    if (result.MessageCode && !result.ResponseCode) {
+      console.log('[v0] Normalizing STK Push response: MessageCode->ResponseCode');
+      result.ResponseCode = result.MessageCode;
+    }
+    if (result.MessageDescription && !result.ResponseDescription) {
+      console.log('[v0] Normalizing STK Push response: MessageDescription->ResponseDescription');
+      result.ResponseDescription = result.MessageDescription;
+    }
+
     // Attach the message reference we sent so callers can always access it
     result.MessageReference = msgRef;
+
+    console.log('[v0] Normalized STK Push Response:', {
+      ResponseCode: result.ResponseCode,
+      ResponseDescription: result.ResponseDescription,
+      MessageReference: result.MessageReference,
+    });
 
     return result;
   }
@@ -282,6 +318,17 @@ export class CoopBankService {
     const result = (await response.json()) as TransactionStatusResponse;
 
     console.log('[v0] STK Status Result:', JSON.stringify(result, null, 2));
+
+    // ⚠️  CRITICAL: Normalize response fields (same as STK Push)
+    // Some endpoints might return MessageCode/MessageDescription
+    if (result.MessageCode && !result.ResponseCode) {
+      console.log('[v0] Normalizing Status response: MessageCode->ResponseCode');
+      result.ResponseCode = result.MessageCode;
+    }
+    if (result.MessageDescription && !result.ResponseDescription) {
+      console.log('[v0] Normalizing Status response: MessageDescription->ResponseDescription');
+      result.ResponseDescription = result.MessageDescription;
+    }
 
     return result;
   }
