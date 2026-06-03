@@ -142,6 +142,32 @@ async function validateDeposit(
         };
     }
 
+    // Clean up old pending transactions (> 3 minutes old) - mark them as timeout/failed
+    const stalePendingTransactions = await (MpesaTransaction as any).find({
+        user_id: userId,
+        status: { $in: ['initiated', 'pending'] },
+        source: 'wallet',
+        created_at: { $lt: threeMinutesAgo },
+    });
+
+    if (stalePendingTransactions.length > 0) {
+        console.log(`[Deposit] Cleaning up ${stalePendingTransactions.length} stale pending transactions for user ${userId}`);
+        // Mark them as timeout since they're older than 3 minutes
+        await (MpesaTransaction as any).updateMany(
+            {
+                user_id: userId,
+                status: { $in: ['initiated', 'pending'] },
+                source: 'wallet',
+                created_at: { $lt: threeMinutesAgo },
+            },
+            {
+                status: 'timeout',
+                result_desc: 'Transaction timed out - no user response within 3 minutes',
+                failed_at: new Date(),
+            }
+        );
+    }
+
     return { valid: true, message: 'Validation passed', data: { formattedPhone } };
 }
 
@@ -397,10 +423,14 @@ export async function checkMpesaPaymentStatus(messageReference: string): Promise
         });
 
         if (terminalStatuses.includes(mappedStatus)) {
+            // Safe parse result code - avoid NaN
+            const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
+            const safeResultCode = isNaN(resultCode) ? 1 : resultCode;
+            
             // Update the MpesaTransaction record status (wallet credit still via callback)
             await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
                 status: mappedStatus,
-                result_code: parseInt(statusResponse.ResponseCode || '1', 10),
+                result_code: safeResultCode,
                 result_desc: statusResponse.ResponseDescription || '',
                 ...(mappedStatus === 'completed' ? { completed_at: new Date() } : { failed_at: new Date() }),
             });
@@ -408,7 +438,7 @@ export async function checkMpesaPaymentStatus(messageReference: string): Promise
             await syncTransactionStatus(
                 mpesaTransaction._id,
                 mappedStatus,
-                parseInt(statusResponse.ResponseCode || '1', 10),
+                safeResultCode,
                 statusResponse.ResponseDescription || '',
                 undefined
             );
