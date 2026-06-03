@@ -160,8 +160,8 @@ export class CoopBankService {
       clearTimeout(timeout);
 
       if (!response.ok) {
-        const error = await response.text();
-        console.error(`[v0] Token request failed (${response.status}):`, error.substring(0, 150));
+        const errorText = await response.text();
+        console.error(`[v0] Token request failed (${response.status}):`, errorText);
         
         // Retry with backoff on 500+ errors or timeouts
         if (attempt < maxAttempts && response.status >= 500) {
@@ -292,38 +292,43 @@ export class CoopBankService {
         console.error('[v0] STK Push Error Response:', error.substring(0, 200));
         throw new Error(`Co-op Bank STK Push failed (${response.status})`);
       }
+
+      // ✅ MOVED INSIDE try block — response is accessible here
+      const result = (await response.json()) as STKPushResponse;
+
+      console.log('[v0] STK Push Success Response:', JSON.stringify(result, null, 2));
+
+      // ⚠️  CRITICAL: Normalize response fields
+      // Co-op Bank STK Push API returns MessageCode/MessageDescription,
+      // but our code expects ResponseCode/ResponseDescription
+      // Map the fields for consistency across all endpoints
+      if (result.MessageCode && !result.ResponseCode) {
+        console.log('[v0] Normalizing STK Push response: MessageCode->ResponseCode');
+        result.ResponseCode = result.MessageCode;
+      }
+      if (result.MessageDescription && !result.ResponseDescription) {
+        console.log('[v0] Normalizing STK Push response: MessageDescription->ResponseDescription');
+        result.ResponseDescription = result.MessageDescription;
+      }
+
+      // Attach the message reference we sent so callers can always access it
+      result.MessageReference = msgRef;
+
+      console.log('[v0] Normalized STK Push Response:', {
+        ResponseCode: result.ResponseCode,
+        ResponseDescription: result.ResponseDescription,
+        MessageReference: result.MessageReference,
+      });
+
+      return result;
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('[v0] STK Push timeout (60s)');
+        throw new Error('Co-op Bank STK Push timed out');
+      }
       console.error('[v0] STK Push request error:', error instanceof Error ? error.message : String(error));
       throw error;
     }
-
-    const result = (await response.json()) as STKPushResponse;
-
-    console.log('[v0] STK Push Success Response:', JSON.stringify(result, null, 2));
-
-    // ⚠️  CRITICAL: Normalize response fields
-    // Co-op Bank STK Push API returns MessageCode/MessageDescription,
-    // but our code expects ResponseCode/ResponseDescription
-    // Map the fields for consistency across all endpoints
-    if (result.MessageCode && !result.ResponseCode) {
-      console.log('[v0] Normalizing STK Push response: MessageCode->ResponseCode');
-      result.ResponseCode = result.MessageCode;
-    }
-    if (result.MessageDescription && !result.ResponseDescription) {
-      console.log('[v0] Normalizing STK Push response: MessageDescription->ResponseDescription');
-      result.ResponseDescription = result.MessageDescription;
-    }
-
-    // Attach the message reference we sent so callers can always access it
-    result.MessageReference = msgRef;
-
-    console.log('[v0] Normalized STK Push Response:', {
-      ResponseCode: result.ResponseCode,
-      ResponseDescription: result.ResponseDescription,
-      MessageReference: result.MessageReference,
-    });
-
-    return result;
   }
 
   // -------------------------------------------------------------------------
@@ -448,12 +453,15 @@ export function createCoopBankService(): CoopBankService {
   const stkPushUrl = process.env.COOP_BANK_STK_PUSH_ENDPOINT;
   const stkStatusUrl = process.env.COOP_BANK_STK_STATUS_ENDPOINT;
 
-  console.log('[v0] createCoopBankService - Environment vars:');
-  console.log('[v0]   COOP_BANK_BASIC_AUTH exists:', !!basicAuth, 'starts with Basic:', basicAuth?.startsWith('Basic'));
-  console.log('[v0]   COOP_BANK_OPERATOR_CODE:', operatorCode);
-  console.log('[v0]   Token URL:', tokenUrl);
-  console.log('[v0]   STK Push URL:', stkPushUrl);
-  console.log('[v0]   STK Status URL:', stkStatusUrl);
+    console.log('[v0] createCoopBankService - Environment vars:');
+    console.log('[v0]   COOP_BANK_BASIC_AUTH exists:', !!basicAuth);
+    console.log('[v0]   COOP_BANK_BASIC_AUTH format:', basicAuth ? `${basicAuth.substring(0, 20)}...${basicAuth.substring(basicAuth.length - 10)}` : 'MISSING');
+    console.log('[v0]   COOP_BANK_BASIC_AUTH starts with "Basic ":', basicAuth?.startsWith('Basic '));
+    console.log('[v0]   COOP_BANK_BASIC_AUTH length:', basicAuth?.length);
+    console.log('[v0]   COOP_BANK_OPERATOR_CODE:', operatorCode);
+    console.log('[v0]   Token URL:', tokenUrl);
+    console.log('[v0]   STK Push URL:', stkPushUrl);
+    console.log('[v0]   STK Status URL:', stkStatusUrl);
 
   if (!basicAuth) throw new Error('Missing env var: COOP_BANK_BASIC_AUTH (must be "Basic <base64...>")');
   if (!operatorCode) throw new Error('Missing env var: COOP_BANK_OPERATOR_CODE');
