@@ -113,8 +113,10 @@ export interface TransactionStatus {
 }
 
 export interface CoopBankConfig {
-  clientId: string;
-  clientSecret: string;
+  basicAuth: string; // Pre-encoded "Basic <base64...>" string
   operatorCode: string;
-  environment: 'sandbox' | 'production';
+  baseUrl?: string;
+  tokenUrl?: string;
+  stkPushUrl?: string;
+  stkStatusUrl?: string;
 }
