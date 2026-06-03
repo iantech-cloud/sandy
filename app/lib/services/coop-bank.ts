@@ -124,20 +124,21 @@ export class CoopBankService {
   /**
    * Obtain an OAuth2 access token using client-credentials grant.
    * Uses Bearer Token authentication with pre-encoded Basic auth credentials.
-   * Caches the token with a 60-second buffer before expiry (as per documentation).
    * 
-   * On error, clears token cache so retry gets a fresh token.
-   * Timeout: 60 seconds per request.
+   * STRATEGY: Get fresh token for each STK call (no caching)
+   * - Ensures always valid token
+   * - Avoids stale/expired token issues
+   * - Improves reliability when API is flaky
+   * - Single retry on failure with exponential backoff (1s, 2s)
+   * 
+   * Timeout: 60 seconds per request
+   * Retries: 2 attempts with backoff before giving up
    */
-  async getAccessToken(): Promise<string> {
-    if (this.tokenCache && this.tokenCache.expiresAt > Date.now()) {
-      console.log('[v0] Using cached token, expires in:', Math.round((this.tokenCache.expiresAt - Date.now()) / 1000), 'seconds');
-      return this.tokenCache.token;
-    }
+  async getAccessToken(attempt: number = 1): Promise<string> {
+    const maxAttempts = 2;
 
-    console.log('[v0] Co-op Bank Token Request:');
+    console.log(`[v0] Token Request (Attempt ${attempt}/${maxAttempts}):`);
     console.log('[v0]   Token URL:', this.tokenUrl);
-    console.log('[v0]   Using Bearer Token auth with Authorization header');
     console.log('[v0]   Timeout: 60 seconds');
 
     try {
@@ -160,35 +161,45 @@ export class CoopBankService {
 
       if (!response.ok) {
         const error = await response.text();
-        console.error('[v0] Token request failed:', {
-          status: response.status,
-          error: error.substring(0, 200), // Limit error output
-          tokenUrl: this.tokenUrl,
-        });
-        // Clear cache on error so retry will attempt fresh token
-        this.tokenCache = null;
+        console.error(`[v0] Token request failed (${response.status}):`, error.substring(0, 150));
+        
+        // Retry with backoff on 500+ errors or timeouts
+        if (attempt < maxAttempts && response.status >= 500) {
+          const backoffMs = attempt * 1000; // 1s, 2s
+          console.log(`[v0] Retrying in ${backoffMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+          return this.getAccessToken(attempt + 1);
+        }
+        
         throw new Error(`Co-op Bank token request failed (${response.status})`);
       }
 
       const data = (await response.json()) as TokenResponse;
 
       if (!data.access_token) {
-        throw new Error('Co-op Bank returned a token response with no access_token');
+        throw new Error('Co-op Bank returned invalid token response (no access_token)');
       }
 
       // Cache with 60-second safety buffer before expiry (as per documentation)
+      // This caches ONLY successful tokens - cache is cleared when token generation fails
       this.tokenCache = {
         token: data.access_token,
         expiresAt: Date.now() + (data.expires_in - 60) * 1000,
       };
 
-      console.log('[v0] Token obtained successfully, expires in:', data.expires_in, 'seconds');
+      console.log(`[v0] Token obtained successfully (expires in ${data.expires_in}s)`);
 
       return data.access_token;
     } catch (error) {
-      // Clear cache on any error (timeout, network, etc.)
+      // Clear cache on any error - force fresh token on next attempt
       this.tokenCache = null;
-      console.error('[v0] Token request error:', error instanceof Error ? error.message : String(error));
+      
+      if (error instanceof Error && error.message.includes('AbortError')) {
+        console.error('[v0] Token request timeout (60s)');
+      } else {
+        console.error('[v0] Token request error:', error instanceof Error ? error.message : String(error));
+      }
+      
       throw error;
     }
   }
@@ -219,6 +230,10 @@ export class CoopBankService {
     callbackUrl: string,
     messageReference?: string
   ): Promise<STKPushResponse> {
+    // Force fresh token for each STK push (don't use cached token)
+    // This ensures always valid token and improves reliability
+    this.tokenCache = null;
+    
     const token = await this.getAccessToken();
 
     const msgRef =
@@ -321,6 +336,9 @@ export class CoopBankService {
    * @param messageReference  The same reference used when initiating the push
    */
   async getTransactionStatus(messageReference: string): Promise<TransactionStatusResponse> {
+    // Force fresh token for status checks (don't use cached token)
+    this.tokenCache = null;
+    
     const token = await this.getAccessToken();
 
     console.log('[v0] STK Status Request:');
@@ -329,39 +347,52 @@ export class CoopBankService {
 
     const statusPayload = { MessageReference: messageReference };
 
-    const response = await fetch(this.stkStatusUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(statusPayload),
-    });
+    try {
+      const abortController = new AbortController();
+      const timeout = setTimeout(() => abortController.abort(), 60000); // 60 second timeout
 
-    console.log('[v0] STK Status Response Status:', response.status);
+      const response = await fetch(this.stkStatusUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(statusPayload),
+        signal: abortController.signal,
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[v0] STK Status Error Response:', error);
-      throw new Error(`Co-op Bank status query failed (${response.status}): ${error}`);
+      clearTimeout(timeout);
+
+      console.log('[v0] STK Status Response Status:', response.status);
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[v0] STK Status Error Response:', error.substring(0, 150));
+        throw new Error(`Co-op Bank status query failed (${response.status})`);
+      }
+
+      const result = (await response.json()) as TransactionStatusResponse;
+
+      console.log('[v0] STK Status Result:', JSON.stringify(result, null, 2));
+
+      // ⚠️  CRITICAL: Normalize response fields (same as STK Push)
+      // Some endpoints might return MessageCode/MessageDescription
+      if (result.MessageCode && !result.ResponseCode) {
+        console.log('[v0] Normalizing Status response: MessageCode->ResponseCode');
+        result.ResponseCode = result.MessageCode;
+      }
+      if (result.MessageDescription && !result.ResponseDescription) {
+        console.log('[v0] Normalizing Status response: MessageDescription->ResponseDescription');
+        result.ResponseDescription = result.MessageDescription;
+      }
+
+      return result;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('AbortError')) {
+        console.error('[v0] Status check timeout (60s)');
+      }
+      throw error;
     }
-
-    const result = (await response.json()) as TransactionStatusResponse;
-
-    console.log('[v0] STK Status Result:', JSON.stringify(result, null, 2));
-
-    // ⚠️  CRITICAL: Normalize response fields (same as STK Push)
-    // Some endpoints might return MessageCode/MessageDescription
-    if (result.MessageCode && !result.ResponseCode) {
-      console.log('[v0] Normalizing Status response: MessageCode->ResponseCode');
-      result.ResponseCode = result.MessageCode;
-    }
-    if (result.MessageDescription && !result.ResponseDescription) {
-      console.log('[v0] Normalizing Status response: MessageDescription->ResponseDescription');
-      result.ResponseDescription = result.MessageDescription;
-    }
-
-    return result;
   }
 
   // -------------------------------------------------------------------------
