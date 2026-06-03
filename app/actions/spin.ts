@@ -687,14 +687,43 @@ async function validateSpinDeposit(
     return { valid: false, message: 'User not found' };
   }
 
-  const pendingMpesaTransaction = await (MpesaTransaction as any).findOne({
+  // Check for recent pending transactions (within last 5 minutes)
+  // This prevents accidental duplicate submissions but allows retry after timeout
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+  const recentPendingTransaction = await (MpesaTransaction as any).findOne({
     user_id: userId,
     status: { $in: ['initiated', 'pending'] },
     phone_number: formattedPhone,
+    created_at: { $gt: fiveMinutesAgo }, // Only block recent transactions
   });
 
-  if (pendingMpesaTransaction) {
-    return { valid: false, message: 'You have a pending M-Pesa transaction. Please complete or wait for it to be processed.' };
+  if (recentPendingTransaction) {
+    return { valid: false, message: 'You have a pending M-Pesa transaction from the last 5 minutes. Please complete or wait for it to be processed before trying again.' };
+  }
+
+  // Clean up old pending transactions (> 5 minutes old) - mark them as timeout/failed
+  const stalePendingTransactions = await (MpesaTransaction as any).find({
+    user_id: userId,
+    status: { $in: ['initiated', 'pending'] },
+    phone_number: formattedPhone,
+    created_at: { $lt: fiveMinutesAgo },
+  });
+
+  if (stalePendingTransactions.length > 0) {
+    console.log(`[Spin] Cleaning up ${stalePendingTransactions.length} stale pending transactions for user ${userId}`);
+    // Mark them as timeout since they're older than 5 minutes
+    await (MpesaTransaction as any).updateMany(
+      {
+        user_id: userId,
+        status: { $in: ['initiated', 'pending'] },
+        created_at: { $lt: fiveMinutesAgo },
+      },
+      {
+        status: 'timeout',
+        result_desc: 'Transaction timed out - no user response within 5 minutes',
+        failed_at: new Date(),
+      }
+    );
   }
 
   return { valid: true, message: 'Validation passed', data: { formattedPhone } };

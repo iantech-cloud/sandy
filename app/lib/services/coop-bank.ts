@@ -125,52 +125,72 @@ export class CoopBankService {
    * Obtain an OAuth2 access token using client-credentials grant.
    * Uses Bearer Token authentication with pre-encoded Basic auth credentials.
    * Caches the token with a 60-second buffer before expiry (as per documentation).
+   * 
+   * On error, clears token cache so retry gets a fresh token.
+   * Timeout: 60 seconds per request.
    */
   async getAccessToken(): Promise<string> {
     if (this.tokenCache && this.tokenCache.expiresAt > Date.now()) {
+      console.log('[v0] Using cached token, expires in:', Math.round((this.tokenCache.expiresAt - Date.now()) / 1000), 'seconds');
       return this.tokenCache.token;
     }
 
     console.log('[v0] Co-op Bank Token Request:');
     console.log('[v0]   Token URL:', this.tokenUrl);
     console.log('[v0]   Using Bearer Token auth with Authorization header');
+    console.log('[v0]   Timeout: 60 seconds');
 
-    const response = await fetch(this.tokenUrl, {
-      method: 'POST',
-      headers: {
-        // Pre-encoded Basic auth string from environment
-        Authorization: this.config.basicAuth,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      // Must be sent as raw text — not JSON and not form-encoded key=value object
-      body: 'grant_type=client_credentials',
-    });
+    try {
+      const abortController = new AbortController();
+      const timeout = setTimeout(() => abortController.abort(), 60000); // 60 second timeout
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[v0] Token request failed:', {
-        status: response.status,
-        error,
-        tokenUrl: this.tokenUrl,
+      const response = await fetch(this.tokenUrl, {
+        method: 'POST',
+        headers: {
+          // Pre-encoded Basic auth string from environment
+          Authorization: this.config.basicAuth,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        // Must be sent as raw text — not JSON and not form-encoded key=value object
+        body: 'grant_type=client_credentials',
+        signal: abortController.signal,
       });
-      throw new Error(`Co-op Bank token request failed (${response.status}): ${error}`);
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[v0] Token request failed:', {
+          status: response.status,
+          error: error.substring(0, 200), // Limit error output
+          tokenUrl: this.tokenUrl,
+        });
+        // Clear cache on error so retry will attempt fresh token
+        this.tokenCache = null;
+        throw new Error(`Co-op Bank token request failed (${response.status})`);
+      }
+
+      const data = (await response.json()) as TokenResponse;
+
+      if (!data.access_token) {
+        throw new Error('Co-op Bank returned a token response with no access_token');
+      }
+
+      // Cache with 60-second safety buffer before expiry (as per documentation)
+      this.tokenCache = {
+        token: data.access_token,
+        expiresAt: Date.now() + (data.expires_in - 60) * 1000,
+      };
+
+      console.log('[v0] Token obtained successfully, expires in:', data.expires_in, 'seconds');
+
+      return data.access_token;
+    } catch (error) {
+      // Clear cache on any error (timeout, network, etc.)
+      this.tokenCache = null;
+      console.error('[v0] Token request error:', error instanceof Error ? error.message : String(error));
+      throw error;
     }
-
-    const data = (await response.json()) as TokenResponse;
-
-    if (!data.access_token) {
-      throw new Error('Co-op Bank returned a token response with no access_token');
-    }
-
-    // Cache with 60-second safety buffer before expiry (as per documentation)
-    this.tokenCache = {
-      token: data.access_token,
-      expiresAt: Date.now() + (data.expires_in - 60) * 1000,
-    };
-
-    console.log('[v0] Token obtained successfully, expires in:', data.expires_in, 'seconds');
-
-    return data.access_token;
   }
 
   // -------------------------------------------------------------------------
@@ -234,21 +254,32 @@ export class CoopBankService {
 
     console.log('[v0] STK Push Payload:', JSON.stringify(payload, null, 2));
 
-    const response = await fetch(this.stkPushUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const abortController = new AbortController();
+      const timeout = setTimeout(() => abortController.abort(), 60000); // 60 second timeout
 
-    console.log('[v0] STK Push Response Status:', response.status);
+      const response = await fetch(this.stkPushUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: abortController.signal,
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[v0] STK Push Error Response:', error);
-      throw new Error(`Co-op Bank STK Push failed (${response.status}): ${error}`);
+      clearTimeout(timeout);
+
+      console.log('[v0] STK Push Response Status:', response.status);
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[v0] STK Push Error Response:', error.substring(0, 200));
+        throw new Error(`Co-op Bank STK Push failed (${response.status})`);
+      }
+    } catch (error) {
+      console.error('[v0] STK Push request error:', error instanceof Error ? error.message : String(error));
+      throw error;
     }
 
     const result = (await response.json()) as STKPushResponse;

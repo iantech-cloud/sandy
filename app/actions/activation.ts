@@ -279,10 +279,13 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
         description: statusResponse.ResponseDescription,
       });
 
-      // Persist status update
+      // Persist status update - ensure result_code is valid number
+      const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
+      const safeResultCode = isNaN(resultCode) ? 1 : resultCode;
+      
       await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: mappedStatus,
-        result_code: parseInt(statusResponse.ResponseCode || '1', 10),
+        result_code: safeResultCode,
         result_desc: statusResponse.ResponseDescription || '',
         ...(mappedStatus === 'completed' ? { completed_at: new Date() } : {}),
         ...((['failed', 'cancelled', 'timeout'].includes(mappedStatus)) ? { failed_at: new Date() } : {}),
