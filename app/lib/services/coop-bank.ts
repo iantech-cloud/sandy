@@ -163,6 +163,12 @@ export class CoopBankService {
   /**
    * Initiate an STK Push prompt on the customer's phone.
    *
+   * Payload format matches SANDRA OTIENO SCHOLINE Postman collection exactly:
+   * - All keys in PascalCase
+   * - OtherDetails as array of {Name, Value} objects
+   * - Amount as integer (KES)
+   * - MessageDateTime in ISO format
+   *
    * @param phoneNumber   Customer phone in any common KE format (07..., 254..., +254...)
    * @param amount        Amount in KES — whole number (fractions are truncated)
    * @param narration     Short description shown on the M-Pesa prompt (max 60 chars)
@@ -184,7 +190,14 @@ export class CoopBankService {
 
     const formattedPhone = CoopBankService.normalisePhone(phoneNumber);
 
-    // PascalCase keys as required by the Co-op Bank API (from Postman collection)
+    console.log('[v0] STK Push Request Details:');
+    console.log('[v0]   Phone:', formattedPhone);
+    console.log('[v0]   Amount:', amount, 'KES');
+    console.log('[v0]   Message Reference:', msgRef);
+    console.log('[v0]   Callback URL:', callbackUrl);
+
+    // PascalCase payload exactly as per Postman collection
+    // https://github.com/iantech-cloud/sandy/blob/main/SANDRA_OTIENO_SCHOLINE.postman_collection.json
     const payload = {
       MessageReference: msgRef,
       CallBackUrl: callbackUrl,
@@ -192,7 +205,7 @@ export class CoopBankService {
       TransactionCurrency: 'KES',
       MobileNumber: formattedPhone,
       Narration: narration.substring(0, 60),
-      Amount: Math.floor(amount),
+      Amount: Math.floor(amount), // Must be integer, not float
       MessageDateTime: new Date().toISOString(),
       OtherDetails: [
         {
@@ -201,6 +214,8 @@ export class CoopBankService {
         },
       ],
     };
+
+    console.log('[v0] STK Push Payload:', JSON.stringify(payload, null, 2));
 
     const response = await fetch(this.stkPushUrl, {
       method: 'POST',
@@ -211,12 +226,17 @@ export class CoopBankService {
       body: JSON.stringify(payload),
     });
 
+    console.log('[v0] STK Push Response Status:', response.status);
+
     if (!response.ok) {
       const error = await response.text();
+      console.error('[v0] STK Push Error Response:', error);
       throw new Error(`Co-op Bank STK Push failed (${response.status}): ${error}`);
     }
 
     const result = (await response.json()) as STKPushResponse;
+
+    console.log('[v0] STK Push Success Response:', JSON.stringify(result, null, 2));
 
     // Attach the message reference we sent so callers can always access it
     result.MessageReference = msgRef;
@@ -236,21 +256,34 @@ export class CoopBankService {
   async getTransactionStatus(messageReference: string): Promise<TransactionStatusResponse> {
     const token = await this.getAccessToken();
 
+    console.log('[v0] STK Status Request:');
+    console.log('[v0]   Message Reference:', messageReference);
+    console.log('[v0]   Status URL:', this.stkStatusUrl);
+
+    const statusPayload = { MessageReference: messageReference };
+
     const response = await fetch(this.stkStatusUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ MessageReference: messageReference }),
+      body: JSON.stringify(statusPayload),
     });
+
+    console.log('[v0] STK Status Response Status:', response.status);
 
     if (!response.ok) {
       const error = await response.text();
+      console.error('[v0] STK Status Error Response:', error);
       throw new Error(`Co-op Bank status query failed (${response.status}): ${error}`);
     }
 
-    return (await response.json()) as TransactionStatusResponse;
+    const result = (await response.json()) as TransactionStatusResponse;
+
+    console.log('[v0] STK Status Result:', JSON.stringify(result, null, 2));
+
+    return result;
   }
 
   // -------------------------------------------------------------------------
