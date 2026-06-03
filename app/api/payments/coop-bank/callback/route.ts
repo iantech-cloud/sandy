@@ -8,6 +8,7 @@ import {
   SpinWallet,
   Transaction,
 } from '@/app/lib/models';
+import { CoopBankService } from '@/app/lib/services/coop-bank';
 import mongoose from 'mongoose';
 import { completeActivationAfterPayment } from '@/app/actions/activation';
 
@@ -30,23 +31,8 @@ interface CoopBankCallback {
   [key: string]: unknown;
 }
 
-/**
- * Map a Co-op Bank ResponseCode to our internal status enum.
- */
-function mapResponseCode(
-  responseCode: string
-): 'completed' | 'failed' | 'cancelled' | 'timeout' {
-  switch (responseCode) {
-    case '0':
-      return 'completed';
-    case '2002':
-      return 'cancelled';
-    case '2001':
-      return 'timeout';
-    default:
-      return 'failed';
-  }
-}
+// NOTE: Use CoopBankService.mapResponseCode() for status mapping
+// This is the single source of truth for response code mappings
 
 // ---------------------------------------------------------------------------
 // POST /api/payments/coop-bank/callback
@@ -95,7 +81,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'Already processed' });
     }
 
-    const paymentStatus = mapResponseCode(callbackData.ResponseCode);
+    // Use service mapping for consistency across all payment flows
+    const paymentStatus = CoopBankService.mapResponseCode(callbackData.ResponseCode);
+    
+    console.log('[CoopCallback] Status mapped:', {
+      responseCode: callbackData.ResponseCode,
+      mappedStatus: paymentStatus,
+    });
     const receiptNumber =
       callbackData.ReceiptNumber ||
       callbackData.OperatorTxnID ||

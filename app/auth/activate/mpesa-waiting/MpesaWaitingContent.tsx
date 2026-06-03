@@ -44,14 +44,19 @@ export default function MpesaWaitingContent() {
       setPollingCount(prev => prev + 1);
 
       if (result.success && result.data) {
-        const { status, resultCode, resultDesc, mpesaReceiptNumber, amount } = result.data;
+        const { status, resultCode, resultDesc, mpesaReceiptNumber, amount, source } = result.data;
 
         // Log for debugging
-        console.log(`[v0] Polling attempt ${pollingCount + 1}: status=${status}, code=${resultCode}`);
+        console.log(`[v0] Activation polling attempt ${pollingCount + 1}:`, {
+          status,
+          resultCode,
+          resultDesc,
+          source,
+        });
 
         // Handle pending/processing state - normal intermediate state
-        if (status === 'pending') {
-          console.log('⏳ Transaction still pending - M-Pesa is processing, will check again in 5 seconds');
+        if (status === 'pending' || status === 'initiated') {
+          console.log('⏳ Transaction still pending - M-Pesa is processing, will check again');
           return;
         }
 
@@ -64,6 +69,7 @@ export default function MpesaWaitingContent() {
           
           // Map status from API/database to our UI status
           if (status === 'completed') {
+            console.log('✅ Status mapped to success');
             return {
               status: 'success',
               resultCode: resultCode,
@@ -72,18 +78,21 @@ export default function MpesaWaitingContent() {
               amount: amount
             };
           } else if (status === 'cancelled') {
+            console.log('❌ Status mapped to cancelled');
             return {
               status: 'cancelled',
               resultCode: resultCode,
               resultDesc: resultDesc || 'Payment cancelled by user'
             };
           } else if (status === 'timeout') {
+            console.log('⏱️ Status mapped to timeout');
             return {
               status: 'timeout',
               resultCode: resultCode,
               resultDesc: resultDesc || 'Payment timeout'
             };
           } else if (status === 'failed') {
+            console.log('❌ Status mapped to failed');
             return {
               status: 'failed',
               resultCode: resultCode,
@@ -92,6 +101,7 @@ export default function MpesaWaitingContent() {
           }
           
           // Keep processing status for pending
+          console.log('⏳ Status is pending, keeping processing state');
           return prev;
         });
 

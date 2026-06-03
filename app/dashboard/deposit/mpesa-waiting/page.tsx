@@ -8,7 +8,7 @@ import { checkMpesaPaymentStatus } from '@/app/actions/deposit';
 
 interface PaymentStatus {
   status: 'processing' | 'success' | 'failed' | 'cancelled' | 'timeout';
-  resultCode?: number;
+  resultCode?: string | number;
   resultDesc?: string;
   mpesaReceiptNumber?: string;
   amount?: number;
@@ -52,8 +52,17 @@ export default function MpesaWaitingPage() {
       if (result.success && result.data) {
         const { status, resultCode, resultDesc, mpesaReceiptNumber, source } = result.data;
 
+        console.log('[Deposit waiting] Status received:', { status, resultCode, resultDesc, source });
+
+        // Handle pending/processing state - normal intermediate state
+        if (status === 'pending' || status === 'initiated') {
+          console.log('⏳ Transaction still pending - continuing to poll');
+          return; // Keep polling, don't update UI
+        }
+
         // Map terminal statuses
         if (status === 'completed') {
+          console.log('✅ Payment completed successfully');
           setPaymentStatus({
             status: 'success',
             resultCode,
@@ -64,15 +73,17 @@ export default function MpesaWaitingPage() {
           });
           setIsPolling(false);
         } else if (status === 'cancelled') {
+          console.log('❌ Payment cancelled by user');
           setPaymentStatus({
             status: 'cancelled',
             resultCode,
-            resultDesc: 'You cancelled the payment request',
+            resultDesc: resultDesc || 'You cancelled the payment request',
             amount: Number(amount),
             source
           });
           setIsPolling(false);
-        } else if (status === 'failed' && resultCode && resultCode !== 11) {
+        } else if (status === 'failed') {
+          console.log('❌ Payment failed:', resultCode);
           setPaymentStatus({
             status: 'failed',
             resultCode,
@@ -82,6 +93,7 @@ export default function MpesaWaitingPage() {
           });
           setIsPolling(false);
         } else if (status === 'timeout') {
+          console.log('⏱️ Payment timeout');
           setPaymentStatus({
             status: 'timeout',
             resultCode,
