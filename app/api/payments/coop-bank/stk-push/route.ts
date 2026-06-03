@@ -63,20 +63,40 @@ export async function POST(request: NextRequest) {
     const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
     // Initiate STK push (PascalCase payload constructed inside the service)
-    const stkResponse = await coopBank.initiateSTKPush(
-      formattedPhone,
+    console.log('[API] Calling coopBank.initiateSTKPush with:', {
+      phone: formattedPhone,
       amount,
       narration,
       callbackUrl,
-      messageReference
-    );
+      messageReference,
+    });
+
+    let stkResponse;
+    try {
+      stkResponse = await coopBank.initiateSTKPush(
+        formattedPhone,
+        amount,
+        narration,
+        callbackUrl,
+        messageReference
+      );
+      console.log('[API] STK Push response received:', stkResponse);
+    } catch (error) {
+      console.error('[API] STK Push initiation failed with exception:', error);
+      throw error;
+    }
 
     // Non-'0' ResponseCode means the bank rejected the initiation
     if (stkResponse.ResponseCode !== '0') {
+      console.warn('[API] STK Push rejected by bank:', {
+        responseCode: stkResponse.ResponseCode,
+        description: stkResponse.ResponseDescription,
+      });
       return NextResponse.json(
         {
           success: false,
           error: stkResponse.ResponseDescription || 'STK Push rejected by bank',
+          responseCode: stkResponse.ResponseCode,
         },
         { status: 400 }
       );

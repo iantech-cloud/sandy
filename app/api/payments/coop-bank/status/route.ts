@@ -52,6 +52,11 @@ async function handleStatusCheck(request: NextRequest, messageReferenceFromPath?
       );
     }
 
+    console.log('[CoopStatus] Checking transaction:', {
+      messageReference,
+      userId: session.user.id,
+    });
+
     // Find transaction — scoped to the authenticated user
     const mpesaTransaction = await MpesaTransaction.findOne({
       checkout_request_id: messageReference,
@@ -59,11 +64,18 @@ async function handleStatusCheck(request: NextRequest, messageReferenceFromPath?
     });
 
     if (!mpesaTransaction) {
+      console.warn('[CoopStatus] Transaction not found for:', messageReference);
       return NextResponse.json(
         { success: false, error: 'Transaction not found' },
         { status: 404 }
       );
     }
+
+    console.log('[CoopStatus] Transaction found:', {
+      id: mpesaTransaction._id,
+      status: mpesaTransaction.status,
+      amount: mpesaTransaction.amount_cents,
+    });
 
     // Terminal state — return cached status immediately (avoid unnecessary API call)
     const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
@@ -71,6 +83,7 @@ async function handleStatusCheck(request: NextRequest, messageReferenceFromPath?
       terminalStatuses.includes(mpesaTransaction.status) &&
       mpesaTransaction.metadata?.callback_processed
     ) {
+      console.log('[CoopStatus] Returning cached terminal status:', mpesaTransaction.status);
       return NextResponse.json({
         success: true,
         data: {
@@ -85,16 +98,25 @@ async function handleStatusCheck(request: NextRequest, messageReferenceFromPath?
     }
 
     // Not yet terminal — query Co-op Bank Enquiry API
+    console.log('[CoopStatus] Querying Co-op Bank API for status...');
     // POST /Enquiry/STK/1.0.0/ with body { MessageReference }
     try {
       const coopBank = createCoopBankService();
       const statusResponse = await coopBank.getTransactionStatus(messageReference);
 
+      console.log('[CoopStatus] API Response:', statusResponse);
+
       // Use the canonical mapping from the service (consistent with the callback route)
       const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
 
+      console.log('[CoopStatus] Mapped status:', {
+        responseCode: statusResponse.ResponseCode,
+        mappedStatus,
+      });
+
       // Persist the updated status if we got a terminal result
       if (terminalStatuses.includes(mappedStatus)) {
+        console.log('[CoopStatus] Persisting terminal status to DB...');
         await MpesaTransaction.findByIdAndUpdate(mpesaTransaction._id, {
           status: mappedStatus,
           result_code: parseInt(statusResponse.ResponseCode || '1', 10),
@@ -105,6 +127,7 @@ async function handleStatusCheck(request: NextRequest, messageReferenceFromPath?
         });
       }
 
+      console.log('[CoopStatus] Returning live status:', mappedStatus);
       return NextResponse.json({
         success: true,
         data: {
@@ -120,7 +143,7 @@ async function handleStatusCheck(request: NextRequest, messageReferenceFromPath?
         },
       });
     } catch (apiError) {
-      console.error('[CoopStatus] Co-op Bank API error:', apiError);
+      console.error('[CoopStatus] Co-op Bank API error:', apiError, 'for messageReference:', messageReference);
 
       // Fallback to cached DB status when the API is unreachable
       return NextResponse.json({
