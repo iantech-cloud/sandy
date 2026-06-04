@@ -52,7 +52,6 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
         total_deposited_cents: 0,
         total_used_cents: 0,
         total_spins: 0,
-        spin_credits: 0,
       })
     }
 
@@ -193,8 +192,9 @@ export async function checkSpinDepositStatus(messageReference: string) {
       return {
         success: true,
         status: 'completed',
-        message: 'Payment confirmed. Your spin credit has been added.',
-        spin_credits: spinWallet.spin_credits || 0,
+        message: 'Payment confirmed. Your spin wallet has been credited.',
+        balance_cents: spinWallet.balance_cents,
+        balance_kes: (spinWallet.balance_cents / 100).toFixed(2),
       }
     }
 
@@ -209,9 +209,10 @@ export async function checkSpinDepositStatus(messageReference: string) {
         status: mpesaTransaction.status,
         message:
           mpesaTransaction.status === 'completed'
-            ? 'Payment confirmed. Your spin credit has been added.'
+            ? 'Payment confirmed. Your spin wallet has been credited.'
             : `Payment ${mpesaTransaction.status}.`,
-        spin_credits: spinWallet.spin_credits || 0,
+        balance_cents: spinWallet.balance_cents,
+        balance_kes: (spinWallet.balance_cents / 100).toFixed(2),
       }
     }
 
@@ -228,12 +229,13 @@ export async function checkSpinDepositStatus(messageReference: string) {
     });
 
     if (mappedStatus === 'completed') {
-      console.log('[SpinWallet] ✅ Payment completed - processing spin credit');
+      console.log('[SpinWallet] ✅ Payment completed - crediting spin wallet');
       return {
         success: true,
         status: 'processing',
-        message: 'Payment received! Processing your spin credit...',
-        spin_credits: spinWallet.spin_credits || 0,
+        message: 'Payment received! Crediting your spin wallet...',
+        balance_cents: spinWallet.balance_cents,
+        balance_kes: (spinWallet.balance_cents / 100).toFixed(2),
       }
     }
 
@@ -243,7 +245,8 @@ export async function checkSpinDepositStatus(messageReference: string) {
         success: true,
         status: 'pending',
         message: 'Payment still processing...',
-        spin_credits: spinWallet.spin_credits || 0,
+        balance_cents: spinWallet.balance_cents,
+        balance_kes: (spinWallet.balance_cents / 100).toFixed(2),
       }
     }
 
@@ -285,17 +288,15 @@ export async function getSpinWalletBalance() {
         total_deposited_cents: 0,
         total_used_cents: 0,
         total_spins: 0,
-        spin_credits: 0,
       })
     }
 
     return {
       success: true,
-      // balance_cents = winnings/prizes owed to user
+      // balance_cents = user's spendable spin wallet balance (from deposits)
+      // This is the amount the user can use to spin
       balance_cents: spinWallet.balance_cents,
       balance_kes: (spinWallet.balance_cents / 100).toFixed(2),
-      // spin_credits = number of spins the user has purchased but not yet used
-      spin_credits: spinWallet.spin_credits || 0,
       total_deposited: spinWallet.total_deposited_cents,
       total_used: spinWallet.total_used_cents,
       total_spins: spinWallet.total_spins,
