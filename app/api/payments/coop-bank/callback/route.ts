@@ -128,11 +128,10 @@ export async function POST(request: NextRequest) {
     console.log('[CoopCallback] depositType:', depositType, '| status:', paymentStatus);
 
     // ========================================================================
-    // SPIN WALLET PAYMENT
+    // SPIN WALLET DEPOSIT
     // ========================================================================
-    // Money goes to the COMPANY wallet as SPIN_COST revenue.
-    // The user receives one spin credit per KES 30 paid.
-    // The SpinWallet.balance_cents is NOT touched here.
+    // Money is deposited to the USER's spin wallet balance, NOT company.
+    // Company revenue is only recorded when the user actually spins.
     // ========================================================================
     if (depositType === 'spin_wallet') {
       // Update the embedded deposit record in SpinWallet
@@ -146,8 +145,6 @@ export async function POST(request: NextRequest) {
         );
 
         if (paymentStatus === 'completed') {
-          const spinCreditsEarned = Math.floor(mpesaTransaction.amount_cents / 3000); // 3000 cents = KES 30
-
           if (existingDeposit && existingDeposit.status !== 'completed') {
             existingDeposit.status = 'completed';
             existingDeposit.overall_status = 'completed';
@@ -169,14 +166,13 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          // Add spin credits to the wallet (not balance_cents)
-          spinWallet.spin_credits = (spinWallet.spin_credits || 0) + spinCreditsEarned;
-          // Track total deposited for reporting, but this is company revenue
+          // Credit the deposited amount to user's spin wallet balance
+          spinWallet.balance_cents = (spinWallet.balance_cents || 0) + mpesaTransaction.amount_cents;
           spinWallet.total_deposited_cents =
             (spinWallet.total_deposited_cents || 0) + mpesaTransaction.amount_cents;
 
           console.log(
-            `[CoopCallback] SpinWallet: +${spinCreditsEarned} spin credits for user ${mpesaTransaction.user_id}. Money goes to company.`
+            `[CoopCallback] SpinWallet: +KES ${mpesaTransaction.amount_cents / 100} credited to user ${mpesaTransaction.user_id}. Balance now: KES ${spinWallet.balance_cents / 100}`
           );
         } else {
           // Failed / cancelled / timeout
@@ -190,31 +186,7 @@ export async function POST(request: NextRequest) {
         await spinWallet.save({ session });
       }
 
-      // Record as COMPANY revenue — SPIN_COST
-      if (paymentStatus === 'completed') {
-        await (Transaction as any).create(
-          [
-            {
-              user_id: mpesaTransaction.user_id,
-              target_type: 'company',
-              type: 'SPIN_COST',
-              amount_cents: mpesaTransaction.amount_cents,
-              status: 'completed',
-              source: 'coop_bank_stk_push',
-              description: `Spin wallet deposit - KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`,
-              metadata: {
-                message_reference: messageReference,
-                receipt_number: receiptNumber,
-                phone_number: mpesaTransaction.phone_number,
-                deposit_type: 'spin_wallet',
-                revenue_target: 'company',
-                payment_method: 'coop_bank_stk_push',
-              },
-            },
-          ],
-          { session }
-        );
-      }
+      // DO NOT record company revenue on deposit - revenue is only recorded when user spins
     }
 
     // ========================================================================

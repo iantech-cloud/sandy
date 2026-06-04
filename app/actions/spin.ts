@@ -1122,6 +1122,22 @@ export async function performSpin(spinAmountKes: number = 30): Promise<SpinRespo
     spinWallet.total_spins += 1
     await spinWallet.save()
 
+    // Record company revenue from the spin
+    await (Transaction as any).create({
+      user_id: userId,
+      target_type: 'company',
+      type: 'SPIN_COST',
+      amount_cents: SPIN_COST_CENTS,
+      status: 'completed',
+      source: 'spin_wallet',
+      description: `Spin cost - KES ${spinAmountKes.toFixed(2)} (${spinAmountKes === 30 ? '1 spin' : spinAmountKes / 30 + ' spins'})`,
+      metadata: {
+        spin_amount: spinAmountKes,
+        user_tier: userTier,
+        revenue_target: 'company',
+      },
+    })
+
     const won = selectedPrize.type !== "ZERO"
 
     // Log spin
