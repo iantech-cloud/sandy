@@ -247,6 +247,7 @@ export class CoopBankService {
     console.log('[v0]   Amount:', amount, 'KES');
     console.log('[v0]   Message Reference:', msgRef);
     console.log('[v0]   Callback URL:', callbackUrl);
+    console.log('[v0]   Endpoint URL:', this.stkPushUrl);
 
     // PascalCase payload exactly as per Postman collection
     // https://github.com/iantech-cloud/sandy/blob/main/SANDRA_OTIENO_SCHOLINE.postman_collection.json
@@ -348,9 +349,12 @@ export class CoopBankService {
 
     console.log('[v0] STK Status Request:');
     console.log('[v0]   Message Reference:', messageReference);
-    console.log('[v0]   Status URL:', this.stkStatusUrl);
+    console.log('[v0]   Status Endpoint URL:', this.stkStatusUrl);
+    console.log('[v0]   Bearer Token:', `${token.substring(0, 20)}...${token.substring(token.length - 10)}`);
 
     const statusPayload = { MessageReference: messageReference };
+
+    console.log('[v0] STK Status Request Payload:', JSON.stringify(statusPayload));
 
     try {
       const abortController = new AbortController();
@@ -369,6 +373,7 @@ export class CoopBankService {
       clearTimeout(timeout);
 
       console.log('[v0] STK Status Response Status:', response.status);
+      console.log('[v0] STK Status Endpoint URL used:', this.stkStatusUrl);
 
       if (!response.ok) {
         const error = await response.text();
@@ -422,47 +427,53 @@ export class CoopBankService {
   /**
    * Map a Co-op Bank ResponseCode to a local payment status.
    * 
-   * Co-op Bank Response Codes:
+   * Terminal States (stop polling):
    * - '0' = Success (transaction completed)
-   * - 'S_001' = PROCESSING (transaction in flight — poll again)
-   * - '1' = PROCESSING (legacy, poll again)
    * - '2001' = TIMEOUT (user didn't respond within timeout)
    * - '2002' = CANCELLED (user cancelled the STK prompt)
-   * - Other 'S_*' codes = PROCESSING intermediates (poll again)
-   * - Everything else = FAILED
+   * - '1037' = NO RESPONSE FROM USER (user cancelled or didn't respond)
+   * - Other non-S_* codes = FAILED (error)
+   * 
+   * PROCESSING States (continue polling):
+   * - 'S_001' = PROCESSING (transaction in flight)
+   * - '1' = PROCESSING (legacy, still processing)
+   * - Other 'S_*' codes = PROCESSING intermediates
    */
   static mapResponseCode(
     responseCode: string
   ): 'completed' | 'pending' | 'failed' | 'cancelled' | 'timeout' {
-    // Handle success
+    // TERMINAL: Success
     if (responseCode === '0') {
       return 'completed';
     }
 
-    // Handle cancellation
+    // TERMINAL: User cancellation/timeout events
     if (responseCode === '2002') {
-      return 'cancelled'; // User cancelled STK prompt
+      return 'cancelled'; // User explicitly cancelled STK prompt
     }
 
-    // Handle timeout
     if (responseCode === '2001') {
       return 'timeout'; // User didn't respond within timeout window
     }
 
-    // Handle PROCESSING states (poll again)
+    if (responseCode === '1037') {
+      return 'timeout'; // No response from user (another variant of timeout)
+    }
+
+    // PROCESSING: Poll again states
     // Co-op Bank uses 'S_001' and '1' for "still processing"
     if (responseCode === '1' || responseCode === 'S_001') {
       return 'pending'; // Still processing — continue polling
     }
 
-    // Handle other S_* codes as PROCESSING (intermediate states)
+    // PROCESSING: Other S_* codes as intermediate states
     if (responseCode?.startsWith('S_')) {
-      console.log(`[v0] Unknown S_* code: ${responseCode} - treating as pending`);
+      console.log(`[v0] Intermediate S_* code: ${responseCode} - continuing to poll`);
       return 'pending'; // Unknown S_ code = intermediate state, keep polling
     }
 
-    // Default: treat as failed
-    console.log(`[v0] Unknown response code: ${responseCode} - treating as failed`);
+    // TERMINAL: All other codes are failures/errors
+    console.log(`[v0] Terminal error code: ${responseCode} - stopping polling`);
     return 'failed';
   }
 }
