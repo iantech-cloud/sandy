@@ -2454,4 +2454,14 @@ export {
 
 export { UserSession } from './models/UserSession';
 export { Invoice, InvoiceUtils, type IInvoice, type InvoiceCreateData, type InvoiceUpdateData } from './models/Invoice';
+export {
+  ChatForeignersBot,
+  ChatForeignersBotAccess,
+  ChatForeignersMpesaTransaction,
+  ChatForeignersPayment,
+  ChatForeignersReferralEarning,
+  ChatForeignersWallet,
+  ChatForeignersTransaction,
+  ChatForeignersProfile
+} from './models/ChatForeigners';
 

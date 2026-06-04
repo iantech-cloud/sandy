@@ -7,10 +7,12 @@ import {
   ActivationPayment,
   SpinWallet,
   Transaction,
+  ChatForeignersMpesaTransaction,
 } from '@/app/lib/models';
 import { CoopBankService } from '@/app/lib/services/coop-bank';
 import mongoose from 'mongoose';
 import { completeActivationAfterPayment } from '@/app/actions/activation';
+import { completeBotUnlockPayment, completeWalletDeposit } from '@/app/actions/chat-foreigners/payments';
 
 // ---------------------------------------------------------------------------
 // Co-op Bank Callback payload shape
@@ -277,6 +279,55 @@ export async function POST(request: NextRequest) {
             message: 'Activation payment processed',
           });
         }
+      }
+    }
+
+    // ========================================================================
+    // CHAT FOREIGNERS BOT UNLOCK
+    // ========================================================================
+    const chatForeignersUnlock = await ChatForeignersMpesaTransaction.findOne({
+      checkout_request_id: messageReference,
+      transaction_type: 'chat_foreigners_unlock',
+    }).session(session);
+
+    if (chatForeignersUnlock && paymentStatus === 'completed') {
+      try {
+        // Commit session before calling server action
+        await session.commitTransaction();
+        session = null;
+
+        await completeBotUnlockPayment(chatForeignersUnlock._id.toString());
+
+        return NextResponse.json({
+          success: true,
+          data: { status: paymentStatus, messageReference },
+          message: 'Chat foreigners unlock payment processed',
+        });
+      } catch (chatError) {
+        console.error('[CoopCallback] Chat foreigners unlock error:', chatError);
+        return NextResponse.json(
+          {
+            success: false,
+            error: chatError instanceof Error ? chatError.message : 'Failed to process chat unlock',
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ========================================================================
+    // CHAT FOREIGNERS WALLET DEPOSIT
+    // ========================================================================
+    const chatForeignersDeposit = await ChatForeignersMpesaTransaction.findOne({
+      checkout_request_id: messageReference,
+      transaction_type: 'chat_foreigners_deposit',
+    }).session(session);
+
+    if (chatForeignersDeposit && paymentStatus === 'completed') {
+      try {
+        await completeWalletDeposit(chatForeignersDeposit._id.toString(), session);
+      } catch (chatDepositError) {
+        console.error('[CoopCallback] Chat foreigners deposit error:', chatDepositError);
       }
     }
 
