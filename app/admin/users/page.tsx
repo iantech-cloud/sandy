@@ -615,6 +615,15 @@ export default function AdminUsersPage() {
                           >
                             {actionLoading === `reset-${user._id}` ? '...' : '↻'}
                           </button>
+
+                          {/* Chat Foreigners Coming Soon */}
+                          <button
+                            disabled
+                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-lg text-gray-500 bg-gray-100 cursor-not-allowed"
+                            title="Chat Foreigners feature coming soon"
+                          >
+                            Chat Foreigners (Coming Soon)
+                          </button>
                         </div>
                       </div>
                     </td>
