@@ -174,6 +174,16 @@ export async function POST(request: NextRequest) {
           console.log(
             `[CoopCallback] SpinWallet: +KES ${mpesaTransaction.amount_cents / 100} credited to user ${mpesaTransaction.user_id}. Balance now: KES ${spinWallet.balance_cents / 100}`
           );
+
+          // Mark the deposit Transaction record as completed
+          await (Transaction as any).findOneAndUpdate(
+            {
+              mpesa_transaction_id: mpesaTransaction._id,
+              type: 'SPIN_WALLET_DEPOSIT',
+            },
+            { status: 'completed' },
+            { session }
+          );
         } else {
           // Failed / cancelled / timeout
           if (existingDeposit) {
@@ -181,6 +191,16 @@ export async function POST(request: NextRequest) {
             existingDeposit.overall_status = paymentStatus;
             existingDeposit.mpesa_status = paymentStatus;
           }
+
+          // Mark the deposit Transaction record as failed
+          await (Transaction as any).findOneAndUpdate(
+            {
+              mpesa_transaction_id: mpesaTransaction._id,
+              type: 'SPIN_WALLET_DEPOSIT',
+            },
+            { status: paymentStatus },
+            { session }
+          );
         }
 
         await spinWallet.save({ session });
