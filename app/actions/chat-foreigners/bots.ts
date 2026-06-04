@@ -275,3 +275,141 @@ export async function recordMilestoneBonus(botId: string) {
     };
   }
 }
+
+// ========================================================================
+// ADMIN: Create Bot
+// ========================================================================
+export async function createChatForeignersBot(data: {
+  name: string;
+  username: string;
+  avatar?: string;
+  bio?: string;
+  personalityType?: string;
+  speakingStyle?: string;
+  mood?: string;
+  interests?: string;
+  unlockPrice?: number;
+}) {
+  try {
+    await connectToDatabase();
+
+    const bot = await ChatForeignersBot.create({
+      name: data.name,
+      username: data.username,
+      avatar_url: data.avatar,
+      bio: data.bio,
+      personalityType: data.personalityType,
+      speakingStyle: data.speakingStyle,
+      mood: data.mood,
+      interests: data.interests,
+      unlockCost_cents: (data.unlockPrice || 60) * 100,
+      isActive: true,
+    });
+
+    return {
+      success: true,
+      data: {
+        _id: bot._id.toString(),
+        name: bot.name,
+        username: bot.username,
+        avatar: bot.avatar_url,
+        bio: bot.bio,
+        personalityType: bot.personalityType,
+        speakingStyle: bot.speakingStyle,
+        mood: bot.mood,
+        interests: bot.interests,
+        unlockPrice: bot.unlockCost_cents / 100,
+      },
+    };
+  } catch (error) {
+    console.error('[ChatForeigners] Bot creation error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create bot',
+    };
+  }
+}
+
+// ========================================================================
+// ADMIN: Update Bot
+// ========================================================================
+export async function updateChatForeignersBot(botId: string, data: {
+  name?: string;
+  avatar?: string;
+  bio?: string;
+  personalityType?: string;
+  speakingStyle?: string;
+  mood?: string;
+  interests?: string;
+  unlockPrice?: number;
+}) {
+  try {
+    await connectToDatabase();
+
+    const updateData: any = {};
+    if (data.name) updateData.name = data.name;
+    if (data.avatar) updateData.avatar_url = data.avatar;
+    if (data.bio) updateData.bio = data.bio;
+    if (data.personalityType) updateData.personalityType = data.personalityType;
+    if (data.speakingStyle) updateData.speakingStyle = data.speakingStyle;
+    if (data.mood) updateData.mood = data.mood;
+    if (data.interests) updateData.interests = data.interests;
+    if (data.unlockPrice) updateData.unlockCost_cents = data.unlockPrice * 100;
+
+    const bot = await ChatForeignersBot.findByIdAndUpdate(botId, updateData, {
+      new: true,
+    });
+
+    if (!bot) {
+      return { success: false, error: 'Bot not found' };
+    }
+
+    return {
+      success: true,
+      data: {
+        _id: bot._id.toString(),
+        name: bot.name,
+        username: bot.username,
+        avatar: bot.avatar_url,
+        bio: bot.bio,
+        personalityType: bot.personalityType,
+        speakingStyle: bot.speakingStyle,
+        mood: bot.mood,
+        interests: bot.interests,
+        unlockPrice: bot.unlockCost_cents / 100,
+      },
+    };
+  } catch (error) {
+    console.error('[ChatForeigners] Bot update error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update bot',
+    };
+  }
+}
+
+// ========================================================================
+// ADMIN: Delete Bot
+// ========================================================================
+export async function deleteChatForeignersBot(botId: string) {
+  try {
+    await connectToDatabase();
+
+    const bot = await ChatForeignersBot.findByIdAndDelete(botId);
+
+    if (!bot) {
+      return { success: false, error: 'Bot not found' };
+    }
+
+    return {
+      success: true,
+      data: { botId: bot._id.toString() },
+    };
+  } catch (error) {
+    console.error('[ChatForeigners] Bot delete error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete bot',
+    };
+  }
+}
