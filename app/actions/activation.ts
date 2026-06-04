@@ -305,6 +305,20 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
         }
       }
 
+      // Build user-friendly error message
+      let userMessage = `Payment status: ${mappedStatus}`;
+      if (mappedStatus === 'completed') {
+        userMessage = 'Payment successful! Your account has been activated.';
+      } else if (mappedStatus === 'failed') {
+        userMessage = `Payment failed: ${statusResponse.ResponseDescription || 'Transaction could not be processed'}`;
+      } else if (mappedStatus === 'timeout') {
+        userMessage = 'Payment timeout: No response from M-Pesa. Please check your M-Pesa history and try again.';
+      } else if (mappedStatus === 'cancelled') {
+        userMessage = 'Payment cancelled: You cancelled the M-Pesa prompt.';
+      } else if (mappedStatus === 'pending') {
+        userMessage = 'Payment is still being processed. Please wait...';
+      }
+
       return {
         success: true,
         data: {
@@ -314,7 +328,7 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
           isActivationPayment: true,
           source: 'coop_api',
         },
-        message: `Payment status: ${mappedStatus}`,
+        message: userMessage,
       };
     } catch (apiError) {
       console.error('[Activation] Co-op Bank API error, returning DB status:', apiError);

@@ -8,6 +8,30 @@ import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhone
 import { createCoopBankService, CoopBankService } from '../lib/services/coop-bank';
 
 // ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Get user-friendly message for deposit status
+ */
+function getDepositUserMessage(status: string, responseDescription?: string): string {
+  switch (status) {
+    case 'completed':
+      return 'Payment successful! Your wallet has been credited.';
+    case 'failed':
+      return `Payment failed: ${responseDescription || 'Transaction could not be processed'}`;
+    case 'timeout':
+      return 'Payment timeout: No response from M-Pesa. Please check your M-Pesa history and try again.';
+    case 'cancelled':
+      return 'Payment cancelled: You cancelled the M-Pesa prompt.';
+    case 'pending':
+      return 'Payment is still being processed. Please wait...';
+    default:
+      return `Payment status: ${status}`;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Type definitions
 // ---------------------------------------------------------------------------
 
@@ -455,7 +479,7 @@ export async function checkMpesaPaymentStatus(messageReference: string): Promise
                 responseCode: statusResponse.ResponseCode,
                 responseDescription: statusResponse.ResponseDescription,
             },
-            message: `Payment status: ${mappedStatus}`,
+            message: getDepositUserMessage(mappedStatus, statusResponse.ResponseDescription),
         };
 
     } catch (error) {
