@@ -809,6 +809,8 @@ export async function depositSpinWalletViaMpesa(depositData: {
     });
 
     // Create a pending Transaction record
+    // NOTE: This is a user deposit transaction, NOT company revenue
+    // Company revenue is only recorded when the user actually spins
     const transaction = await (Transaction as any).create({
       user_id: currentUser._id,
       amount_cents: amountCents,
@@ -816,8 +818,8 @@ export async function depositSpinWalletViaMpesa(depositData: {
       description: `Co-op Bank spin wallet deposit from ${formattedPhone}`,
       status: 'pending',
       mpesa_transaction_id: mpesaTransaction._id,
-      target_type: 'company',
-      target_id: 'company',
+      target_type: 'user',
+      target_id: currentUser._id.toString(),
       metadata: {
         phoneNumber: formattedPhone,
         provider: 'coop_bank',
