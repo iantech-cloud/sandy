@@ -421,23 +421,49 @@ export class CoopBankService {
 
   /**
    * Map a Co-op Bank ResponseCode to a local payment status.
-   * ResponseCode '0' === success; anything else is a failure or still pending.
+   * 
+   * Co-op Bank Response Codes:
+   * - '0' = Success (transaction completed)
+   * - 'S_001' = PROCESSING (transaction in flight — poll again)
+   * - '1' = PROCESSING (legacy, poll again)
+   * - '2001' = TIMEOUT (user didn't respond within timeout)
+   * - '2002' = CANCELLED (user cancelled the STK prompt)
+   * - Other 'S_*' codes = PROCESSING intermediates (poll again)
+   * - Everything else = FAILED
    */
   static mapResponseCode(
     responseCode: string
   ): 'completed' | 'pending' | 'failed' | 'cancelled' | 'timeout' {
-    switch (responseCode) {
-      case '0':
-        return 'completed';
-      case '2002':
-        return 'cancelled'; // User cancelled
-      case '2001':
-        return 'timeout';   // Request timed out
-      case '1':             // Still processing (poll again)
-        return 'pending';
-      default:
-        return 'failed';
+    // Handle success
+    if (responseCode === '0') {
+      return 'completed';
     }
+
+    // Handle cancellation
+    if (responseCode === '2002') {
+      return 'cancelled'; // User cancelled STK prompt
+    }
+
+    // Handle timeout
+    if (responseCode === '2001') {
+      return 'timeout'; // User didn't respond within timeout window
+    }
+
+    // Handle PROCESSING states (poll again)
+    // Co-op Bank uses 'S_001' and '1' for "still processing"
+    if (responseCode === '1' || responseCode === 'S_001') {
+      return 'pending'; // Still processing — continue polling
+    }
+
+    // Handle other S_* codes as PROCESSING (intermediate states)
+    if (responseCode?.startsWith('S_')) {
+      console.log(`[v0] Unknown S_* code: ${responseCode} - treating as pending`);
+      return 'pending'; // Unknown S_ code = intermediate state, keep polling
+    }
+
+    // Default: treat as failed
+    console.log(`[v0] Unknown response code: ${responseCode} - treating as failed`);
+    return 'failed';
   }
 }
 
