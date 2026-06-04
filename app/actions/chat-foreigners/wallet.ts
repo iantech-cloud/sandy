@@ -110,7 +110,8 @@ export async function getChatForeignersProfile() {
     if (!profile) {
       // Generate referral code
       const referralCode = generateReferralCode();
-      const referralLink = `${process.env.NEXT_PUBLIC_APP_URL}/chat-foreigners?ref=${referralCode}`;
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      const referralLink = `${appUrl}/dashboard/chat-foreigners?ref=${referralCode}`;
 
       profile = await ChatForeignersProfile.create({
         user_id: currentUser._id,

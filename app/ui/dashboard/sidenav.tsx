@@ -46,6 +46,7 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
     { path: '/dashboard/wallet', label: 'Wallet & Pay', icon: Wallet },
     { path: '/dashboard/surveys', label: 'Earn Surveys', icon: Award },
     { path: '/dashboard/content', label: 'Tasks', icon: ClipboardList },
+    { path: '/dashboard/chat-foreigners', label: 'Chat Foreigners', icon: MessageCircle },
     { path: '/dashboard/referrals', label: 'Referrals', icon: Users },
     { path: '/dashboard/soko', label: 'Affiliate Marketing', icon: ShoppingBag },
     { path: '/dashboard/profile', label: 'Profile', icon: UserIcon },

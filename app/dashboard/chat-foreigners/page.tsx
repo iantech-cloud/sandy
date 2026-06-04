@@ -95,7 +95,7 @@ export default function ChatForeignersPage() {
           </Link>
 
           <Link
-            href="/refer-earn?tab=chat-foreigners"
+            href="/dashboard/referrals"
             className="bg-white p-4 rounded-lg border border-slate-200 hover:border-green-400 hover:shadow-md transition flex items-center justify-between"
           >
             <div className="flex items-center gap-3">
