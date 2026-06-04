@@ -624,17 +624,29 @@ async function syncSpinDepositTransactionWithMpesaStatus(
       }
     };
 
+    // CRITICAL: Only mark balance_updated for TERMINAL statuses
+    // Do NOT mark as updated while transaction is still PROCESSING (status === 'pending')
+    // Balance will be updated when callback arrives with final status
+    
     if (status === 'completed' && mpesaReceiptNumber) {
       updateData.metadata.mpesa_receipt_number = mpesaReceiptNumber;
       updateData.metadata.completed_at = new Date().toISOString();
-      // Mark balance_updated for completed spin deposits to prevent retries
+      // Mark balance_updated ONLY for completed transactions (terminal state)
       updateData.balance_updated = true;
     }
 
+    // Only mark as balance_updated for terminal failure states (not pending)
     if (['failed', 'cancelled', 'timeout'].includes(status)) {
       updateData.metadata.failed_at = new Date().toISOString();
-      // For failed deposits, also mark balance_updated to prevent retries
+      // Mark balance_updated to prevent retries of failed transactions
       updateData.balance_updated = true;
+    }
+
+    // For 'pending' status: DO NOT set balance_updated
+    // This allows the balance to be updated when callback arrives with completion status
+    if (status === 'pending') {
+      console.log('[SpinWallet] Transaction still PROCESSING - NOT marking balance_updated yet');
+      // balance_updated remains false/unchanged so callback can still update balance
     }
 
     const result = await (Transaction as any).findOneAndUpdate(
