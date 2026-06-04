@@ -37,6 +37,7 @@ export default function ReferralsPage() {
   const [allReferrals, setAllReferrals] = useState<Referral[]>([]);
   const [commissionStats, setCommissionStats] = useState<CommissionStats | null>(null);
   const [referralLink, setReferralLink] = useState<string>('');
+  const [chatReferralLink, setChatReferralLink] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
   const [loading, setLoading] = useState(true);
@@ -79,6 +80,19 @@ export default function ReferralsPage() {
 
         if (infoResult.success && infoResult.data) {
           setReferralLink(infoResult.data.referralLink);
+        }
+
+        // Fetch chat foreigners referral link
+        try {
+          const chatProfileRes = await fetch('/api/chat-foreigners/profile');
+          const chatProfileData = await chatProfileRes.json();
+          if (chatProfileData.success && chatProfileData.data?.referralCode) {
+            const baseUrl = window.location.origin;
+            const chatRefLink = `${baseUrl}/dashboard/chat-foreigners?ref=${chatProfileData.data.referralCode}`;
+            setChatReferralLink(chatRefLink);
+          }
+        } catch (chatError) {
+          console.error('Failed to load chat referral link:', chatError);
         }
 
       } catch (error) {
@@ -207,6 +221,38 @@ export default function ReferralsPage() {
 
         <p className="text-gray-600 mt-4 text-sm">
           Share your referral code or link with friends. You&apos;ll earn <strong>KES 70</strong> for each direct referral when they activate their accounts!
+        </p>
+      </div>
+
+      {/* Chat Foreigners Referral Section */}
+      <div className="bg-white p-6 rounded-xl shadow-lg mb-8 border-l-4 border-green-500">
+        <h3 className="font-bold text-lg mb-4 text-gray-800">Chat Foreigners Referral</h3>
+        
+        {/* Chat Referral Link */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Your Chat Foreigners Referral Link</label>
+          <div className="flex items-center gap-4 flex-wrap">
+            <input
+              type="text"
+              readOnly
+              value={chatReferralLink || 'Loading...'}
+              className="flex-1 px-4 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg font-mono text-gray-600 break-all"
+            />
+            <button
+              onClick={() => {
+                if (chatReferralLink) {
+                  copyToClipboard(chatReferralLink, 'Chat referral link');
+                }
+              }}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap flex-shrink-0"
+            >
+              Copy Link
+            </button>
+          </div>
+        </div>
+
+        <p className="text-gray-600 text-sm">
+          Share your Chat Foreigners referral link with friends. You&apos;ll earn <strong>KES 60</strong> for each person who unlocks a bot through your referral!
         </p>
       </div>
 

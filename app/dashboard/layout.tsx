@@ -152,6 +152,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (pathname?.includes('/dashboard/blog')) return 'blog';
     if (pathname?.includes('/dashboard/wallet')) return 'wallet';
     if (pathname?.includes('/dashboard/surveys')) return 'surveys';
+    if (pathname?.includes('/dashboard/chat-foreigners')) return 'chat-foreigners';
     if (pathname?.includes('/dashboard/referrals')) return 'referrals';
     if (pathname?.includes('/dashboard/support')) return 'support';
     if (pathname?.includes('/dashboard/settings')) return 'settings';
