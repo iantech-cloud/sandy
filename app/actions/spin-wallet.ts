@@ -15,14 +15,14 @@ import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-
 // initiatSpinDeposit
 // ---------------------------------------------------------------------------
 // IMPORTANT ACCOUNTING RULE:
-//   When a user pays KES 30 to spin, that money goes to the COMPANY, not to
-//   the user's spin wallet balance.  The SpinWallet only tracks how many spins
-//   the user has available (each spin costs 30 KES).  The payment is recorded
-//   as company revenue (SPIN_COST) in the Transaction ledger, and the
-//   SpinWallet.spin_credits counter is incremented by 1 when confirmed.
+//   When a user pays KES 30 to spin via Co-op Bank deposit:
+//   1. The payment is recorded in MpesaTransaction with deposit_type='spin_wallet'
+//   2. Callback credits the amount to SpinWallet.balance_cents (user's spendable balance)
+//   3. NO company revenue is recorded on deposit
+//   4. When user actually spins, balance_cents is deducted AND company revenue (SPIN_COST) is recorded
 //
-//   The SpinWallet.balance_cents field is only used for winnings/prizes that
-//   the company pays OUT to the user, not for deposited amounts.
+//   The SpinWallet.balance_cents field now holds deposited amounts that the user
+//   can spend on spins. Company revenue is only recorded when spins are performed.
 // ---------------------------------------------------------------------------
 
 export async function initiatSpinDeposit(phoneNumber: string, amount: number = 30) {
@@ -72,8 +72,9 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
 
     // ======================================================================
     // Create MpesaTransaction FIRST so the callback can always find it.
-    // deposit_type = 'spin_wallet' tells the callback to route this as
-    // company revenue (SPIN_COST), NOT as a user wallet credit.
+    // deposit_type = 'spin_wallet' tells the callback to credit user's
+    // spin wallet balance (balance_cents). Company revenue is recorded
+    // only when the user actually spins.
     // ======================================================================
     const mpesaTransaction = await (MpesaTransaction as any).create({
       user_id: session.user.id,
@@ -88,8 +89,8 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
         payment_method: 'coop_bank_stk_push',
         initiated_at: new Date().toISOString(),
         callback_url: callbackUrl,
-        // Flag: money goes to company, NOT to user spin wallet balance
-        revenue_target: 'company',
+        // Money credits user's spin wallet; company revenue recorded on spin
+        revenue_target: 'user_spin_wallet',
       },
     })
 
@@ -347,9 +348,9 @@ export async function getSpinWalletHistory(limit: number = 20) {
 // ---------------------------------------------------------------------------
 // transferMainToSpinWallet
 // ---------------------------------------------------------------------------
-// Transfer from user's main wallet to spin credits (internal — no payment).
-// The KES is moved from Profile.balance_cents to company revenue to keep
-// bookkeeping consistent.
+// Transfer from user's main wallet to spin wallet balance (internal — no payment).
+// The KES is moved from Profile.balance_cents to SpinWallet.balance_cents.
+// Company revenue (SPIN_COST) is recorded when the user actually spins.
 // ---------------------------------------------------------------------------
 
 export async function transferMainToSpinWallet(amountKes: number) {
@@ -414,8 +415,8 @@ export async function transferMainToSpinWallet(amountKes: number) {
       $inc: { balance_cents: -amountCents },
     })
 
-    // Add spin credits (money goes to company, not to spin balance)
-    spinWallet.spin_credits = (spinWallet.spin_credits || 0) + spinCreditsToAdd
+    // Add to spin wallet balance (will be used for spins)
+    spinWallet.balance_cents = (spinWallet.balance_cents || 0) + amountCents
     spinWallet.total_deposited_cents += amountCents
     spinWallet.deposits.push({
       amount_cents: amountCents,
@@ -427,19 +428,20 @@ export async function transferMainToSpinWallet(amountKes: number) {
     })
     await spinWallet.save()
 
-    // Record as company SPIN_COST revenue
+    // NO company revenue recorded here - only when user spins
+    // Record the transfer for audit trail
     await (Transaction as any).create({
       user_id: session.user.id,
-      target_type: 'company',
-      type: 'SPIN_COST',
+      target_type: 'spin_wallet',
+      type: 'TRANSFER',
       amount_cents: amountCents,
       status: 'completed',
       source: 'main_wallet_transfer',
-      description: `Spin wallet transfer - KES ${amountKes.toFixed(2)} (${spinCreditsToAdd} spin credits)`,
+      description: `Transferred KES ${amountKes.toFixed(2)} to spin wallet`,
       metadata: {
         transfer_type: 'main_to_spin',
-        spin_credits_added: spinCreditsToAdd,
-        revenue_target: 'company',
+        source_balance: 'main_wallet',
+        destination_balance: 'spin_wallet',
       },
     })
 
