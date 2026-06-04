@@ -168,7 +168,7 @@ export default function TransactionsPage() {
       .filter(t => userPaymentTypes.includes(t.type))
       .reduce((sum, t) => sum + t.amount, 0);
     
-    const companyRevenueTypes = ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'UNCLAIMED_REFERRAL', 'SPIN_WALLET_DEPOSIT'];
+    const companyRevenueTypes = ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'UNCLAIMED_REFERRAL', 'SPIN_COST'];
     const companyRevenue = companyTxns
       .filter(t => companyRevenueTypes.includes(t.type))
       .reduce((sum, t) => sum + t.amount, 0);
@@ -199,10 +199,10 @@ export default function TransactionsPage() {
   };
 
   const getTypeColor = (type: string, targetType: string) => {
-    if (targetType === 'company' && ['COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SPIN_WALLET_DEPOSIT'].includes(type)) {
+    if (targetType === 'company' && ['COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SPIN_COST'].includes(type)) {
       return 'text-green-600';
     }
-    if (targetType === 'user' && ['REFERRAL', 'BONUS', 'TASK_PAYMENT', 'SURVEY', 'SPIN_WIN'].includes(type)) {
+    if (targetType === 'user' && ['REFERRAL', 'BONUS', 'TASK_PAYMENT', 'SURVEY', 'SPIN_WIN', 'SPIN_WALLET_DEPOSIT'].includes(type)) {
       return 'text-red-600';
     }
     if (type === 'DEPOSIT') {
