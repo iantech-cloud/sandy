@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Copy, Code } from 'lucide-react';
 
 interface Bot {
   _id: string;
@@ -89,6 +89,55 @@ export default function BotsAdminPage() {
       }
     } catch (error) {
       console.error('Failed to save bot:', error);
+    }
+  };
+
+  const handleClone = async (bot: Bot) => {
+    try {
+      const res = await fetch(`/api/chat-foreigners/bots/${bot._id}/clone`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Bot cloned successfully! New username: ${data.data.username}`);
+        loadBots();
+      } else {
+        alert(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to clone bot:', error);
+      alert('Failed to clone bot');
+    }
+  };
+
+  const handleTrainingData = async (botId: string) => {
+    try {
+      const res = await fetch(`/api/chat-foreigners/bots/${botId}/training`);
+      const data = await res.json();
+      if (data.success) {
+        const json = JSON.stringify(data.data.trainingData, null, 2);
+        // Open in new modal for editing
+        const newData = prompt('Edit bot training data (JSON):', json);
+        if (newData) {
+          try {
+            const parsed = JSON.parse(newData);
+            const updateRes = await fetch(`/api/chat-foreigners/bots/${botId}/training`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ trainingData: parsed }),
+            });
+            const updateData = await updateRes.json();
+            if (updateData.success) {
+              alert('Training data updated successfully');
+            }
+          } catch {
+            alert('Invalid JSON format');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load training data:', error);
+      alert('Failed to load training data');
     }
   };
 
@@ -341,13 +390,27 @@ export default function BotsAdminPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex gap-2 ml-4">
+              <div className="flex gap-2 ml-4 flex-wrap justify-end">
                 <button
                   onClick={() => handleEdit(bot)}
                   className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"
                   title="Edit bot"
                 >
                   <Edit2 className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => handleClone(bot)}
+                  className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200"
+                  title="Clone bot"
+                >
+                  <Copy className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => handleTrainingData(bot._id)}
+                  className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200"
+                  title="Edit training data (JSON)"
+                >
+                  <Code className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => handleDelete(bot._id)}
