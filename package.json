@@ -9,6 +9,7 @@
     "start": "next start -p 5000 -H 0.0.0.0",
     "seed": "tsx scripts/seed-spin-prizes.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",
+    "seed:chat-bots": "node scripts/seed-chat-foreigners-bots.js",
     "clean": "rm -rf .next node_modules out dist build && pnpm store prune && pnpm install",
     "migrate:transactions": "node scripts/migrate-transactions.js",
     "update:company": "node scripts/update-company-id.js"
