@@ -624,29 +624,35 @@ async function syncSpinDepositTransactionWithMpesaStatus(
       }
     };
 
-    // CRITICAL: Only mark balance_updated for TERMINAL statuses
-    // Do NOT mark as updated while transaction is still PROCESSING (status === 'pending')
-    // Balance will be updated when callback arrives with final status
+    // CRITICAL: Only mark balance_updated for COMPLETED transactions
+    // balance_updated tells the callback NOT to process the balance again
+    // For completed: set to true ONLY if this sync is from API, callback will also set it
+    // For failed/cancelled/timeout: NEVER set to true - no balance should be updated
+    // For pending: NEVER set to true - still waiting for completion
     
-    if (status === 'completed' && mpesaReceiptNumber) {
-      updateData.metadata.mpesa_receipt_number = mpesaReceiptNumber;
+    if (status === 'completed') {
+      if (mpesaReceiptNumber) {
+        updateData.metadata.mpesa_receipt_number = mpesaReceiptNumber;
+      }
       updateData.metadata.completed_at = new Date().toISOString();
-      // Mark balance_updated ONLY for completed transactions (terminal state)
+      // Mark balance_updated ONLY for completed transactions
+      // Callback will also set this when it processes the success
       updateData.balance_updated = true;
     }
 
-    // Only mark as balance_updated for terminal failure states (not pending)
+    // For terminal FAILURE states: Do NOT set balance_updated
+    // No balance should be credited for failed/cancelled/timeout
     if (['failed', 'cancelled', 'timeout'].includes(status)) {
       updateData.metadata.failed_at = new Date().toISOString();
-      // Mark balance_updated to prevent retries of failed transactions
-      updateData.balance_updated = true;
+      // IMPORTANT: Do NOT set balance_updated for failures
+      // balance_updated remains false so the transaction is not processed for balance
+      console.log(`[SpinWallet] ${status.toUpperCase()} transaction - balance_updated NOT set`);
     }
 
-    // For 'pending' status: DO NOT set balance_updated
-    // This allows the balance to be updated when callback arrives with completion status
+    // For 'pending' status: Do NOT set balance_updated
     if (status === 'pending') {
       console.log('[SpinWallet] Transaction still PROCESSING - NOT marking balance_updated yet');
-      // balance_updated remains false/unchanged so callback can still update balance
+      // balance_updated remains false/unchanged
     }
 
     const result = await (Transaction as any).findOneAndUpdate(
@@ -948,6 +954,20 @@ export async function checkSpinDepositMpesaStatus(messageReference: string): Pro
       );
     }
 
+    // Build user-friendly error message
+    let userMessage = `Payment status: ${mappedStatus}`;
+    if (mappedStatus === 'completed') {
+      userMessage = 'Payment successful! Your spin credits have been added.';
+    } else if (mappedStatus === 'failed') {
+      userMessage = `Payment failed: ${statusResponse.ResponseDescription || 'Transaction could not be processed'}`;
+    } else if (mappedStatus === 'timeout') {
+      userMessage = 'Payment timeout: No response from M-Pesa. Please check your M-Pesa history and try again.';
+    } else if (mappedStatus === 'cancelled') {
+      userMessage = 'Payment cancelled: You cancelled the M-Pesa prompt.';
+    } else if (mappedStatus === 'pending') {
+      userMessage = 'Payment is still being processed. Please wait...';
+    }
+
     return {
       success: true,
       data: {
@@ -957,7 +977,7 @@ export async function checkSpinDepositMpesaStatus(messageReference: string): Pro
         responseCode: statusResponse.ResponseCode,
         responseDescription: statusResponse.ResponseDescription,
       },
-      message: `Payment status: ${mappedStatus}`,
+      message: userMessage,
     };
 
   } catch (error) {
