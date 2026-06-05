@@ -3,8 +3,34 @@
 import { connectToDatabase, ChatForeignersPayment, ChatForeignersMpesaTransaction, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersReferralEarning, ChatForeignersBot, ChatForeignersBotAccess, Transaction, Profile } from '@/app/lib/models';
 import { CoopBankService } from '@/app/lib/services/coop-bank';
 import mongoose from 'mongoose';
-import { generateRandomString } from '@/app/lib/utils';
-import { getCurrentUser } from '@/app/actions/auth';
+import { auth } from '@/auth';
+import crypto from 'crypto';
+
+// ========================================================================
+// Helper: Get Current User from Session
+// ========================================================================
+async function getCurrentUserFromSession() {
+  const session = await auth();
+  const sessionId = (session?.user as any)?.id || (session?.user as any)?.userId;
+  
+  if (!session?.user || (!sessionId && !session.user.email)) {
+    return null;
+  }
+
+  let currentUser = null;
+  if (sessionId) {
+    currentUser = await Profile.findOne({ _id: sessionId }).lean();
+  }
+  if (!currentUser && session.user.email) {
+    const emailPattern = new RegExp(
+      `^${session.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+      'i'
+    );
+    currentUser = await Profile.findOne({ email: { $regex: emailPattern } }).lean();
+  }
+
+  return currentUser;
+}
 
 // ========================================================================
 // Initiate Bot Unlock Payment via M-Pesa (Co-op Bank STK Push)
@@ -16,7 +42,7 @@ export async function initiateBotUnlockViaMpesa(
 ) {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, error: 'Not authenticated' };
@@ -64,7 +90,7 @@ export async function initiateBotUnlockViaMpesa(
 
     // Call Co-op Bank STK Push
     const accountRef = `CHAT_${botId}_${currentUser._id}`.substring(0, 14);
-    const messageRef = generateRandomString(16);
+    const messageRef = crypto.randomBytes(16).toString("hex");
 
     console.log('[ChatForeigners] Initiating STK push:', {
       checkoutRequestId: messageRef,
@@ -126,7 +152,7 @@ export async function initiateBotUnlockViaMpesa(
 export async function checkBotUnlockMpesaStatus(paymentId: string) {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, error: 'Not authenticated' };
@@ -295,7 +321,7 @@ export async function initiateWalletDepositViaMpesa(
 ) {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, error: 'Not authenticated' };
@@ -328,7 +354,7 @@ export async function initiateWalletDepositViaMpesa(
 
     // Call Co-op Bank STK Push
     const accountRef = `CHATDEP_${currentUser._id}`.substring(0, 14);
-    const messageRef = generateRandomString(16);
+    const messageRef = crypto.randomBytes(16).toString("hex");
 
     console.log('[ChatForeigners] Initiating deposit STK push:', {
       checkoutRequestId: messageRef,

@@ -1,7 +1,33 @@
 'use server';
 
-import { connectToDatabase, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersProfile } from '@/app/lib/models';
-import { getCurrentUser } from '@/app/actions/auth';
+import { connectToDatabase, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersProfile, Profile } from '@/app/lib/models';
+import { auth } from '@/auth';
+
+// ========================================================================
+// Helper: Get Current User from Session
+// ========================================================================
+async function getCurrentUserFromSession() {
+  const session = await auth();
+  const sessionId = (session?.user as any)?.id || (session?.user as any)?.userId;
+  
+  if (!session?.user || (!sessionId && !session.user.email)) {
+    return null;
+  }
+
+  let currentUser = null;
+  if (sessionId) {
+    currentUser = await Profile.findOne({ _id: sessionId }).lean();
+  }
+  if (!currentUser && session.user.email) {
+    const emailPattern = new RegExp(
+      `^${session.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+      'i'
+    );
+    currentUser = await Profile.findOne({ email: { $regex: emailPattern } }).lean();
+  }
+
+  return currentUser;
+}
 
 // ========================================================================
 // Get Chat Foreigners Wallet
@@ -9,7 +35,7 @@ import { getCurrentUser } from '@/app/actions/auth';
 export async function getChatForeignersWallet() {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, error: 'Not authenticated' };
@@ -49,7 +75,7 @@ export async function getChatForeignersWallet() {
 export async function getChatForeignersWalletTransactions(limit = 20, skip = 0) {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, error: 'Not authenticated' };
@@ -97,7 +123,7 @@ export async function getChatForeignersWalletTransactions(limit = 20, skip = 0) 
 export async function getChatForeignersProfile() {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, error: 'Not authenticated' };
