@@ -1,7 +1,33 @@
 'use server';
 
-import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, ChatForeignersReferralEarning } from '@/app/lib/models';
-import { getCurrentUser } from '@/app/actions/auth';
+import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, ChatForeignersReferralEarning, Profile } from '@/app/lib/models';
+import { auth } from '@/auth';
+
+// ========================================================================
+// Helper: Get Current User from Session
+// ========================================================================
+async function getCurrentUserFromSession() {
+  const session = await auth();
+  const sessionId = (session?.user as any)?.id || (session?.user as any)?.userId;
+  
+  if (!session?.user || (!sessionId && !session.user.email)) {
+    return null;
+  }
+
+  let currentUser = null;
+  if (sessionId) {
+    currentUser = await Profile.findOne({ _id: sessionId }).lean();
+  }
+  if (!currentUser && session.user.email) {
+    const emailPattern = new RegExp(
+      `^${session.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+      'i'
+    );
+    currentUser = await Profile.findOne({ email: { $regex: emailPattern } }).lean();
+  }
+
+  return currentUser;
+}
 
 // ========================================================================
 // List All Active Bots
@@ -73,13 +99,13 @@ export async function getBotDetails(botId: string) {
 export async function getUserBotAccess() {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, error: 'Not authenticated' };
     }
 
-    const botAccess = await ChatForeignersBotAccess.find({
+    const accesses = await ChatForeignersBotAccess.find({
       user_id: currentUser._id,
     })
       .populate('bot_id', 'name description avatar_url category')
@@ -111,7 +137,7 @@ export async function getUserBotAccess() {
 export async function checkBotAccess(botId: string) {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, hasAccess: false, error: 'Not authenticated' };
@@ -148,7 +174,7 @@ export async function checkBotAccess(botId: string) {
 export async function updateBotMessageCount(botId: string) {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, error: 'Not authenticated' };
@@ -205,7 +231,7 @@ export async function updateBotMessageCount(botId: string) {
 export async function recordMilestoneBonus(botId: string) {
   try {
     await connectToDatabase();
-    const currentUser = await getCurrentUser();
+    const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
       return { success: false, error: 'Not authenticated' };

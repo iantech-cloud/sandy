@@ -19,6 +19,7 @@ export default function HamburgerMenu({ userName }: HamburgerMenuProps) {
     { id: 'wallet', label: 'Wallet', icon: Wallet, path: '/dashboard/wallet' },
     { id: 'surveys', label: 'Earn', icon: Award, path: '/dashboard/surveys' },
     { id: 'tasks', label: 'Tasks', icon: ClipboardList, path: '/dashboard/content' },
+    { id: 'chat-foreigners', label: 'Chat Foreigners', icon: MessageCircle, path: '/dashboard/chat-foreigners' },
     { id: 'affiliate', label: 'Soko', icon: ShoppingBag, path: '/dashboard/soko' },
     { id: 'referrals', label: 'Refs', icon: Users, path: '/dashboard/referrals' },
     { id: 'chat', label: 'Chat Online', icon: MessageCircle, path: 'https://chatvibe.co.ke/register.php?ref=Scholine', external: true },
