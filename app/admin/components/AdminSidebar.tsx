@@ -15,10 +15,9 @@ const navigation = [
 ];
 
 const chatForeignersNav = [
-  { name: 'Chat Foreigners', href: '/admin/chat-foreigners', icon: '💬' },
-  { name: '  Bots', href: '/admin/chat-foreigners/bots', icon: '🤖' },
-  { name: '  Users', href: '/admin/chat-foreigners/users', icon: '👤' },
-  { name: '  Dashboard', href: '/admin/chat-foreigners/dashboard', icon: '📈' },
+  { name: 'Bots', href: '/admin/chat-foreigners/bots', icon: '🤖' },
+  { name: 'Users', href: '/admin/chat-foreigners/users', icon: '👤' },
+  { name: 'Analytics Dashboard', href: '/admin/chat-foreigners/dashboard', icon: '📈' },
 ];
 
 export default function AdminSidebar() {
@@ -54,18 +53,18 @@ export default function AdminSidebar() {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Chat Foreigners</p>
           <div className="space-y-2">
             {chatForeignersNav.map((item) => {
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+              const isActive = pathname === item.href || pathname?.startsWith(item.href);
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                  className={`flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ml-1 ${
                     isActive
-                      ? 'bg-green-100 text-green-700 border-r-2 border-green-600'
+                      ? 'bg-green-100 text-green-700 border-l-2 border-green-600 pl-2'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                   }`}
                 >
-                  <span className="mr-3 text-lg">{item.icon}</span>
+                  <span className="mr-2 text-base">{item.icon}</span>
                   {item.name}
                 </Link>
               );
