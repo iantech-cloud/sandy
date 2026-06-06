@@ -1,145 +1,182 @@
 /**
- * Script: Backfill Referral records for Chat Foreigners
- * 
- * Purpose: Create Referral records for users who have a referred_by field in Profile
- * but no corresponding Referral collection entry. This ensures existing users also
- * benefit from Chat Foreigners commission payouts.
- * 
- * Usage: node scripts/backfill-chat-foreigners-referrals.js
+ * Script: backfill-chat-foreigners-referrals.ts
+ *
+ * One-time migration: ensures every existing user who was referred (has
+ * Profile.referred_by set) also has a matching Referral collection record.
+ * The Referral record is what the Chat Foreigners payment completion code
+ * reads to look up who referred a user and therefore who should receive the
+ * KES 60 commission when that user unlocks a personality.
+ *
+ * Safety guarantees
+ * -----------------
+ * 1. Skips users who already have a Referral record (idempotent).
+ * 2. Skips users whose referred_by referrer no longer exists in Profile.
+ * 3. Does NOT require the referrer to be approved/active — commission
+ *    eligibility is checked at payout time, not here.
+ * 4. Sets `referred_user_activated` correctly based on the referred user's
+ *    own approval_status so downstream logic is consistent.
+ * 5. Runs in serial batches of 100 to avoid overwhelming the DB.
+ *
+ * Usage
+ * -----
+ *   node --env-file-if-exists=/vercel/share/.env.project \
+ *        -r ts-node/register scripts/backfill-chat-foreigners-referrals.ts
+ *
+ * Or compile first:
+ *   npx tsc --module commonjs --esModuleInterop scripts/backfill-chat-foreigners-referrals.ts
+ *   node scripts/backfill-chat-foreigners-referrals.js
  */
 
 import mongoose from 'mongoose';
-import { Profile, Referral, connectToDatabase } from '../app/lib/models';
+import { connectToDatabase, Profile, Referral } from '../app/lib/models';
 
-async function backfillReferrals() {
+async function backfillChatForeignersReferrals() {
   try {
     console.log('[Backfill] Connecting to MongoDB...');
     await connectToDatabase();
-    console.log('[Backfill] Connected!');
+    console.log('[Backfill] Connected.');
 
-    // Find all Profile users who have a referred_by field but no corresponding Referral record
-    const usersWithoutReferral = await Profile.find({
+    // ----------------------------------------------------------------
+    // Step 1: Load all users who have a referred_by value
+    // ----------------------------------------------------------------
+    const usersWithReferredBy = await Profile.find({
       referred_by: { $ne: null, $exists: true },
     })
-      .select('_id username email referred_by')
+      .select('_id username email referred_by approval_status status')
       .lean();
 
-    console.log(`[Backfill] Found ${usersWithoutReferral.length} users with referred_by field`);
+    console.log(`[Backfill] Found ${usersWithReferredBy.length} users with referred_by set.`);
 
-    if (usersWithoutReferral.length === 0) {
-      console.log('[Backfill] No users to process. All referrals are up to date!');
+    if (usersWithReferredBy.length === 0) {
+      console.log('[Backfill] Nothing to process. Exiting.');
       await mongoose.disconnect();
       process.exit(0);
     }
 
-    // Get existing referred_id values from Referral collection to avoid duplicates
-    const existingReferrals = await Referral.find({}).select('referred_id').lean();
-    const existingReferredIds = new Set(existingReferrals.map((r) => r.referred_id.toString()));
+    // ----------------------------------------------------------------
+    // Step 2: Build a set of referred_ids that already have a Referral
+    //         record so we can skip them cheaply.
+    // ----------------------------------------------------------------
+    const existingReferralIds = await Referral.distinct('referred_id');
+    const existingSet = new Set(existingReferralIds.map((id: unknown) => String(id)));
 
-    console.log(`[Backfill] Found ${existingReferrals.length} existing Referral records`);
-
-    // Filter users who don't already have a Referral record
-    const usersToProcess = usersWithoutReferral.filter(
-      (user) => !existingReferredIds.has(user._id.toString())
+    const usersNeedingBackfill = usersWithReferredBy.filter(
+      (u) => !existingSet.has(String(u._id))
     );
 
-    console.log(`[Backfill] ${usersToProcess.length} users need Referral records created`);
+    console.log(
+      `[Backfill] ${usersWithReferredBy.length - usersNeedingBackfill.length} already have Referral records.`
+    );
+    console.log(`[Backfill] ${usersNeedingBackfill.length} users need a Referral record created.`);
 
-    if (usersToProcess.length === 0) {
-      console.log('[Backfill] All users already have Referral records!');
+    if (usersNeedingBackfill.length === 0) {
+      console.log('[Backfill] All referral records are up to date. Exiting.');
       await mongoose.disconnect();
       process.exit(0);
     }
 
-    // Create Referral records in batches
-    const batchSize = 100;
+    // ----------------------------------------------------------------
+    // Step 3: Build a cache of referrer existence so we don't hit the
+    //         DB repeatedly for the same referrer_id.
+    // ----------------------------------------------------------------
+    const referrerIdSet = new Set(
+      usersNeedingBackfill.map((u) => String(u.referred_by))
+    );
+    const existingReferrers = await Profile.find({
+      _id: { $in: Array.from(referrerIdSet) },
+    })
+      .select('_id')
+      .lean();
+    const validReferrerIds = new Set(existingReferrers.map((r) => String(r._id)));
+
+    // ----------------------------------------------------------------
+    // Step 4: Create Referral records in batches
+    // ----------------------------------------------------------------
+    const BATCH = 100;
     let created = 0;
     let skipped = 0;
     let errors = 0;
 
-    for (let i = 0; i < usersToProcess.length; i += batchSize) {
-      const batch = usersToProcess.slice(i, i + batchSize);
+    for (let i = 0; i < usersNeedingBackfill.length; i += BATCH) {
+      const batch = usersNeedingBackfill.slice(i, i + BATCH);
 
       for (const user of batch) {
+        const referrerId = String(user.referred_by);
+
+        if (!validReferrerIds.has(referrerId)) {
+          console.warn(
+            `[Backfill] Referrer ${referrerId} not found for user ${user.username ?? user._id}. Skipping.`
+          );
+          skipped++;
+          continue;
+        }
+
         try {
-          // Verify the referrer exists and is active
-          const referrer = await Profile.findById(user.referred_by).select('_id approval_status status').lean();
-
-          if (!referrer) {
-            console.log(
-              `[Backfill] ⚠️  Referrer not found for user ${user.username} (ID: ${user._id}). Skipping.`
-            );
+          // Double-check — guard against a race between Step 2 and now
+          const alreadyExists = await Referral.findOne({ referred_id: String(user._id) }).lean();
+          if (alreadyExists) {
             skipped++;
             continue;
           }
 
-          if (referrer.approval_status !== 'approved' || referrer.status !== 'active') {
-            console.log(
-              `[Backfill] ⚠️  Referrer is not active for user ${user.username}. Skipping.`
-            );
-            skipped++;
-            continue;
-          }
+          const isActivated =
+            user.approval_status === 'approved' && user.status === 'active';
 
-          // Check if Referral record already exists (in case of race condition)
-          const existingRecord = await Referral.findOne({ referred_id: user._id });
-          if (existingRecord) {
-            console.log(`[Backfill] ℹ️  Referral already exists for ${user.username}. Skipping.`);
-            skipped++;
-            continue;
-          }
-
-          // Create the Referral record
-          const referralRecord = await Referral.create({
-            referrer_id: user.referred_by,
-            referred_id: user._id,
+          await Referral.create({
+            referrer_id: referrerId,
+            referred_id: String(user._id),
             earning_cents: 0,
             status: 'active',
-            referred_user_activated: false, // Will be set when user activates
+            referred_user_activated: isActivated,
           });
 
           created++;
-          console.log(
-            `[Backfill] ✓ Created Referral for ${user.username} → referrer ID: ${user.referred_by}`
-          );
 
-          // Optional: Log every 10 records
-          if (created % 10 === 0) {
-            console.log(`[Backfill] Progress: ${created} created, ${skipped} skipped, ${errors} errors`);
+          if (created % 50 === 0) {
+            console.log(
+              `[Backfill] Progress: ${created} created | ${skipped} skipped | ${errors} errors`
+            );
           }
-        } catch (error) {
-          errors++;
-          console.error(
-            `[Backfill] ✗ Error creating referral for ${user.username}:`,
-            error instanceof Error ? error.message : error
-          );
+        } catch (err: unknown) {
+          // Unique-key violation means a record was inserted by another
+          // process between our check and insert — that is fine.
+          const mongoErr = err as { code?: number; message?: string };
+          if (mongoErr.code === 11000) {
+            skipped++;
+          } else {
+            errors++;
+            console.error(
+              `[Backfill] Error for user ${user.username ?? user._id}:`,
+              mongoErr.message ?? err
+            );
+          }
         }
       }
     }
 
-    console.log('\n[Backfill] === Summary ===');
-    console.log(`Total users processed: ${usersToProcess.length}`);
-    console.log(`Referral records created: ${created}`);
-    console.log(`Records skipped: ${skipped}`);
-    console.log(`Errors: ${errors}`);
+    // ----------------------------------------------------------------
+    // Step 5: Summary
+    // ----------------------------------------------------------------
+    console.log('\n[Backfill] === Completed ===');
+    console.log(`  Users processed : ${usersNeedingBackfill.length}`);
+    console.log(`  Records created : ${created}`);
+    console.log(`  Skipped         : ${skipped}`);
+    console.log(`  Errors          : ${errors}`);
 
     if (created > 0) {
       console.log(
-        `\n[Backfill] ✓ Successfully backfilled ${created} Referral records!`
-      );
-      console.log(
-        '[Backfill] These users will now earn Chat Foreigners commissions when their downlines unlock persons.'
+        `\n[Backfill] ${created} Referral records created. These users' referrers will now` +
+          ' receive KES 60 commissions when those users unlock Chat Foreigners personalities.'
       );
     }
 
     await mongoose.disconnect();
-    console.log('[Backfill] Disconnected from MongoDB');
-    process.exit(0);
-  } catch (error) {
-    console.error('[Backfill] Fatal error:', error);
+    console.log('[Backfill] Disconnected. Done.');
+    process.exit(errors > 0 ? 1 : 0);
+  } catch (err) {
+    console.error('[Backfill] Fatal error:', err);
     process.exit(1);
   }
 }
 
-// Run the script
-backfillReferrals();
+backfillChatForeignersReferrals();
