@@ -2,22 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersReferralEarning, ChatForeignersWallet, ChatForeignersTransaction, Profile, Referral } from '@/app/lib/models';
 import { auth } from '@/auth';
 import OpenAI from 'openai';
+import { generateText } from 'ai';
 
 const nvidiaClient = process.env.NVIDIA_API_KEY
   ? new OpenAI({
       apiKey: process.env.NVIDIA_API_KEY,
       baseURL: 'https://integrate.api.nvidia.com/v1',
+      timeout: 12000, // 12 s hard timeout
     })
   : null;
 
-// ── Typing delays by personality style ───────────────────────────────────────
-const TYPING_DELAYS_MS: Record<string, number> = {
-  casual: 1500,
-  formal: 3000,
-  analytical: 4000,
-  flirty: 2000,
-  mentor: 3500,
-};
+const NVIDIA_MODEL = 'meta/llama-3.3-70b-instruct';
+const HISTORY_WINDOW = 6; // last N turns to send for context
 
 // ── Persona-specific fallback reply banks ─────────────────────────────────────
 interface ReplyBank {
@@ -363,7 +359,7 @@ export async function POST(request: NextRequest) {
       }
 
       const conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = (history || [])
-        .slice(-10)
+        .slice(-HISTORY_WINDOW)
         .map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
       let reply = '';
@@ -377,11 +373,11 @@ export async function POST(request: NextRequest) {
             { role: 'user' as const, content: message },
           ];
           const completion = await nvidiaClient.chat.completions.create({
-            model: 'meta/llama-3.3-70b-instruct',
+            model: NVIDIA_MODEL,
             messages,
             temperature: 0.2,
             top_p: 0.7,
-            max_tokens: 1024,
+            max_tokens: 256,
             stream: false,
           });
           reply = completion.choices[0]?.message?.content ?? '';
@@ -459,7 +455,7 @@ export async function POST(request: NextRequest) {
 
     // Build conversation history for AI
     const conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = (history || [])
-      .slice(-10)
+      .slice(-HISTORY_WINDOW)
       .map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
     let reply = '';
@@ -475,11 +471,11 @@ export async function POST(request: NextRequest) {
         ];
 
         const completion = await nvidiaClient.chat.completions.create({
-          model: 'meta/llama-3.3-70b-instruct',
+          model: NVIDIA_MODEL,
           messages,
           temperature: 0.2,
           top_p: 0.7,
-          max_tokens: 1024,
+          max_tokens: 256,
           stream: false,
         });
 
@@ -492,7 +488,6 @@ export async function POST(request: NextRequest) {
     // Fallback to Vercel AI Gateway
     if (!reply) {
       try {
-        const { generateText } = await import('ai');
         const systemPrompt = buildSystemPrompt(person, trainingData);
         const result = await generateText({
           model: 'openai/gpt-4o-mini' as any,
