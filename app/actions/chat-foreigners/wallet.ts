@@ -7,9 +7,14 @@ import { auth } from '@/auth';
 // Helper: Get Current User from Session
 // ========================================================================
 async function getCurrentUserFromSession() {
-  const session = await auth();
+  let session: any;
+  try {
+    session = await auth();
+  } catch {
+    return null;
+  }
   const sessionId = (session?.user as any)?.id || (session?.user as any)?.userId;
-  
+
   if (!session?.user || (!sessionId && !session.user.email)) {
     return null;
   }

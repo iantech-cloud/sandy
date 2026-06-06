@@ -1,150 +1,226 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, Plus, ArrowLeft, Wallet, TrendingUp, PiggyBank } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import DepositModal from '../components/DepositModal';
 
 interface Transaction {
   id: string;
   amount_cents: number;
-  type: 'CHAT_DEPOSIT' | 'CHAT_EARNINGS' | 'CHAT_WITHDRAWAL';
+  type: string;
   description: string;
   status: string;
   createdAt: string;
 }
 
+interface WalletData {
+  balance_cents: number;
+  total_earned_cents: number;
+  total_deposited_cents: number;
+}
+
+const CREDIT_TYPES = new Set(['CHAT_DEPOSIT', 'CHAT_EARNINGS', 'REFERRAL', 'BONUS', 'REFERRAL_BONUS']);
+const DEBIT_TYPES = new Set(['CHAT_WITHDRAWAL', 'UNLOCK', 'UNLOCK_FEE']);
+// PLATFORM_FEE transactions are internal company records — never shown to users
+const HIDDEN_TYPES = new Set(['PLATFORM_FEE']);
+
+function getTransactionSign(type: string) {
+  return DEBIT_TYPES.has(type) ? '-' : '+';
+}
+
+function getAmountColor(type: string) {
+  if (DEBIT_TYPES.has(type)) return 'text-red-500';
+  return 'text-emerald-600';
+}
+
+function getIconBg(type: string) {
+  if (DEBIT_TYPES.has(type)) return 'bg-red-50';
+  if (type === 'CHAT_DEPOSIT') return 'bg-blue-50';
+  return 'bg-emerald-50';
+}
+
+function TransactionIcon({ type }: { type: string }) {
+  if (DEBIT_TYPES.has(type)) return <ArrowUp className="text-red-500" size={18} />;
+  if (type === 'CHAT_DEPOSIT') return <ArrowDown className="text-blue-600" size={18} />;
+  return <TrendingUp className="text-emerald-600" size={18} />;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    completed: 'bg-emerald-100 text-emerald-700',
+    pending: 'bg-amber-100 text-amber-700',
+    failed: 'bg-red-100 text-red-600',
+  };
+  const cls = map[status.toLowerCase()] ?? 'bg-slate-100 text-slate-600';
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${cls}`}>
+      {status}
+    </span>
+  );
+}
+
 export default function WalletPage() {
-  const [wallet, setWallet] = useState({ balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0 });
+  const router = useRouter();
+  const [wallet, setWallet] = useState<WalletData>({ balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0 });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showDepositModal, setShowDepositModal] = useState(false);
 
   useEffect(() => {
-    const loadWalletData = async () => {
+    const load = async () => {
       try {
-        // Load wallet balance
-        const walletRes = await fetch('/api/chat-foreigners/wallet');
-        const walletData = await walletRes.json();
+        const [walletRes, txRes] = await Promise.all([
+          fetch('/api/chat-foreigners/wallet'),
+          fetch('/api/chat-foreigners/wallet?type=transactions&limit=50'),
+        ]);
+
+        const [walletData, txData] = await Promise.all([
+          walletRes.json(),
+          txRes.json(),
+        ]);
+
         if (walletData.success) {
           setWallet(walletData.data);
+        } else {
+          setError(walletData.error || 'Could not load wallet');
         }
 
-        // Load transactions
-        const txRes = await fetch('/api/chat-foreigners/wallet?type=transactions');
-        const txData = await txRes.json();
         if (txData.success) {
-          setTransactions(txData.data.transactions);
+          const visible = (txData.data.transactions ?? []).filter(
+            (tx: Transaction) => !HIDDEN_TYPES.has(tx.type)
+          );
+          setTransactions(visible);
         }
-      } catch (error) {
-        console.error('Error loading wallet:', error);
+      } catch (err) {
+        setError('Network error — please refresh and try again.');
       } finally {
         setLoading(false);
       }
     };
 
-    loadWalletData();
+    load();
   }, []);
-
-  const getTransactionIcon = (type: string) => {
-    if (type === 'CHAT_DEPOSIT') return <ArrowDown className="text-green-600" size={20} />;
-    if (type === 'CHAT_EARNINGS') return <ArrowUp className="text-blue-600" size={20} />;
-    return <ArrowUp className="text-red-600" size={20} />;
-  };
-
-  const getTransactionColor = (type: string) => {
-    if (type === 'CHAT_DEPOSIT') return 'text-green-600';
-    if (type === 'CHAT_EARNINGS') return 'text-blue-600';
-    return 'text-red-600';
-  };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin">Loading...</div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+          <p className="text-slate-400 text-sm">Loading wallet...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8 px-4 md:px-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Chat Foreigners Wallet</h1>
-          <p className="text-slate-600">Manage your funds and earnings</p>
-        </div>
+    <div className="min-h-screen bg-slate-950 text-white">
+      {/* Top bar */}
+      <div className="sticky top-0 z-10 bg-slate-950/90 backdrop-blur-sm border-b border-slate-800 px-4 py-3 flex items-center gap-3">
+        <button
+          onClick={() => router.back()}
+          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-800 transition"
+          aria-label="Go back"
+        >
+          <ArrowLeft size={20} className="text-slate-300" />
+        </button>
+        <h1 className="text-lg font-semibold text-white">Chat Wallet</h1>
+      </div>
 
-        {/* Wallet Balance Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Current Balance */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-slate-600 font-semibold">Current Balance</p>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <ArrowDown className="text-blue-600" size={24} />
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {error && (
+          <div className="bg-red-900/30 border border-red-700 text-red-300 rounded-xl p-4 text-sm">
+            {error}
+          </div>
+        )}
+
+        {/* Balance cards */}
+        <div className="grid grid-cols-1 gap-4">
+          {/* Main balance */}
+          <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-indigo-200 text-sm font-medium">Available Balance</p>
+                <h2 className="text-4xl font-bold text-white mt-1">
+                  KES {(wallet.balance_cents / 100).toFixed(2)}
+                </h2>
+              </div>
+              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                <Wallet size={24} className="text-white" />
               </div>
             </div>
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">KES {(wallet.balance_cents / 100).toFixed(0)}</h2>
             <button
               onClick={() => setShowDepositModal(true)}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 font-semibold"
+              className="w-full bg-white text-indigo-700 font-semibold py-2.5 rounded-xl hover:bg-indigo-50 transition flex items-center justify-center gap-2"
             >
-              <Plus size={20} />
-              Deposit
+              <Plus size={18} />
+              Deposit Funds
             </button>
           </div>
 
-          {/* Total Earned */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-slate-600 font-semibold">Total Earned</p>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <ArrowUp className="text-green-600" size={24} />
+          {/* Stats row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp size={16} className="text-emerald-500" />
+                <p className="text-slate-400 text-sm">Total Earned</p>
               </div>
+              <p className="text-xl font-bold text-white">
+                KES {(wallet.total_earned_cents / 100).toFixed(2)}
+              </p>
             </div>
-            <h2 className="text-3xl font-bold text-slate-900">KES {(wallet.total_earned_cents / 100).toFixed(0)}</h2>
-          </div>
-
-          {/* Total Deposited */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-slate-600 font-semibold">Total Deposited</p>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <ArrowDown className="text-purple-600" size={24} />
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <PiggyBank size={16} className="text-blue-500" />
+                <p className="text-slate-400 text-sm">Total Deposited</p>
               </div>
+              <p className="text-xl font-bold text-white">
+                KES {(wallet.total_deposited_cents / 100).toFixed(2)}
+              </p>
             </div>
-            <h2 className="text-3xl font-bold text-slate-900">KES {(wallet.total_deposited_cents / 100).toFixed(0)}</h2>
           </div>
         </div>
 
-        {/* Transaction History */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          <div className="p-6 border-b border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900">Transaction History</h2>
+        {/* Transaction history */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+            <h2 className="font-semibold text-white">Transaction History</h2>
+            <span className="text-slate-500 text-sm">{transactions.length} entries</span>
           </div>
 
           {transactions.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              <p>No transactions yet</p>
+            <div className="px-5 py-12 text-center">
+              <Wallet size={32} className="text-slate-700 mx-auto mb-3" />
+              <p className="text-slate-500 text-sm">No transactions yet</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-200">
+            <div className="divide-y divide-slate-800">
               {transactions.map((tx) => (
-                <div key={tx.id} className="p-6 flex items-center justify-between hover:bg-slate-50 transition">
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
-                      {getTransactionIcon(tx.type)}
+                <div key={tx.id} className="px-5 py-4 flex items-center justify-between gap-4 hover:bg-slate-800/50 transition">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${getIconBg(tx.type)}`}>
+                      <TransactionIcon type={tx.type} />
                     </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-slate-900">{tx.description}</p>
-                      <p className="text-sm text-slate-500">{new Date(tx.createdAt).toLocaleDateString()}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white truncate">
+                        {(tx.description || tx.type).replace(/\s*\([^)]*\)/g, '')}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {new Date(tx.createdAt).toLocaleDateString('en-KE', {
+                          day: 'numeric', month: 'short', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-bold text-lg ${getTransactionColor(tx.type)}`}>
-                      {tx.type === 'CHAT_WITHDRAWAL' ? '-' : '+'}KES {(tx.amount_cents / 100).toFixed(0)}
+                  <div className="text-right flex-shrink-0">
+                    <p className={`font-bold text-sm ${getAmountColor(tx.type)}`}>
+                      {getTransactionSign(tx.type)}KES {(tx.amount_cents / 100).toFixed(2)}
                     </p>
-                    <p className="text-sm text-slate-500 capitalize">{tx.status}</p>
+                    <div className="mt-1">
+                      <StatusBadge status={tx.status} />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -153,7 +229,6 @@ export default function WalletPage() {
         </div>
       </div>
 
-      {/* Deposit Modal */}
       <DepositModal isOpen={showDepositModal} onClose={() => setShowDepositModal(false)} />
     </div>
   );
