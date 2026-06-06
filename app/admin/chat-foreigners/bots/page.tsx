@@ -100,14 +100,14 @@ export default function BotsAdminPage() {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`Bot cloned successfully! New username: ${data.data.username}`);
+        alert(`Person cloned successfully! New username: ${data.data.username}`);
         loadBots();
       } else {
         alert(`Error: ${data.error}`);
       }
     } catch (error) {
-      console.error('Failed to clone bot:', error);
-      alert('Failed to clone bot');
+      console.error('Failed to clone person:', error);
+      alert('Failed to clone person');
     }
   };
 
@@ -118,7 +118,7 @@ export default function BotsAdminPage() {
       if (data.success) {
         const json = JSON.stringify(data.data.trainingData, null, 2);
         // Open in new modal for editing
-        const newData = prompt('Edit bot training data (JSON):', json);
+        const newData = prompt('Edit person training data (JSON):', json);
         if (newData) {
           try {
             const parsed = JSON.parse(newData);
@@ -395,14 +395,14 @@ export default function BotsAdminPage() {
                 <button
                   onClick={() => handleEdit(bot)}
                   className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"
-                  title="Edit bot"
+                  title="Edit person"
                 >
                   <Edit2 className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => handleClone(bot)}
                   className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200"
-                  title="Clone bot"
+                  title="Clone person"
                 >
                   <Copy className="w-5 h-5" />
                 </button>
@@ -416,7 +416,7 @@ export default function BotsAdminPage() {
                 <button
                   onClick={() => handleDelete(bot._id)}
                   className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200"
-                  title="Delete bot"
+                  title="Delete person"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
