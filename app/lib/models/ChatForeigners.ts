@@ -411,6 +411,16 @@ const ChatForeignersWalletSchema = new Schema({
     type: Number,
     default: 0,
   },
+  // Downline earnings: KSH 75 credited per referred user's chat unlock — goes to main wallet
+  downline_earnings_cents: {
+    type: Number,
+    default: 0,
+  },
+  // Chat earnings: KSH 100 earned by completing a 20-message chat session
+  chat_earnings_cents: {
+    type: Number,
+    default: 0,
+  },
   created_at: {
     type: Date,
     default: Date.now,

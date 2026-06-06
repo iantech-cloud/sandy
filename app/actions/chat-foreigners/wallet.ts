@@ -51,7 +51,6 @@ export async function getChatForeignersWallet() {
     });
 
     if (!wallet) {
-      // Create wallet if it doesn't exist
       wallet = await ChatForeignersWallet.create({
         user_id: currentUser._id,
       });
@@ -63,6 +62,8 @@ export async function getChatForeignersWallet() {
         balance_cents: wallet.balance_cents,
         total_earned_cents: wallet.total_earned_cents,
         total_deposited_cents: wallet.total_deposited_cents,
+        downline_earnings_cents: (wallet as any).downline_earnings_cents || 0,
+        chat_earnings_cents: (wallet as any).chat_earnings_cents || 0,
       },
     };
   } catch (error) {
