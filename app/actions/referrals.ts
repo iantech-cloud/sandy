@@ -140,63 +140,45 @@ export async function getReferrals(filters?: {
 
     const totalCount = await (Referral as any).countDocuments(query);
 
-    // Get referral earnings - only selected fields, single query
+    // Get referral earnings from REFERRAL transactions for this user
     const referralTransactions = await (Transaction as any)
       .find({
         user_id: currentUser._id,
         type: 'REFERRAL',
         status: 'completed'
       })
-      .select('amount_cents metadata.referredUser') // Only needed fields
+      .select('amount_cents metadata')
       .lean()
       .exec();
 
-    // Get referral counts for all referred users in one query
-      const referralCountsMap = new Map();
-      if (userReferrals.length > 0) {
-        const referredIds = userReferrals
-          .map(ref => ref.referred_id?._id)
-          .filter(Boolean);
-
-        const referralCounts = await (Referral as any)
-          .aggregate([
-            { $match: { referrer_id: { $in: referredIds } } },
-            { $group: { _id: '$referrer_id', count: { $sum: 1 } } }
-          ]);
-
-        referralCounts.forEach((item: any) => {
-          referralCountsMap.set(item._id.toString(), item.count);
-        });
+    // Build earnings map keyed by referred user ID string
+    const earningsMap = new Map<string, number>();
+    (referralTransactions as TransactionDocument[]).forEach((tx) => {
+      const refId = tx.metadata?.referredUser?.toString();
+      if (refId) {
+        earningsMap.set(refId, (earningsMap.get(refId) || 0) + tx.amount_cents);
       }
+    });
 
-      // Get referral payments (KSH 70 = 7000 cents) to determine activation
-      const referralPayments = await (Transaction as any)
-        .find({
-          type: 'REFERRAL',
-          status: 'completed',
-          amount_cents: 7000 // KSH 70 activation payment
-        })
-        .select('metadata.referredUser')
-        .lean()
-        .exec();
+    // Build referral counts for all referred users in a single aggregation
+    const referralCountsMap = new Map<string, number>();
+    if (userReferrals.length > 0) {
+      const referredIds = userReferrals.map((ref: any) => ref.referred_id?._id).filter(Boolean);
+      const referralCounts = await (Referral as any).aggregate([
+        { $match: { referrer_id: { $in: referredIds } } },
+        { $group: { _id: '$referrer_id', count: { $sum: 1 } } }
+      ]);
+      referralCounts.forEach((item: any) => {
+        referralCountsMap.set(item._id.toString(), item.count);
+      });
+    }
 
-      const activatedUserIds = new Set(
-        referralPayments
-          .map((p: any) => p.metadata?.referredUser?.toString())
-          .filter(Boolean)
-      );
-
-    // Transform data for frontend - no async operations needed
+    // Transform — derive activationStatus directly from the populated user record
     const transformedReferrals: ReferralItem[] = (userReferrals as ReferralDocument[]).map((ref) => {
       const referredUser = ref.referred_id;
-      const userId = referredUser?._id?.toString();
-      
-      const earnings = (referralTransactions as TransactionDocument[])
-        .filter(tx => tx.metadata?.referredUser === userId)
-        .reduce((sum, tx) => sum + tx.amount_cents, 0);
-
-      // Activation status: yes if user has paid KSH 70, otherwise no
-      const isActivated = activatedUserIds.has(userId) ? 'activated' : 'not_activated';
+      const userId = referredUser?._id?.toString() || '';
+      const earnings = earningsMap.get(userId) || 0;
+      const activationStatus = referredUser?.activation_status === 'activated' ? 'activated' : 'not_activated';
 
       return {
         id: ref._id.toString(),
@@ -209,7 +191,7 @@ export async function getReferrals(filters?: {
         rank: 'Bronze',
         tasksCompleted: 0,
         totalEarnings: 0,
-        activationStatus: isActivated,
+        activationStatus,
         referralCount: referralCountsMap.get(userId) || 0
       };
     });
@@ -250,24 +232,13 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
       return { success: false, message: 'User not found' };
     }
 
-    console.log('[v0] Fetching referral commission stats for:', currentUser.username);
-
-    // Get direct referral commissions (KES 70 each)
+    // Get direct referral commissions
     // Query transactions where user_id is the EARNER (referrer) and type is REFERRAL
     const directReferralTransactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
       status: 'completed'
     }).lean();
-
-    console.log('[v0] Found referral transactions:', {
-      count: directReferralTransactions.length,
-      transactions: directReferralTransactions.map((tx: any) => ({
-        amount: tx.amount_cents / 100,
-        level: tx.metadata?.level,
-        description: tx.description
-      }))
-    });
 
     const level1Earnings = directReferralTransactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
     const level1Count = directReferralTransactions.length;
@@ -279,11 +250,6 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
       },
       total: level1Earnings
     };
-
-    console.log('[v0] Commission stats:', {
-      totalEarnings: level1Earnings / 100,
-      count: level1Count
-    });
 
     return {
       success: true,
