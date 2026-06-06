@@ -196,18 +196,18 @@ async function seedBots() {
 
     const Bot = mongoose.model('ChatForeignersBot', botSchema);
 
-    // Clear existing bots (optional)
-    console.log('Clearing existing bots...');
+    // Clear existing persons
+    console.log('Clearing existing persons...');
     await Bot.deleteMany({});
 
-    // Create bots
-    console.log('Seeding bots...');
-    const createdBots = await Bot.insertMany(botsData);
+    // Create persons
+    console.log('Seeding persons...');
+    const createdPersons = await Bot.insertMany(botsData);
 
-    console.log(`✓ Successfully seeded ${createdBots.length} bots!`);
-    console.log('Bots created:');
-    createdBots.forEach((bot) => {
-      console.log(`  - ${bot.name} (@${bot.username}) - KSh ${bot.unlockCost_cents / 100}`);
+    console.log(`✓ Successfully seeded ${createdPersons.length} persons!`);
+    console.log('Persons created:');
+    createdPersons.forEach((person) => {
+      console.log(`  - ${person.name} (@${person.username}) - KSh ${person.unlockCost_cents / 100}`);
     });
 
     await mongoose.disconnect();

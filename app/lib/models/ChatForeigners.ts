@@ -14,8 +14,29 @@ const ChatForeignersBotSchema = new Schema({
     required: true,
     index: true 
   },
+  username: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true,
+  },
   description: { 
     type: String 
+  },
+  bio: {
+    type: String,
+  },
+  personalityType: {
+    type: String,
+  },
+  speakingStyle: {
+    type: String,
+  },
+  mood: {
+    type: String,
+  },
+  interests: {
+    type: String,
   },
   avatar_url: { 
     type: String 
@@ -44,6 +65,14 @@ const ChatForeignersBotSchema = new Schema({
   milestoneBonus_cents: {
     type: Number,
     default: 1000, // 10 KSh
+  },
+  training_data: {
+    type: String,
+    default: '{}',
+  },
+  cloned_from: {
+    type: Schema.Types.ObjectId,
+    ref: 'ChatForeignersBot',
   },
   created_at: {
     type: Date,
@@ -187,6 +216,9 @@ const ChatForeignersMpesaTransactionSchema = new Schema({
     type: Date
   },
   callback_payload: {
+    type: Schema.Types.Mixed
+  },
+  stk_push_response: {
     type: Schema.Types.Mixed
   },
   metadata: {

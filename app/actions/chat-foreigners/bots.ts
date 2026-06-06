@@ -45,10 +45,20 @@ export async function listChatForeignersBots() {
       data: bots.map((bot) => ({
         id: bot._id.toString(),
         name: bot.name,
-        description: bot.description,
+        username: bot.username,
+        description: bot.description || bot.bio,
+        bio: bot.bio,
+        personalityType: bot.personalityType,
+        speakingStyle: bot.speakingStyle,
+        mood: bot.mood,
+        interests: bot.interests,
         avatar_url: bot.avatar_url,
+        avatar: bot.avatar_url,
         category: bot.category,
         unlockCost_cents: bot.unlockCost_cents,
+        unlockPrice: bot.unlockCost_cents / 100,
+        isActive: bot.isActive,
+        createdAt: bot.created_at,
       })),
     };
   } catch (error) {
@@ -77,10 +87,17 @@ export async function getBotDetails(botId: string) {
       data: {
         id: bot._id.toString(),
         name: bot.name,
-        description: bot.description,
+        username: bot.username,
+        description: bot.description || bot.bio,
+        bio: bot.bio,
+        personalityType: bot.personalityType,
+        speakingStyle: bot.speakingStyle,
+        mood: bot.mood,
+        interests: bot.interests,
         avatar_url: bot.avatar_url,
         category: bot.category,
         unlockCost_cents: bot.unlockCost_cents,
+        unlockPrice: bot.unlockCost_cents / 100,
         messageLimitForMilestone: bot.messageLimitForMilestone,
       },
     };
@@ -113,7 +130,7 @@ export async function getUserBotAccess() {
 
     return {
       success: true,
-      data: botAccess.map((access) => ({
+      data: accesses.map((access) => ({
         botId: access.bot_id._id.toString(),
         botName: access.bot_id.name,
         botAvatar: access.bot_id.avatar_url,
@@ -324,6 +341,7 @@ export async function createChatForeignersBot(data: {
       username: data.username,
       avatar_url: data.avatar,
       bio: data.bio,
+      description: data.bio,
       personalityType: data.personalityType,
       speakingStyle: data.speakingStyle,
       mood: data.mood,

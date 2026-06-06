@@ -57,10 +57,11 @@ export default function BotsAdminPage() {
       const res = await fetch('/api/chat-foreigners/bots');
       const data = await res.json();
       if (data.success) {
-        setBots(data.data || []);
+        // Normalize: API returns id and _id, unify to _id for admin form
+        setBots((data.data || []).map((b: any) => ({ ...b, _id: b._id || b.id })));
       }
     } catch (error) {
-      console.error('Failed to load bots:', error);
+      console.error('Failed to load persons:', error);
     } finally {
       setLoading(false);
     }
@@ -99,14 +100,14 @@ export default function BotsAdminPage() {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`Bot cloned successfully! New username: ${data.data.username}`);
+        alert(`Person cloned successfully! New username: ${data.data.username}`);
         loadBots();
       } else {
         alert(`Error: ${data.error}`);
       }
     } catch (error) {
-      console.error('Failed to clone bot:', error);
-      alert('Failed to clone bot');
+      console.error('Failed to clone person:', error);
+      alert('Failed to clone person');
     }
   };
 
@@ -117,7 +118,7 @@ export default function BotsAdminPage() {
       if (data.success) {
         const json = JSON.stringify(data.data.trainingData, null, 2);
         // Open in new modal for editing
-        const newData = prompt('Edit bot training data (JSON):', json);
+        const newData = prompt('Edit person training data (JSON):', json);
         if (newData) {
           try {
             const parsed = JSON.parse(newData);
@@ -142,7 +143,7 @@ export default function BotsAdminPage() {
   };
 
   const handleDelete = async (botId: string) => {
-    if (!confirm('Are you sure you want to delete this bot?')) return;
+    if (!confirm('Are you sure you want to delete this person?')) return;
 
     try {
       const res = await fetch(`/api/chat-foreigners/bots/${botId}`, {
@@ -190,15 +191,15 @@ export default function BotsAdminPage() {
   };
 
   if (loading) {
-    return <div className="p-8 text-center">Loading bots...</div>;
+    return <div className="p-8 text-center">Loading persons...</div>;
   }
 
   return (
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Manage Bots</h1>
-          <p className="text-gray-600 mt-1">Create and manage chat bot profiles</p>
+          <h1 className="text-3xl font-bold text-gray-900">Manage Persons</h1>
+          <p className="text-gray-600 mt-1">Create and manage foreign personality profiles</p>
         </div>
         <button
           onClick={() => {
@@ -208,7 +209,7 @@ export default function BotsAdminPage() {
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
         >
           <Plus className="w-5 h-5" />
-          Add Bot
+          Add Person
         </button>
       </div>
 
@@ -216,7 +217,7 @@ export default function BotsAdminPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-2xl font-bold">{editingBot ? 'Edit Bot' : 'Create New Bot'}</h2>
+              <h2 className="text-2xl font-bold">{editingBot ? 'Edit Person' : 'Create New Person'}</h2>
               <button
                 onClick={() => setShowForm(false)}
                 className="text-gray-500 hover:text-gray-700"
@@ -324,7 +325,7 @@ export default function BotsAdminPage() {
                   type="submit"
                   className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
                 >
-                  {editingBot ? 'Update Bot' : 'Create Bot'}
+                  {editingBot ? 'Update Person' : 'Create Person'}
                 </button>
                 <button
                   type="button"
@@ -342,7 +343,7 @@ export default function BotsAdminPage() {
       <div className="grid gap-6">
         {bots.length === 0 ? (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <p className="text-gray-600">No bots created yet. Click "Add Bot" to create one.</p>
+            <p className="text-gray-600">No persons created yet. Click &quot;Add Person&quot; to create one.</p>
           </div>
         ) : (
           bots.map((bot) => (
@@ -394,14 +395,14 @@ export default function BotsAdminPage() {
                 <button
                   onClick={() => handleEdit(bot)}
                   className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"
-                  title="Edit bot"
+                  title="Edit person"
                 >
                   <Edit2 className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => handleClone(bot)}
                   className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200"
-                  title="Clone bot"
+                  title="Clone person"
                 >
                   <Copy className="w-5 h-5" />
                 </button>
@@ -415,7 +416,7 @@ export default function BotsAdminPage() {
                 <button
                   onClick={() => handleDelete(bot._id)}
                   className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200"
-                  title="Delete bot"
+                  title="Delete person"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
