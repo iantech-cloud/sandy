@@ -2,19 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, MessageSquare, Wallet, Users } from 'lucide-react';
+import { ChevronRight, MessageSquare, Wallet, Users, Loader } from 'lucide-react';
 
-interface Bot {
+interface Person {
   id: string;
   name: string;
-  description: string;
+  username?: string;
+  bio?: string;
   avatar_url?: string;
   category: string;
   unlockCost_cents: number;
 }
 
 export default function ChatForeignersPage() {
-  const [bots, setBots] = useState<Bot[]>([]);
+  const [persons, setPersons] = useState<Person[]>([]);
   const [userAccess, setUserAccess] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [wallet, setWallet] = useState({ balance_cents: 0 });
@@ -22,11 +23,11 @@ export default function ChatForeignersPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Load bots
-        const botsRes = await fetch('/api/chat-foreigners/bots?type=list');
-        const botsData = await botsRes.json();
-        if (botsData.success) {
-          setBots(botsData.data);
+        // Load persons
+        const personsRes = await fetch('/api/chat-foreigners/bots?type=list');
+        const personsData = await personsRes.json();
+        if (personsData.success) {
+          setPersons(personsData.data);
         }
 
         // Load user access
@@ -55,7 +56,7 @@ export default function ChatForeignersPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="animate-spin">Loading...</div>
+        <Loader className="animate-spin text-blue-600" size={32} />
       </div>
     );
   }
@@ -124,53 +125,69 @@ export default function ChatForeignersPage() {
         </div>
       </div>
 
-      {/* Bots Grid */}
+      {/* Persons Grid */}
       <div className="max-w-6xl mx-auto">
-        <h2 className="text-2xl font-bold text-slate-900 mb-6">Available Bots</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {bots.map((bot) => (
-            <div
-              key={bot.id}
-              className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition"
-            >
-              {bot.avatar_url && (
-                <div className="h-48 bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
-                  <img src={bot.avatar_url} alt={bot.name} className="w-full h-full object-cover" />
-                </div>
-              )}
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="text-xl font-bold text-slate-900">{bot.name}</h3>
-                    <p className="text-sm text-slate-500 capitalize">{bot.category}</p>
+        <h2 className="text-2xl font-bold text-slate-900 mb-6">Available Personalities</h2>
+        {persons.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-xl border border-slate-200">
+            <MessageSquare className="mx-auto text-slate-300 mb-4" size={48} />
+            <p className="text-slate-500">No personalities available yet. Check back soon!</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {persons.map((person) => (
+              <div
+                key={person.id}
+                className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition"
+              >
+                {person.avatar_url ? (
+                  <div className="h-48 overflow-hidden">
+                    <img src={person.avatar_url} alt={person.name} className="w-full h-full object-cover" />
                   </div>
-                  {userAccess.has(bot.id) && (
-                    <span className="bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
-                      Unlocked
-                    </span>
+                ) : (
+                  <div className="h-48 bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
+                    <span className="text-white font-bold text-6xl">{person.name[0]}</span>
+                  </div>
+                )}
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">{person.name}</h3>
+                      {person.username && (
+                        <p className="text-sm text-slate-500">@{person.username}</p>
+                      )}
+                      <p className="text-xs text-slate-400 capitalize mt-0.5">{person.category}</p>
+                    </div>
+                    {userAccess.has(person.id) && (
+                      <span className="bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
+                        Unlocked
+                      </span>
+                    )}
+                  </div>
+                  {person.bio && (
+                    <p className="text-slate-600 text-sm mb-4 line-clamp-2">{person.bio}</p>
+                  )}
+
+                  {userAccess.has(person.id) ? (
+                    <Link
+                      href={`/dashboard/chat-foreigners/chat/${person.id}`}
+                      className="block w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition text-center font-semibold"
+                    >
+                      Continue Chat
+                    </Link>
+                  ) : (
+                    <Link
+                      href={`/dashboard/chat-foreigners/unlock/${person.id}`}
+                      className="block w-full bg-slate-900 text-white py-2 rounded-lg hover:bg-slate-800 transition text-center font-semibold"
+                    >
+                      Unlock - KES {(person.unlockCost_cents / 100).toFixed(0)}
+                    </Link>
                   )}
                 </div>
-                <p className="text-slate-600 text-sm mb-4 line-clamp-2">{bot.description}</p>
-                
-                {userAccess.has(bot.id) ? (
-                  <Link
-                    href={`/dashboard/chat-foreigners/chat/${bot.id}`}
-                    className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition text-center font-semibold"
-                  >
-                    Start Chat
-                  </Link>
-                ) : (
-                  <Link
-                    href={`/dashboard/chat-foreigners/unlock/${bot.id}`}
-                    className="w-full bg-slate-900 text-white py-2 rounded-lg hover:bg-slate-800 transition text-center font-semibold"
-                  >
-                    Unlock - KES {(bot.unlockCost_cents / 100).toFixed(0)}
-                  </Link>
-                )}
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

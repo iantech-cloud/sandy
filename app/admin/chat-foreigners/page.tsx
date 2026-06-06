@@ -6,8 +6,8 @@ import { BarChart3, Users, Settings } from 'lucide-react';
 export default function ChatForeignersAdminPage() {
   const sections = [
     {
-      title: 'Bots Management',
-      description: 'Create, edit, and manage chat bots with custom personalities and settings',
+      title: 'Persons Management',
+      description: 'Create, edit, and manage foreign personalities with custom profiles and settings',
       href: '/admin/chat-foreigners/bots',
       icon: <BarChart3 className="w-8 h-8" />,
       color: 'bg-blue-500',
@@ -21,7 +21,7 @@ export default function ChatForeignersAdminPage() {
     },
     {
       title: 'Analytics Dashboard',
-      description: 'View key metrics, revenue, user engagement, and bot performance',
+      description: 'View key metrics, revenue, user engagement, and personality performance',
       href: '/admin/chat-foreigners/dashboard',
       icon: <Settings className="w-8 h-8" />,
       color: 'bg-green-500',
@@ -32,7 +32,7 @@ export default function ChatForeignersAdminPage() {
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Chat Foreigners Admin</h1>
-        <p className="text-gray-600 mt-2">Manage bots, users, and view analytics for the chat platform</p>
+        <p className="text-gray-600 mt-2">Manage persons, users, and view analytics for the chat platform</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

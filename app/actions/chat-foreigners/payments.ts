@@ -1,6 +1,6 @@
 'use server';
 
-import { connectToDatabase, ChatForeignersPayment, ChatForeignersMpesaTransaction, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersReferralEarning, ChatForeignersBot, ChatForeignersBotAccess, Transaction, Profile } from '@/app/lib/models';
+import { connectToDatabase, ChatForeignersPayment, ChatForeignersMpesaTransaction, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersReferralEarning, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, Profile, Referral } from '@/app/lib/models';
 import { CoopBankService } from '@/app/lib/services/coop-bank';
 import mongoose from 'mongoose';
 import { auth } from '@/auth';
@@ -240,23 +240,37 @@ export async function completeBotUnlockPayment(
       throw new Error('Bot not found');
     }
 
-    // Process referral if exists
-    const referralCode = mpesaTransaction.metadata?.referralCode;
-    if (referralCode) {
-      const referrerProfile = await ChatForeignersProfile.findOne({
-        referralCode,
+    // ----------------------------------------------------------------
+    // Universal referral system: look up who referred this user via the
+    // main Referral collection. This ensures the main site referrer
+    // (whoever the user signed up under, defaulting to SANDY001 / the
+    // main account) earns the Chat Foreigners commission automatically.
+    // ----------------------------------------------------------------
+    const referralRecord = await Referral.findOne({
+      referred_id: mpesaTransaction.user_id,
+    }).session(session);
+
+    if (referralRecord) {
+      const referrerId = referralRecord.referrer_id;
+
+      // Check that referral earning doesn't already exist for this unlock
+      const existingEarning = await ChatForeignersReferralEarning.findOne({
+        referrer_id: referrerId,
+        referee_id: mpesaTransaction.user_id,
+        bot_id: payment.bot_id,
+        earningType: 'initial_unlock',
       }).session(session);
 
-      if (referrerProfile) {
-        // Record referral earning for initial unlock
+      if (!existingEarning) {
+        // Record referral earning (KES 60 = 6000 cents)
         const referralEarning = await ChatForeignersReferralEarning.create(
           [
             {
-              referrer_id: referrerProfile.user_id,
+              referrer_id: referrerId,
               referee_id: mpesaTransaction.user_id,
               bot_id: payment.bot_id,
               earningType: 'initial_unlock',
-              amount_cents: 6000, // 60 KSh
+              amount_cents: 6000,
               status: 'pending',
               payment_id: payment._id,
             },
@@ -264,38 +278,46 @@ export async function completeBotUnlockPayment(
           { session }
         );
 
-        // Credit referrer's chat wallet
-        const referrerWallet = await ChatForeignersWallet.findOne({
-          user_id: referrerProfile.user_id,
+        // Credit referrer's Chat Foreigners wallet
+        let referrerWallet = await ChatForeignersWallet.findOne({
+          user_id: referrerId,
         }).session(session);
 
-        if (referrerWallet) {
-          referrerWallet.balance_cents += 6000;
-          referrerWallet.total_earned_cents += 6000;
-          await referrerWallet.save({ session });
-
-          // Record transaction
-          await ChatForeignersTransaction.create(
-            [
-              {
-                user_id: referrerProfile.user_id,
-                amount_cents: 6000,
-                type: 'CHAT_EARNINGS',
-                description: `Referral earning for bot unlock by ${mpesaTransaction.user_id}`,
-                status: 'completed',
-                target_type: 'user',
-                target_id: referrerProfile.user_id,
-              },
-            ],
-            { session }
-          );
-
-          // Update referral earning status
-          if (referralEarning[0]) {
-            referralEarning[0].status = 'completed';
-            await referralEarning[0].save({ session });
-          }
+        if (!referrerWallet) {
+          referrerWallet = new ChatForeignersWallet({ user_id: referrerId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0 });
         }
+
+        referrerWallet.balance_cents += 6000;
+        referrerWallet.total_earned_cents += 6000;
+        await referrerWallet.save({ session });
+
+        // Record wallet transaction for referrer
+        await ChatForeignersTransaction.create(
+          [
+            {
+              user_id: referrerId,
+              amount_cents: 6000,
+              type: 'CHAT_EARNINGS',
+              description: `Chat Foreigners commission: person unlocked by referred user`,
+              status: 'completed',
+              target_type: 'user',
+              target_id: referrerId.toString(),
+            },
+          ],
+          { session }
+        );
+
+        // Mark earning as completed
+        if (referralEarning[0]) {
+          referralEarning[0].status = 'completed';
+          await referralEarning[0].save({ session });
+        }
+
+        console.log('[ChatForeigners] Universal referral commission paid:', {
+          referrerId,
+          botId: payment.bot_id,
+          amount: 60,
+        });
       }
     }
 
