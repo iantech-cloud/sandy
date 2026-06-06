@@ -54,6 +54,7 @@ export async function listChatForeignersBots() {
         interests: bot.interests,
         avatar_url: bot.avatar_url,
         avatar: bot.avatar_url,
+        nationality: bot.nationality,
         category: bot.category,
         unlockCost_cents: bot.unlockCost_cents,
         unlockPrice: bot.unlockCost_cents / 100,
@@ -95,6 +96,7 @@ export async function getBotDetails(botId: string) {
         mood: bot.mood,
         interests: bot.interests,
         avatar_url: bot.avatar_url,
+        nationality: bot.nationality,
         category: bot.category,
         unlockCost_cents: bot.unlockCost_cents,
         unlockPrice: bot.unlockCost_cents / 100,
@@ -124,6 +126,7 @@ export async function getUserBotAccess() {
 
     const accesses = await ChatForeignersBotAccess.find({
       user_id: currentUser._id,
+      isClosed: { $ne: true }, // only active (non-closed) accesses
     })
       .populate('bot_id', 'name description avatar_url category')
       .sort({ unlockedAt: -1 });
@@ -165,13 +168,17 @@ export async function checkBotAccess(botId: string) {
       bot_id: botId,
     });
 
+    // Access is only valid if it's not closed
+    const hasActiveAccess = !!access && !access.isClosed;
+
     return {
       success: true,
-      hasAccess: !!access,
+      hasAccess: hasActiveAccess,
       data: access
         ? {
             messageCount: access.messageCount,
             firstMilestoneComplete: access.firstMilestoneComplete,
+            isClosed: access.isClosed || false,
           }
         : null,
     };

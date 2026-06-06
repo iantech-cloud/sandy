@@ -169,7 +169,7 @@ export default function UnlockPage() {
     INTEREST_LABELS[person.personalityType || ''] ??
     INTEREST_LABELS[person.category] ??
     person.category;
-  const unlockPrice = person.unlockPrice ?? (person.unlockCost_cents / 100);
+  const unlockPrice = 100; // Fixed KSH 100 for all personalities
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 overflow-y-auto">

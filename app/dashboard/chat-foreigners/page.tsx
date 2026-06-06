@@ -219,7 +219,7 @@ export default function ChatForeignersPage() {
                       ) : (
                         <>
                           <Sparkles className="w-4 h-4" />
-                          Connect &mdash; KES {person.unlockPrice ?? (person.unlockCost_cents / 100).toFixed(0)}
+                          Connect &mdash; KES 100
                         </>
                       )}
                     </div>
