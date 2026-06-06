@@ -41,6 +41,9 @@ const ChatForeignersBotSchema = new Schema({
   avatar_url: { 
     type: String 
   },
+  nationality: {
+    type: String,
+  },
   category: { 
     type: String,
     default: 'general'
