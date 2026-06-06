@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, MessageSquare, Loader2, Lock, Sparkles, Globe,
-  Zap, ShieldCheck, Info, BadgeCheck, Heart, Clock, Star,
+  Zap, ShieldCheck, Info, BadgeCheck, Heart, Clock, Star, Phone, XCircle,
 } from 'lucide-react';
+import { checkBotUnlockPaymentStatus } from '@/app/actions/chat-foreigners/payments';
 
 interface Person {
   id: string;
@@ -29,7 +30,11 @@ interface Person {
   unlockPrice: number;
 }
 
-type UnlockStatus = 'idle' | 'pending' | 'polling' | 'success' | 'failed';
+type UnlockStatus = 'idle' | 'pending' | 'polling' | 'success' | 'failed' | 'cancelled' | 'timeout';
+
+// Polling constants — identical to the activation waiting page
+const POLLING_INTERVAL = 4000;   // 4 s
+const MAX_POLLING_ATTEMPTS = 60; // 60 × 4 s = 240 s (~4 min)
 
 const CATEGORY_LABELS: Record<string, string> = {
   relationship_coach: 'Relationships',
@@ -73,8 +78,11 @@ export default function UnlockPage() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [status, setStatus] = useState<UnlockStatus>('idle');
   const [error, setError] = useState('');
+  // messageReference (= checkout_request_id) replaces paymentId as the polling key
+  const [messageReference, setMessageReference] = useState('');
   const [paymentId, setPaymentId] = useState('');
   const [pollCount, setPollCount] = useState(0);
+  const [resultDesc, setResultDesc] = useState('');
   const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
@@ -105,36 +113,60 @@ export default function UnlockPage() {
     loadPerson();
   }, [personId, router]);
 
-  // Poll payment status
-  useEffect(() => {
-    if (status !== 'polling' || !paymentId) return;
+  // Poll payment status — mirrors MpesaWaitingContent from the activation page
+  const pollPaymentStatus = useCallback(async () => {
+    if (!messageReference) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/chat-foreigners/payments/status?paymentId=${paymentId}`);
-        const data = await res.json();
-        setPollCount((prev) => prev + 1);
+    try {
+      const result = await checkBotUnlockPaymentStatus(messageReference);
+      setPollCount((prev) => prev + 1);
 
-        if (data.success && data.data?.status === 'completed') {
-          setStatus('success');
-          clearInterval(interval);
+      if (result.success && result.data) {
+        const { status: txStatus, resultDesc: desc } = result.data as any;
+
+        // Still pending / initiated — normal intermediate state, keep waiting
+        if (txStatus === 'pending' || txStatus === 'initiated') return;
+
+        setStatus((prev) => {
+          if (['success', 'cancelled', 'timeout', 'failed'].includes(prev)) return prev;
+
+          if (txStatus === 'completed') return 'success';
+          if (txStatus === 'cancelled') return 'cancelled';
+          if (txStatus === 'timeout') return 'timeout';
+          if (txStatus === 'failed') { setError(desc || 'Payment failed. Please try again.'); return 'failed'; }
+          return prev;
+        });
+
+        if (txStatus === 'completed') {
           setTimeout(() => router.push(`/dashboard/chat-foreigners/chat/${personId}`), 2000);
-        } else if (data.data?.status === 'failed') {
-          setStatus('failed');
-          setError('Payment failed. Please try again.');
-          clearInterval(interval);
-        } else if (pollCount > 24) {
-          setStatus('failed');
-          setError('Payment timed out. Please check your M-Pesa and try again.');
-          clearInterval(interval);
         }
-      } catch {
-        console.error('Poll error');
+        if (['cancelled', 'timeout', 'failed'].includes(txStatus)) {
+          setResultDesc(desc || '');
+        }
       }
-    }, 5000);
+    } catch (err) {
+      console.error('[v0] Poll error:', err);
+    }
+  }, [messageReference, personId, router, pollCount]);
 
-    return () => clearInterval(interval);
-  }, [status, paymentId, personId, pollCount, router]);
+  // Initial poll as soon as messageReference is set
+  useEffect(() => {
+    if (messageReference) pollPaymentStatus();
+  }, [messageReference]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fixed-interval polling while status === 'polling'
+  useEffect(() => {
+    if (status !== 'polling') return;
+
+    if (pollCount >= MAX_POLLING_ATTEMPTS) {
+      setStatus('timeout');
+      setError('Payment request timed out. Please check your M-Pesa history and try again.');
+      return;
+    }
+
+    const timeout = setTimeout(pollPaymentStatus, POLLING_INTERVAL);
+    return () => clearTimeout(timeout);
+  }, [status, pollPaymentStatus, pollCount]);
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,7 +186,9 @@ export default function UnlockPage() {
       const data = await res.json();
 
       if (data.success) {
+        // Store both IDs; poll by messageReference (checkout_request_id) for Co-op Bank query
         setPaymentId(data.data.paymentId);
+        setMessageReference(data.data.checkoutRequestId);
         setPollCount(0);
         setStatus('polling');
       } else {
@@ -467,13 +501,37 @@ export default function UnlockPage() {
               <div className="flex flex-col items-center py-5 gap-3">
                 <Loader2 className="animate-spin text-[#00c97a]" size={32} />
                 <p className="font-semibold text-zinc-200 text-sm">Waiting for M-Pesa payment...</p>
-                <p className="text-xs text-zinc-500 text-center">Enter your PIN on the prompt sent to your phone.</p>
-                <p className="text-[10px] text-zinc-600">Checking... ({pollCount}/24)</p>
+                <p className="text-xs text-zinc-500 text-center">Enter your PIN on the Co-op Bank prompt sent to your phone. Do not close this page.</p>
+                <p className="text-[10px] text-zinc-600">Checking... ({pollCount}/{MAX_POLLING_ATTEMPTS})</p>
                 <button
-                  onClick={() => { setStatus('idle'); setPollCount(0); }}
+                  onClick={() => { setStatus('idle'); setPollCount(0); setMessageReference(''); }}
                   className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mt-1"
                 >
                   Cancel
+                </button>
+              </div>
+            ) : status === 'cancelled' ? (
+              <div className="flex flex-col items-center py-5 gap-3">
+                <XCircle className="text-amber-400" size={32} />
+                <p className="font-semibold text-amber-300 text-sm">Payment Cancelled</p>
+                <p className="text-xs text-zinc-400 text-center">{resultDesc || 'You cancelled the M-Pesa prompt.'}</p>
+                <button
+                  onClick={() => { setStatus('idle'); setPollCount(0); setMessageReference(''); setError(''); setResultDesc(''); }}
+                  className="mt-2 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-full transition-colors"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : status === 'timeout' ? (
+              <div className="flex flex-col items-center py-5 gap-3">
+                <XCircle className="text-red-400" size={32} />
+                <p className="font-semibold text-red-300 text-sm">Payment Timed Out</p>
+                <p className="text-xs text-zinc-400 text-center">No response received. Check your M-Pesa history — if debited, contact support.</p>
+                <button
+                  onClick={() => { setStatus('idle'); setPollCount(0); setMessageReference(''); setError(''); setResultDesc(''); }}
+                  className="mt-2 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-full transition-colors"
+                >
+                  Try Again
                 </button>
               </div>
             ) : (
