@@ -156,9 +156,7 @@ export default function ChatForeignersPage() {
               return (
                 <Link
                   key={person.id}
-                  href={unlocked
-                    ? `/dashboard/chat-foreigners/chat/${person.id}`
-                    : `/dashboard/chat-foreigners/unlock/${person.id}`}
+                  href={`/dashboard/chat-foreigners/chat/${person.id}`}
                   className="flex flex-col items-center bg-[#1c1c2e] rounded-2xl pt-4 pb-3 px-2 gap-2 hover:bg-[#212135] transition-colors active:scale-95 duration-150"
                 >
                   {/* Avatar */}
