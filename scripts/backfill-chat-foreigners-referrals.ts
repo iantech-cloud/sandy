@@ -39,7 +39,7 @@ async function backfillChatForeignersReferrals() {
     // ----------------------------------------------------------------
     // Step 1: Load all users who have a referred_by value
     // ----------------------------------------------------------------
-    const usersWithReferredBy = await Profile.find({
+    const usersWithReferredBy = await (Profile as any).find({
       referred_by: { $ne: null, $exists: true },
     })
       .select('_id username email referred_by approval_status status')
@@ -82,7 +82,7 @@ async function backfillChatForeignersReferrals() {
     const referrerIdSet = new Set(
       usersNeedingBackfill.map((u) => String(u.referred_by))
     );
-    const existingReferrers = await Profile.find({
+    const existingReferrers = await (Profile as any).find({
       _id: { $in: Array.from(referrerIdSet) },
     })
       .select('_id')
@@ -113,7 +113,7 @@ async function backfillChatForeignersReferrals() {
 
         try {
           // Double-check — guard against a race between Step 2 and now
-          const alreadyExists = await Referral.findOne({ referred_id: String(user._id) }).lean();
+          const alreadyExists = await (Referral as any).findOne({ referred_id: String(user._id) }).lean();
           if (alreadyExists) {
             skipped++;
             continue;
@@ -122,7 +122,7 @@ async function backfillChatForeignersReferrals() {
           const isActivated =
             user.approval_status === 'approved' && user.status === 'active';
 
-          await Referral.create({
+          await (Referral as any).create({
             referrer_id: referrerId,
             referred_id: String(user._id),
             earning_cents: 0,
