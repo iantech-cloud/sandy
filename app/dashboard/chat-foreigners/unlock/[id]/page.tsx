@@ -4,8 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, MessageSquare, Loader2, Lock, Sparkles, Globe,
-  Zap, ShieldCheck, Info, BadgeCheck, Heart, Clock, Star, Phone, XCircle,
+  ArrowLeft, MessageSquare, Loader2, Lock, Globe,
+  Zap, BadgeCheck, Heart, Clock, Star, Phone, XCircle,
 } from 'lucide-react';
 import { checkBotUnlockPaymentStatus } from '@/app/actions/chat-foreigners/payments';
 
@@ -410,48 +410,6 @@ export default function UnlockPage() {
           </div>
         </div>
 
-        {/* Trust & safety */}
-        <div className="bg-[#161622] border border-zinc-800 rounded-2xl p-4 space-y-3">
-          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3" /> Trust &amp; Safety
-          </p>
-          <div className="space-y-2">
-            <div className="flex items-start gap-2.5">
-              <div className="w-5 h-5 rounded-full bg-[#00c97a]/10 flex items-center justify-center shrink-0 mt-0.5">
-                <BadgeCheck className="w-3 h-3 text-[#00c97a]" />
-              </div>
-              <div>
-                <p className="text-xs font-medium text-zinc-200">AI Disclosure</p>
-                <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  {person.name} is an AI-powered personality. Conversations are automated and for entertainment and guidance purposes only.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2.5">
-              <div className="w-5 h-5 rounded-full bg-[#00c97a]/10 flex items-center justify-center shrink-0 mt-0.5">
-                <ShieldCheck className="w-3 h-3 text-[#00c97a]" />
-              </div>
-              <div>
-                <p className="text-xs font-medium text-zinc-200">Privacy Protected</p>
-                <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  Your conversations are private and not shared with third parties. Chat data is used only to improve your experience.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2.5">
-              <div className="w-5 h-5 rounded-full bg-[#00c97a]/10 flex items-center justify-center shrink-0 mt-0.5">
-                <Info className="w-3 h-3 text-[#00c97a]" />
-              </div>
-              <div>
-                <p className="text-xs font-medium text-zinc-200">Safe &amp; Moderated</p>
-                <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  All responses follow strict content guidelines. For support or concerns, contact support@sandy.co.ke.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* CTA / Unlock */}
         {hasAccess ? (
           <Link
@@ -527,12 +485,6 @@ export default function UnlockPage() {
                 <XCircle className="text-red-400" size={32} />
                 <p className="font-semibold text-red-300 text-sm">Payment Timed Out</p>
                 <p className="text-xs text-zinc-400 text-center">No response received. Check your M-Pesa history — if debited, contact support.</p>
-                <button
-                  onClick={() => { setStatus('idle'); setPollCount(0); setMessageReference(''); setError(''); setResultDesc(''); }}
-                  className="mt-2 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-full transition-colors"
-                >
-                  Try Again
-                </button>
               </div>
             ) : (
               <form onSubmit={handleUnlock} className="space-y-3">
@@ -574,16 +526,6 @@ export default function UnlockPage() {
           </div>
         )}
 
-        {/* Referral note */}
-        <div className="bg-amber-950/20 border border-amber-800/30 rounded-xl px-4 py-3 flex items-start gap-2.5">
-          <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-xs font-semibold text-amber-400">Earn KES 1,000 by sharing</p>
-            <p className="text-[10px] text-amber-700 mt-0.5 leading-relaxed">
-              Share your referral link and earn KES 60 every time someone you invite unlocks a personality.
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   );
