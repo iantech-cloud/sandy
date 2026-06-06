@@ -392,10 +392,16 @@ export async function POST(request: NextRequest) {
 
     let reply = '';
 
-    // Try OpenAI directly (preferred)
-    const openaiKey = process.env.OPENAI_API_KEY;
-    if (openaiKey) {
+    // Try NVIDIA API (preferred)
+    const nvidiaKey = process.env.NVIDIA_API_KEY;
+    if (nvidiaKey) {
       try {
+        const OpenAI = (await import('openai')).default;
+        const nvidiaClient = new OpenAI({
+          apiKey: nvidiaKey,
+          baseURL: 'https://integrate.api.nvidia.com/v1',
+        });
+
         const systemPrompt = buildSystemPrompt(person, trainingData);
         const messages = [
           { role: 'system' as const, content: systemPrompt },
@@ -403,30 +409,18 @@ export async function POST(request: NextRequest) {
           { role: 'user' as const, content: message },
         ];
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${openaiKey}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages,
-            max_tokens: 200,
-            temperature: 0.88,
-          }),
+        const completion = await nvidiaClient.chat.completions.create({
+          model: 'meta/llama-3.3-70b-instruct',
+          messages,
+          temperature: 0.2,
+          top_p: 0.7,
+          max_tokens: 1024,
+          stream: false,
         });
 
-        if (response.ok) {
-          const data = await response.json() as {
-            choices: Array<{ message: { content: string } }>;
-          };
-          reply = data.choices[0]?.message?.content ?? '';
-        } else {
-          console.warn('[CF Chat] OpenAI returned non-OK:', response.status);
-        }
+        reply = completion.choices[0]?.message?.content ?? '';
       } catch (err) {
-        console.warn('[CF Chat] OpenAI error, falling back:', err);
+        console.warn('[CF Chat] NVIDIA error, falling back:', err);
       }
     }
 
