@@ -6,6 +6,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, MessageSquare, Loader2, Lock, Globe,
   Zap, BadgeCheck, Heart, Clock, Star, Phone, XCircle,
+  Sparkles, Info,
 } from 'lucide-react';
 import { checkBotUnlockPaymentStatus } from '@/app/actions/chat-foreigners/payments';
 
