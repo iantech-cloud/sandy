@@ -183,28 +183,6 @@ export default function ReferralsPage() {
           </div>
         </div>
 
-        {/* Referral Link */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Referral Link</label>
-          <div className="flex items-center gap-4">
-            <div className="flex-1 bg-gray-50 px-4 py-2 rounded-lg border border-gray-300 overflow-x-auto">
-              <code className="text-sm text-gray-700 whitespace-nowrap">
-                {referralLink || 'Loading...'}
-              </code>
-            </div>
-            <button
-              onClick={() => {
-                if (referralLink) {
-                  copyToClipboard(referralLink, 'Referral link');
-                }
-              }}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap"
-            >
-              Copy Link
-            </button>
-          </div>
-        </div>
-
         <p className="text-gray-600 mt-4 text-sm">
           Share your referral code or link with friends. You&apos;ll earn <strong>KES 70</strong> for each direct referral when they activate their accounts!
         </p>
@@ -231,7 +209,7 @@ export default function ReferralsPage() {
               {/* Total Commissions */}
               <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <div className="text-2xl font-bold text-blue-600">
-                  KES {(commissionStats.total / 100).toFixed(2)}
+                  KES {commissionStats.total.toFixed(2)}
                 </div>
                 <div className="text-sm text-gray-600 mt-1">Total Earnings</div>
                 <div className="text-xs text-blue-500 mt-1">From Direct Referrals</div>
@@ -240,7 +218,7 @@ export default function ReferralsPage() {
               {/* Direct Referrals */}
               <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
                 <div className="text-2xl font-bold text-green-600">
-                  KES {(commissionStats.level1.totalEarnings / 100).toFixed(2)}
+                  KES {commissionStats.level1.totalEarnings.toFixed(2)}
                 </div>
                 <div className="text-sm text-gray-600 mt-1">Direct Referral Earnings</div>
                 <div className="text-xs text-green-500 mt-1">
@@ -419,7 +397,7 @@ export default function ReferralsPage() {
           <div className="bg-white p-4 rounded-lg shadow border border-purple-200">
             <div className="text-sm text-gray-500 mb-1">Total Earnings</div>
             <div className="text-3xl font-bold text-purple-600">
-              KES {commissionStats?.total ? (commissionStats.total / 100).toFixed(2) : allReferrals.reduce((sum, ref) => sum + (ref.earnings || 0), 0).toFixed(2)}
+            KES {commissionStats?.total ? commissionStats.total.toFixed(2) : allReferrals.reduce((sum, ref) => sum + (ref.earnings || 0), 0).toFixed(2)}
             </div>
             <div className="text-xs text-gray-400 mt-1">Verified earnings</div>
           </div>
