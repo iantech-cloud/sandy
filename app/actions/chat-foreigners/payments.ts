@@ -715,7 +715,7 @@ export async function closeChat(botId: string) {
       user_id: userId,
       amount_cents: CHAT_CREDIT_CENTS,
       type: 'CHAT_EARNINGS',
-      description: 'Chat session completed reward (non-withdrawable)',
+      description: 'Chat session completed reward',
       status: 'completed',
       target_type: 'user',
       target_id: userId.toString(),

@@ -21,7 +21,9 @@ interface WalletData {
 }
 
 const CREDIT_TYPES = new Set(['CHAT_DEPOSIT', 'CHAT_EARNINGS', 'REFERRAL', 'BONUS', 'REFERRAL_BONUS']);
-const DEBIT_TYPES = new Set(['CHAT_WITHDRAWAL', 'UNLOCK', 'UNLOCK_FEE', 'PLATFORM_FEE']);
+const DEBIT_TYPES = new Set(['CHAT_WITHDRAWAL', 'UNLOCK', 'UNLOCK_FEE']);
+// PLATFORM_FEE transactions are internal company records — never shown to users
+const HIDDEN_TYPES = new Set(['PLATFORM_FEE']);
 
 function getTransactionSign(type: string) {
   return DEBIT_TYPES.has(type) ? '-' : '+';
@@ -86,7 +88,10 @@ export default function WalletPage() {
         }
 
         if (txData.success) {
-          setTransactions(txData.data.transactions ?? []);
+          const visible = (txData.data.transactions ?? []).filter(
+            (tx: Transaction) => !HIDDEN_TYPES.has(tx.type)
+          );
+          setTransactions(visible);
         }
       } catch (err) {
         setError('Network error — please refresh and try again.');
@@ -198,7 +203,9 @@ export default function WalletPage() {
                       <TransactionIcon type={tx.type} />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{tx.description || tx.type}</p>
+                      <p className="text-sm font-medium text-white truncate">
+                        {(tx.description || tx.type).replace(/\s*\([^)]*\)/g, '')}
+                      </p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {new Date(tx.createdAt).toLocaleDateString('en-KE', {
                           day: 'numeric', month: 'short', year: 'numeric',
