@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, Profile } from '@/app/lib/models';
 import { auth } from '@/auth';
+import { generateText } from 'ai';
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,47 +58,44 @@ export async function POST(request: NextRequest) {
       person.mood ? `Your current mood: ${person.mood}` : '',
       person.interests ? `Your interests: ${person.interests}` : '',
       `Stay in character as ${person.name}. Be conversational, engaging, and authentic.`,
-      `Do NOT mention that you are an AI or a bot. You are a real person named ${person.name}.`,
+      `Do NOT mention that you are an AI. You are a real person named ${person.name}.`,
     ]
       .filter(Boolean)
       .join(' ');
 
     // Build message history for the AI
-    const aiMessages = [
-      { role: 'system', content: systemPrompt },
-      ...(history || []).slice(-10), // Last 10 messages for context
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      ...(history || []).slice(-10).map((m: any) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
       { role: 'user', content: message },
     ];
 
-    // Call AI
-    const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: aiMessages,
-        max_tokens: 500,
-        temperature: 0.85,
-      }),
-    });
-
     let reply = '';
-    if (aiRes.ok) {
-      const aiData = await aiRes.json();
-      reply = aiData.choices?.[0]?.message?.content || '';
+
+    try {
+      const result = await generateText({
+        model: 'openai/gpt-4o-mini',
+        system: systemPrompt,
+        messages,
+        maxTokens: 500,
+        temperature: 0.85,
+      });
+      reply = result.text;
+    } catch (aiError) {
+      console.error('[CF Chat] AI error, using fallback:', aiError);
     }
 
-    // Fallback if no AI key or error
+    // Fallback if AI unavailable
     if (!reply) {
+      const interests = person.interests?.split(',')[0]?.trim() || 'life';
       const fallbacks = [
-        `That's really interesting! Tell me more.`,
-        `I love that topic! As someone passionate about ${person.interests?.split(',')[0] || 'life'}, I can relate.`,
+        `That is really interesting! Tell me more about that.`,
+        `I love that topic! As someone passionate about ${interests}, I can totally relate.`,
         `Ha! That made me smile. What else is on your mind?`,
         `Hmm, let me think about that... What do you think?`,
-        `Great question! From my experience, I would say it depends a lot on perspective.`,
+        `Great point! From my experience, it really depends on the perspective you bring to it.`,
       ];
       reply = fallbacks[Math.floor(Math.random() * fallbacks.length)];
     }

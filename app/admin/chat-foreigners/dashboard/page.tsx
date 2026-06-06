@@ -5,12 +5,12 @@ import { Users, MessageSquare, DollarSign, TrendingUp } from 'lucide-react';
 
 interface Analytics {
   totalUsers: number;
-  totalBots: number;
-  totalBotUnlocks: number;
+  totalPersons: number;
+  totalPersonUnlocks: number;
   totalMessages: number;
   totalRevenue: number;
   averageUnlockPrice: number;
-  topBots: Array<{ name: string; unlocks: number }>;
+  topPersons: Array<{ name: string; unlocks: number; revenue: number }>;
   recentActivity: Array<{
     id: string;
     type: 'unlock' | 'message' | 'payment';
@@ -30,40 +30,38 @@ export default function AnalyticsDashboard() {
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      // Fetch bots
-      const botsRes = await fetch('/api/chat-foreigners/bots');
-      const botsData = await botsRes.json();
-      
-      // Fetch wallet data for revenue
-      const walletRes = await fetch('/api/chat-foreigners/wallet');
-      const walletData = await walletRes.json();
+      // Fetch persons with access data included
+      const personsRes = await fetch('/api/chat-foreigners/bots?includeAccess=true');
+      const personsData = await personsRes.json();
 
-      if (botsData.success) {
-        const bots = botsData.data || [];
-        const totalBotUnlocks = bots.reduce((sum: number, bot: any) => 
-          sum + ((bot.userAccess || []).length || 0), 0);
-        const totalMessages = bots.reduce((sum: number, bot: any) => 
-          sum + (bot.userAccess || []).reduce((msgSum: number, access: any) => 
-            msgSum + (access.messageCount || 0), 0), 0);
-        const totalRevenue = totalBotUnlocks * 90; // Assuming 90 KSh per unlock
-        const topBots = bots
-          .map((bot: any) => ({
-            name: bot.name,
-            unlocks: (bot.userAccess || []).length,
+      if (personsData.success) {
+        const persons = personsData.data || [];
+        const totalPersonUnlocks = persons.reduce((sum: number, p: any) =>
+          sum + ((p.userAccess || []).length), 0);
+        const totalMessages = persons.reduce((sum: number, p: any) =>
+          sum + (p.userAccess || []).reduce((msgSum: number, a: any) =>
+            msgSum + (a.messageCount || 0), 0), 0);
+        const totalRevenue = persons.reduce((sum: number, p: any) =>
+          sum + (p.userAccess || []).length * (p.unlockPrice || 60), 0);
+        const topPersons = persons
+          .map((p: any) => ({
+            name: p.name,
+            unlocks: (p.userAccess || []).length,
+            revenue: (p.userAccess || []).length * (p.unlockPrice || 60),
           }))
           .sort((a: any, b: any) => b.unlocks - a.unlocks)
           .slice(0, 5);
 
         setAnalytics({
-          totalUsers: 0, // Would need separate API
-          totalBots: bots.length,
-          totalBotUnlocks,
+          totalUsers: 0,
+          totalPersons: persons.length,
+          totalPersonUnlocks,
           totalMessages,
           totalRevenue,
-          averageUnlockPrice: bots.length > 0 
-            ? bots.reduce((sum: number, bot: any) => sum + (bot.unlockPrice || 60), 0) / bots.length
+          averageUnlockPrice: persons.length > 0
+            ? persons.reduce((sum: number, p: any) => sum + (p.unlockPrice || 60), 0) / persons.length
             : 60,
-          topBots,
+          topPersons,
           recentActivity: [],
         });
       }
@@ -93,11 +91,11 @@ export default function AnalyticsDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-600 font-medium">Total Bots</h3>
+            <h3 className="text-gray-600 font-medium">Total Persons</h3>
             <MessageSquare className="w-6 h-6 text-blue-500" />
           </div>
-          <p className="text-3xl font-bold text-gray-900">{analytics.totalBots}</p>
-          <p className="text-sm text-gray-600 mt-2">Active bot profiles</p>
+          <p className="text-3xl font-bold text-gray-900">{analytics.totalPersons}</p>
+          <p className="text-sm text-gray-600 mt-2">Active personality profiles</p>
         </div>
 
         <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
@@ -105,8 +103,8 @@ export default function AnalyticsDashboard() {
             <h3 className="text-gray-600 font-medium">Total Unlocks</h3>
             <TrendingUp className="w-6 h-6 text-green-500" />
           </div>
-          <p className="text-3xl font-bold text-gray-900">{analytics.totalBotUnlocks}</p>
-          <p className="text-sm text-gray-600 mt-2">Bot unlock transactions</p>
+          <p className="text-3xl font-bold text-gray-900">{analytics.totalPersonUnlocks}</p>
+          <p className="text-sm text-gray-600 mt-2">Person unlock transactions</p>
         </div>
 
         <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
@@ -124,18 +122,18 @@ export default function AnalyticsDashboard() {
             <DollarSign className="w-6 h-6 text-orange-500" />
           </div>
           <p className="text-3xl font-bold text-gray-900">KSh {analytics.totalRevenue.toLocaleString()}</p>
-          <p className="text-sm text-gray-600 mt-2">Estimated from unlocks</p>
+          <p className="text-sm text-gray-600 mt-2">Actual from unlocks</p>
         </div>
       </div>
 
-      {/* Top Bots */}
+      {/* Top Persons */}
       <div className="bg-white rounded-lg shadow border border-gray-200 p-6 mb-8">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Top Performing Bots</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Top Performing Personalities</h2>
         <div className="space-y-3">
-          {analytics.topBots.length === 0 ? (
-            <p className="text-gray-600">No bot performance data available yet.</p>
+          {analytics.topPersons.length === 0 ? (
+            <p className="text-gray-600">No performance data available yet.</p>
           ) : (
-            analytics.topBots.map((bot, idx) => (
+            analytics.topPersons.map((person, idx) => (
               <div
                 key={idx}
                 className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
@@ -145,13 +143,13 @@ export default function AnalyticsDashboard() {
                     {idx + 1}
                   </span>
                   <div>
-                    <p className="font-medium text-gray-900">{bot.name}</p>
-                    <p className="text-sm text-gray-600">{bot.unlocks} unlocks</p>
+                    <p className="font-medium text-gray-900">{person.name}</p>
+                    <p className="text-sm text-gray-600">{person.unlocks} unlocks</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-gray-900">
-                    KSh {(bot.unlocks * 90).toLocaleString()}
+                    KSh {person.revenue.toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-600">Revenue</p>
                 </div>
@@ -173,8 +171,8 @@ export default function AnalyticsDashboard() {
             <div className="flex justify-between">
               <span className="text-gray-600">Messages per Unlock</span>
               <span className="font-medium">
-                {analytics.totalBotUnlocks > 0 
-                  ? (analytics.totalMessages / analytics.totalBotUnlocks).toFixed(1)
+                {analytics.totalPersonUnlocks > 0
+                  ? (analytics.totalMessages / analytics.totalPersonUnlocks).toFixed(1)
                   : '0'}
               </span>
             </div>
@@ -191,16 +189,16 @@ export default function AnalyticsDashboard() {
           <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Stats</h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-gray-600">Active Bots</span>
-              <span className="font-medium">{analytics.totalBots}</span>
+              <span className="text-gray-600">Active Personalities</span>
+              <span className="font-medium">{analytics.totalPersons}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Total Unlocks</span>
-              <span className="font-medium">{analytics.totalBotUnlocks}</span>
+              <span className="font-medium">{analytics.totalPersonUnlocks}</span>
             </div>
             <div className="flex justify-between pt-3 border-t">
-              <span className="text-gray-600 font-medium">Monthly Revenue Estimate</span>
-              <span className="font-bold">KSh {(analytics.totalRevenue * 30).toLocaleString()}</span>
+              <span className="text-gray-600 font-medium">Total Revenue</span>
+              <span className="font-bold">KSh {analytics.totalRevenue.toLocaleString()}</span>
             </div>
           </div>
         </div>
