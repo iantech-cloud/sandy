@@ -1,6 +1,6 @@
 'use server';
 
-import { connectToDatabase, ChatForeignersPayment, ChatForeignersMpesaTransaction, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersReferralEarning, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, Profile, Referral } from '@/app/lib/models';
+import { connectToDatabase, ChatForeignersPayment, ChatForeignersMpesaTransaction, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersReferralEarning, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, Profile, Referral, Transaction } from '@/app/lib/models';
 import { createCoopBankService } from '@/app/lib/services/coop-bank';
 import mongoose from 'mongoose';
 import { auth } from '@/auth';
@@ -351,44 +351,15 @@ export async function completeBotUnlockPayment(
       );
     }
 
-    // KSH 100 split:
-    //   Referrer  = KSH 60 (6000 cents) — credited to chat foreigners wallet
-    //   User      = KSH 20 (2000 cents) — credited to chat foreigners wallet (non-withdrawable)
-    //   Company   = KSH 10 (1000 cents) — kept by platform
-    const REFERRER_SHARE_CENTS = 6000;
-    const USER_SHARE_CENTS = 2000;
-    const COMPANY_SHARE_CENTS = 1000;
+    // KSH 100 split (chat unlock):
+    //   Referrer  = KSH 75 (7500 cents) — credited to referrer's MAIN wallet (withdrawable)
+    //   Company   = KSH 25 (2500 cents) — kept by platform
+    //   User self = KSH 0              — no credit to the person who paid
+    const REFERRER_SHARE_CENTS = 7500;
+    const COMPANY_SHARE_CENTS = 2500;
 
     // ----------------------------------------------------------------
-    // Credit user's own Chat Foreigners wallet (non-withdrawable KSH 20)
-    // ----------------------------------------------------------------
-    let userWallet = await ChatForeignersWallet.findOne({
-      user_id: mpesaTransaction.user_id,
-    }).session(session);
-    if (!userWallet) {
-      userWallet = new ChatForeignersWallet({ user_id: mpesaTransaction.user_id, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0 });
-    }
-    userWallet.balance_cents += USER_SHARE_CENTS;
-    userWallet.total_earned_cents += USER_SHARE_CENTS;
-    await userWallet.save({ session });
-
-    await ChatForeignersTransaction.create(
-      [
-        {
-          user_id: mpesaTransaction.user_id,
-          amount_cents: USER_SHARE_CENTS,
-          type: 'CHAT_EARNINGS',
-          description: 'Chat Foreigners personality unlock bonus',
-          status: 'completed',
-          target_type: 'user',
-          target_id: mpesaTransaction.user_id.toString(),
-        },
-      ],
-      { session }
-    );
-
-    // ----------------------------------------------------------------
-    // Universal referral system — credit referrer KSH 60
+    // Universal referral system — credit referrer KSH 75 to MAIN wallet
     // ----------------------------------------------------------------
     const referralRecord = await Referral.findOne({
       referred_id: mpesaTransaction.user_id,
@@ -397,7 +368,7 @@ export async function completeBotUnlockPayment(
     if (referralRecord) {
       const referrerId = referralRecord.referrer_id;
 
-      // Check that referral earning doesn't already exist for this specific payment
+      // Guard: only pay once per payment
       const existingEarning = await ChatForeignersReferralEarning.findOne({
         referrer_id: referrerId,
         referee_id: mpesaTransaction.user_id,
@@ -422,26 +393,44 @@ export async function completeBotUnlockPayment(
           { session }
         );
 
-        let referrerWallet = await ChatForeignersWallet.findOne({
+        // Credit KSH 75 to referrer's MAIN wallet (Profile.balance_cents) — same as activation fees
+        await Profile.findByIdAndUpdate(
+          referrerId,
+          {
+            $inc: {
+              balance_cents: REFERRER_SHARE_CENTS,
+              total_earnings_cents: REFERRER_SHARE_CENTS,
+            },
+          },
+          { session }
+        );
+
+        // Also track in CF wallet downline_earnings for reporting
+        let referrerCFWallet = await ChatForeignersWallet.findOne({
           user_id: referrerId,
         }).session(session);
-        if (!referrerWallet) {
-          referrerWallet = new ChatForeignersWallet({ user_id: referrerId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0 });
+        if (!referrerCFWallet) {
+          referrerCFWallet = new ChatForeignersWallet({ user_id: referrerId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0, downline_earnings_cents: 0 });
         }
-        referrerWallet.balance_cents += REFERRER_SHARE_CENTS;
-        referrerWallet.total_earned_cents += REFERRER_SHARE_CENTS;
-        await referrerWallet.save({ session });
+        (referrerCFWallet as any).downline_earnings_cents = ((referrerCFWallet as any).downline_earnings_cents || 0) + REFERRER_SHARE_CENTS;
+        await referrerCFWallet.save({ session });
 
-        await ChatForeignersTransaction.create(
+        // Record in main Transaction ledger (same as activation REFERRAL type)
+        await (Transaction as any).create(
           [
             {
               user_id: referrerId,
               amount_cents: REFERRER_SHARE_CENTS,
-              type: 'CHAT_EARNINGS',
-              description: 'Chat Foreigners referral commission: referred user unlocked a personality',
+              type: 'REFERRAL',
+              description: 'Chat Foreigners downline: referred user unlocked a personality',
               status: 'completed',
               target_type: 'user',
               target_id: referrerId.toString(),
+              metadata: {
+                referredUser: mpesaTransaction.user_id.toString(),
+                source: 'chat_foreigners_unlock',
+                bot_id: payment.bot_id?.toString(),
+              },
             },
           ],
           { session }
@@ -452,7 +441,7 @@ export async function completeBotUnlockPayment(
           await referralEarning[0].save({ session });
         }
 
-        console.log('[ChatForeigners] Referral commission paid:', {
+        console.log('[ChatForeigners] Downline commission paid to main wallet:', {
           referrerId,
           botId: payment.bot_id,
           amount: REFERRER_SHARE_CENTS / 100,
@@ -461,7 +450,7 @@ export async function completeBotUnlockPayment(
     }
 
     // ----------------------------------------------------------------
-    // Company keeps KSH 10 — recorded as company revenue
+    // Company keeps KSH 25 — recorded as company revenue
     // ----------------------------------------------------------------
     await ChatForeignersTransaction.create(
       [
@@ -469,7 +458,7 @@ export async function completeBotUnlockPayment(
           user_id: mpesaTransaction.user_id,
           amount_cents: COMPANY_SHARE_CENTS,
           type: 'CHAT_EARNINGS',
-          description: 'Chat Foreigners platform fee',
+          description: 'Chat Foreigners platform fee (KSH 25)',
           status: 'completed',
           target_type: 'company',
           target_id: 'company',
@@ -701,13 +690,14 @@ export async function closeChat(botId: string) {
 
     const CHAT_CREDIT_CENTS = 10000; // KSH 100
 
-    // Credit user's Chat Foreigners wallet (non-withdrawable)
+    // Credit user's Chat Foreigners wallet (chat_earnings sub-wallet)
     let wallet = await ChatForeignersWallet.findOne({ user_id: userId });
     if (!wallet) {
-      wallet = new ChatForeignersWallet({ user_id: userId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0 });
+      wallet = new ChatForeignersWallet({ user_id: userId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0, downline_earnings_cents: 0, chat_earnings_cents: 0 });
     }
     wallet.balance_cents += CHAT_CREDIT_CENTS;
     wallet.total_earned_cents += CHAT_CREDIT_CENTS;
+    (wallet as any).chat_earnings_cents = ((wallet as any).chat_earnings_cents || 0) + CHAT_CREDIT_CENTS;
     await wallet.save();
 
     // Record the transaction

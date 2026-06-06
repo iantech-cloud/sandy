@@ -46,8 +46,7 @@ export async function getReferralDashboardData() {
       referrer_id: currentUser._id
     }).populate('referred_id', 'username email status created_at activation_status firstName lastName').lean();
 
-    // Get Level 1 earnings (KES 70 per direct referral)
-    // Query by user_id (the referrer who earned) and REFERRAL type
+    // Get all completed REFERRAL transactions for this user (no metadata level filter)
     const level1Transactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
@@ -56,22 +55,13 @@ export async function getReferralDashboardData() {
 
     const level1Earnings = level1Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0) / 100;
 
-    // Get Level 2 earnings (if implemented with metadata.level: 2)
-    const level2Transactions = await (Transaction as any).find({
-      user_id: currentUser._id,
-      type: 'REFERRAL',
-      'metadata.level': 2,
-      status: 'completed'
-    }).lean();
-
-    const level2Earnings = level2Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0) / 100;
+    // Level 2 no longer exists — kept for backward compat but will always be 0
+    const level2Earnings = 0;
     
     console.log(`[v0] Referral earnings for ${currentUser.username}:`, {
-      totalTransactions: level1Transactions.length + level2Transactions.length,
+      totalTransactions: level1Transactions.length,
       level1Count: level1Transactions.length,
       level1Earnings: level1Earnings,
-      level2Count: level2Transactions.length,
-      level2Earnings: level2Earnings
     });
 
     // Count active referrals (where referred user's status is 'active' or 'verified')
@@ -110,8 +100,8 @@ export async function getReferralDashboardData() {
         totalEarnings: level1Earnings + level2Earnings,
         referralItems,
         commissionStructure: {
-          level1: 70,  // KES 70 per direct referral
-          level2: 10,  // KES 10 per indirect referral (if implemented)
+          level1: 70,  // KES 70 per direct referral activation
+          chatForeignersDownline: 75, // KES 75 per CF chat unlock by downline
           company: 20  // KES 20 company fee per activation
         }
       }

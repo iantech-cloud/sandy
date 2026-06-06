@@ -232,8 +232,7 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
       return { success: false, message: 'User not found' };
     }
 
-    // Get direct referral commissions
-    // Query transactions where user_id is the EARNER (referrer) and type is REFERRAL
+    // Get all completed REFERRAL transactions earned by this user
     const directReferralTransactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
@@ -245,10 +244,10 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
 
     const stats: CommissionStats = {
       level1: {
-        totalEarnings: level1Earnings,
+        totalEarnings: level1Earnings / 100,
         count: level1Count
       },
-      total: level1Earnings
+      total: level1Earnings / 100
     };
 
     return {

@@ -184,7 +184,7 @@ export default function ReferralsPage() {
         </div>
 
         <p className="text-gray-600 mt-4 text-sm">
-          Share your referral code or link with friends. You&apos;ll earn <strong>KES 70</strong> for each direct referral when they activate their accounts!
+          Share your referral link. Earn <strong>KES 70</strong> when a referred user activates, plus <strong>KES 75</strong> every time they unlock a Chat Foreigners personality.
         </p>
       </div>
 
@@ -211,36 +211,43 @@ export default function ReferralsPage() {
                 <div className="text-2xl font-bold text-blue-600">
                   KES {commissionStats.total.toFixed(2)}
                 </div>
-                <div className="text-sm text-gray-600 mt-1">Total Earnings</div>
-                <div className="text-xs text-blue-500 mt-1">From Direct Referrals</div>
+                <div className="text-sm text-gray-600 mt-1">Total Referral Earnings</div>
+                <div className="text-xs text-blue-500 mt-1">Activation + Chat Foreigners</div>
               </div>
 
-              {/* Direct Referrals */}
+              {/* Direct Referrals count */}
               <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
                 <div className="text-2xl font-bold text-green-600">
-                  KES {commissionStats.level1.totalEarnings.toFixed(2)}
+                  {commissionStats.level1.count}
                 </div>
-                <div className="text-sm text-gray-600 mt-1">Direct Referral Earnings</div>
+                <div className="text-sm text-gray-600 mt-1">Paid Commissions</div>
                 <div className="text-xs text-green-500 mt-1">
-                  {commissionStats.level1.count} users × KES 70
+                  Avg KES {commissionStats.level1.count > 0 ? (commissionStats.total / commissionStats.level1.count).toFixed(0) : '0'} each
                 </div>
               </div>
             </div>
 
-            {/* Commission Structure Info */}
+          {/* Commission Structure Info */}
             <div className="p-4 bg-gray-50 rounded-lg border">
               <h4 className="font-semibold text-gray-800 mb-3">Commission Structure</h4>
-              <div className="text-sm">
+              <div className="text-sm space-y-2">
                 <div className="flex items-start gap-3">
                   <div className="w-3 h-3 bg-green-500 rounded-full mt-1 flex-shrink-0"></div>
                   <div>
-                    <p><strong>Direct Referrals:</strong> KES 70 per referral</p>
-                    <p className="text-xs text-gray-500 mt-1">Earned when someone you directly refer activates their account</p>
+                    <p><strong>Account Activation:</strong> KES 70 per direct referral</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Earned when someone you refer pays the KES 90 activation fee</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-3 h-3 bg-amber-500 rounded-full mt-1 flex-shrink-0"></div>
+                  <div>
+                    <p><strong>Chat Foreigners Downline:</strong> KES 75 per chat unlock</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Earned each time your referred user unlocks a Chat Foreigners personality (KES 100 payment)</p>
                   </div>
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-4">
-                * Commissions are paid when referred users pay KES 90 activation fee and get approved.
+                * All earnings go directly to your main wallet and are withdrawable.
               </p>
             </div>
           </div>
@@ -395,11 +402,11 @@ export default function ReferralsPage() {
             <div className="text-xs text-gray-400 mt-1">Account verified</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border border-purple-200">
-            <div className="text-sm text-gray-500 mb-1">Total Earnings</div>
+            <div className="text-sm text-gray-500 mb-1">Total Activation Earnings</div>
             <div className="text-3xl font-bold text-purple-600">
-            KES {commissionStats?.total ? commissionStats.total.toFixed(2) : allReferrals.reduce((sum, ref) => sum + (ref.earnings || 0), 0).toFixed(2)}
+              KES {commissionStats ? commissionStats.total.toFixed(2) : '0.00'}
             </div>
-            <div className="text-xs text-gray-400 mt-1">Verified earnings</div>
+            <div className="text-xs text-gray-400 mt-1">From referral activations</div>
           </div>
         </div>
       )}
