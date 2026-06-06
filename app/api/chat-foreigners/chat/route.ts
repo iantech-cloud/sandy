@@ -12,7 +12,7 @@ const nvidiaClient = process.env.NVIDIA_API_KEY
     })
   : null;
 
-const NVIDIA_MODEL = 'meta/llama-3.3-70b-instruct';
+const NVIDIA_MODEL = 'meta/llama-3.1-8b-instruct';
 const HISTORY_WINDOW = 6; // last N turns to send for context
 
 // ── Persona-specific fallback reply banks ─────────────────────────────────────

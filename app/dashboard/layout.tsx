@@ -474,7 +474,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <DashboardProvider value={{ user, apiFetch: authenticatedApiFetch }}>
           {children}
         </DashboardProvider>
-        <UserChatWidget />
       </>
     );
   }
