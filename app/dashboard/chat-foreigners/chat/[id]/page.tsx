@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Send, Loader, MoreVertical, Phone, Video, CheckCircle2, Lock } from 'lucide-react';
+import { ArrowLeft, Send, Loader, MoreVertical, Phone, Video, XCircle, CheckCircle2, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Message {
@@ -25,6 +25,8 @@ interface Person {
   category: string;
 }
 
+const MIN_MESSAGES_TO_CLOSE = 20;
+
 export default function ChatPage() {
   const params = useParams();
   const router = useRouter();
@@ -37,9 +39,15 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
-  const [milestoneReached, setMilestoneReached] = useState(false);
+  const [showEndChatConfirm, setShowEndChatConfirm] = useState(false);
+  const [closingChat, setClosingChat] = useState(false);
+  const [chatClosed, setChatClosed] = useState(false);
+  const [closeError, setCloseError] = useState('');
+  const [creditAmount, setCreditAmount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const canClose = messageCount >= MIN_MESSAGES_TO_CLOSE;
 
   useEffect(() => {
     const loadData = async () => {
@@ -64,12 +72,7 @@ export default function ChatPage() {
         setHasAccess(true);
         setMessageCount(accessData.data?.messageCount || 0);
 
-        if (accessData.data?.firstMilestoneComplete) {
-          setMilestoneReached(true);
-        }
-
         if (personData.data) {
-          const p = personData.data;
           const greetings = [
             `Hey you! How are you doing today? Like really doing? 😊`,
             `Hi! So glad you reached out. What's on your mind?`,
@@ -100,7 +103,7 @@ export default function ChatPage() {
   }, [messages]);
 
   const sendMessage = async () => {
-    if (!input.trim() || sending || !person) return;
+    if (!input.trim() || sending || !person || chatClosed) return;
 
     const userMessage: Message = {
       role: 'user',
@@ -135,9 +138,6 @@ export default function ChatPage() {
           },
         ]);
         setMessageCount((prev) => prev + 1);
-        if (data.milestoneReached) {
-          setMilestoneReached(true);
-        }
       } else {
         setMessages((prev) => [
           ...prev,
@@ -163,6 +163,33 @@ export default function ChatPage() {
     }
   };
 
+  const handleEndChat = async () => {
+    setClosingChat(true);
+    setCloseError('');
+    try {
+      const res = await fetch('/api/chat-foreigners/chat/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botId: personId }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        setChatClosed(true);
+        setCreditAmount(data.data?.creditAmount || 100);
+        setShowEndChatConfirm(false);
+      } else {
+        setCloseError(data.error || 'Could not close chat. Try again.');
+        setShowEndChatConfirm(false);
+      }
+    } catch (err) {
+      setCloseError('Something went wrong. Please try again.');
+      setShowEndChatConfirm(false);
+    } finally {
+      setClosingChat(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -181,7 +208,39 @@ export default function ChatPage() {
 
   if (!person || !hasAccess) return null;
 
-  const isOnline = true;
+  // Chat closed — show success screen
+  if (chatClosed) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl p-8 max-w-sm w-full text-center text-zinc-100 space-y-4">
+          <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-8 h-8 text-primary" />
+          </div>
+          <h2 className="text-2xl font-bold">Chat Completed!</h2>
+          <p className="text-zinc-400 text-sm">
+            KES {creditAmount} has been credited to your Chat Foreigners wallet (non-withdrawable).
+          </p>
+          <p className="text-xs text-zinc-500">
+            To chat with {person.name} again, you&apos;ll need to unlock with a fresh KES 100 payment.
+          </p>
+          <div className="flex flex-col gap-2 pt-2">
+            <Link
+              href="/dashboard/chat-foreigners/wallet"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-11 rounded-full flex items-center justify-center transition-colors"
+            >
+              View Wallet
+            </Link>
+            <Link
+              href="/dashboard/chat-foreigners"
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold h-11 rounded-full flex items-center justify-center transition-colors"
+            >
+              Browse Personalities
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
@@ -205,13 +264,11 @@ export default function ChatPage() {
                   </span>
                 )}
               </div>
-              {isOnline && (
-                <span className="absolute bottom-0 right-0 w-3 h-3 bg-primary rounded-full border-2 border-zinc-900" />
-              )}
+              <span className="absolute bottom-0 right-0 w-3 h-3 bg-primary rounded-full border-2 border-zinc-900" />
             </div>
             <div>
               <h2 className="font-semibold text-sm">{person.name}</h2>
-              <p className="text-xs text-primary">{isOnline ? 'Active now' : 'Away'}</p>
+              <p className="text-xs text-primary">Active now</p>
             </div>
           </div>
         </div>
@@ -222,17 +279,64 @@ export default function ChatPage() {
           <button className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition-colors">
             <Phone className="w-5 h-5" />
           </button>
-          <button className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition-colors">
-            <MoreVertical className="w-5 h-5" />
+          <button
+            onClick={() => setShowEndChatConfirm(true)}
+            disabled={closingChat}
+            className="p-2 text-zinc-400 hover:text-red-400 rounded-full hover:bg-zinc-800 transition-colors"
+            title="End Chat"
+          >
+            <XCircle className="w-5 h-5" />
           </button>
         </div>
       </header>
 
-      {/* Milestone Banner */}
-      {milestoneReached && (
-        <div className="bg-primary/20 border-b border-primary/30 px-4 py-2 flex items-center gap-2 text-sm text-primary">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span className="font-medium">Milestone reached! Your referrer earned a bonus.</span>
+      {/* Close error banner */}
+      {closeError && (
+        <div className="bg-red-950/50 border-b border-red-900/50 px-4 py-2 flex items-center gap-2 text-sm text-red-400">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{closeError}</span>
+          <button
+            onClick={() => setCloseError('')}
+            className="ml-auto text-red-500 hover:text-red-300 text-xs"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* End chat confirm dialog */}
+      {showEndChatConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
+            <h3 className="font-bold text-lg text-zinc-100">End Chat Session?</h3>
+            {canClose ? (
+              <p className="text-zinc-400 text-sm">
+                You will receive <span className="text-primary font-semibold">KES 100</span> credited to your Chat Foreigners wallet (non-withdrawable). To chat with {person.name} again you will need to pay KES 100 to unlock.
+              </p>
+            ) : (
+              <p className="text-zinc-400 text-sm">
+                You need at least <span className="text-primary font-semibold">{MIN_MESSAGES_TO_CLOSE} messages</span> to end the chat and receive your reward. You currently have <span className="font-semibold">{messageCount}</span>.
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEndChatConfirm(false)}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold h-11 rounded-full transition-colors"
+              >
+                Keep Chatting
+              </button>
+              {canClose && (
+                <button
+                  onClick={handleEndChat}
+                  disabled={closingChat}
+                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold h-11 rounded-full transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {closingChat ? <Loader size={16} className="animate-spin" /> : null}
+                  End & Claim
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -302,11 +406,23 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message count chip */}
-      <div className="flex justify-center pb-1 bg-zinc-950">
+      {/* Message count + close CTA */}
+      <div className="bg-zinc-950 px-4 py-1.5 flex items-center justify-between">
         <span className="text-[11px] text-zinc-500 bg-zinc-900 border border-zinc-800 rounded-full px-3 py-0.5">
-          {messageCount} messages sent
+          {messageCount} / {MIN_MESSAGES_TO_CLOSE} messages
         </span>
+        {canClose ? (
+          <button
+            onClick={() => setShowEndChatConfirm(true)}
+            className="text-[11px] font-semibold text-primary border border-primary/30 bg-primary/10 hover:bg-primary/20 rounded-full px-3 py-0.5 transition-colors"
+          >
+            End Chat &amp; Claim KES 100
+          </button>
+        ) : (
+          <span className="text-[11px] text-zinc-600">
+            {MIN_MESSAGES_TO_CLOSE - messageCount} more to claim reward
+          </span>
+        )}
       </div>
 
       {/* Input Area */}
@@ -319,12 +435,13 @@ export default function ChatPage() {
             onKeyDown={handleKeyDown}
             placeholder={`Message ${person.name}...`}
             rows={1}
-            className="flex-1 resize-none bg-zinc-800 border border-zinc-700 rounded-full px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 max-h-28 leading-relaxed"
+            disabled={chatClosed}
+            className="flex-1 resize-none bg-zinc-800 border border-zinc-700 rounded-full px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 max-h-28 leading-relaxed disabled:opacity-50"
             style={{ scrollbarWidth: 'none' }}
           />
           <button
             onClick={sendMessage}
-            disabled={sending || !input.trim()}
+            disabled={sending || !input.trim() || chatClosed}
             className="p-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full w-10 h-10 flex items-center justify-center shrink-0 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {sending ? (

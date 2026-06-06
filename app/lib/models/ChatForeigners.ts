@@ -125,6 +125,18 @@ const ChatForeignersBotAccessSchema = new Schema({
   expiresAt: {
     type: Date // For subscription-based access
   },
+  isClosed: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  closedAt: {
+    type: Date,
+  },
+  chatCreditPaid: {
+    type: Boolean,
+    default: false,
+  },
   created_at: {
     type: Date,
     default: Date.now,
