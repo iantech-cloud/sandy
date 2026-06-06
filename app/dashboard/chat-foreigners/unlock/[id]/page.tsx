@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Lock, Loader, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Loader2, Briefcase, Sparkles, Heart, Lock } from 'lucide-react';
 
 interface Person {
   id: string;
@@ -17,9 +17,21 @@ interface Person {
   interests?: string;
   category: string;
   unlockCost_cents: number;
+  unlockPrice: number;
 }
 
 type UnlockStatus = 'idle' | 'pending' | 'polling' | 'success' | 'failed';
+
+const INTEREST_LABELS: Record<string, string> = {
+  relationship_coach: 'Relationships',
+  finance_mentor: 'Finance & Investing',
+  social_friend: 'Lifestyle',
+  business_advisor: 'Business & Entrepreneurship',
+  companion: 'Deep Conversations',
+  therapist: 'Mental Wellness',
+  gaming_friend: 'Gaming & Tech',
+  tech_mentor: 'Software & Career',
+};
 
 export default function UnlockPage() {
   const params = useParams();
@@ -33,16 +45,26 @@ export default function UnlockPage() {
   const [error, setError] = useState('');
   const [paymentId, setPaymentId] = useState('');
   const [pollCount, setPollCount] = useState(0);
+  const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
     const loadPerson = async () => {
       try {
-        const res = await fetch(`/api/chat-foreigners/bots?type=details&botId=${personId}`);
-        const data = await res.json();
-        if (data.success) {
-          setPerson(data.data);
+        const [personRes, accessRes] = await Promise.all([
+          fetch(`/api/chat-foreigners/bots?type=details&botId=${personId}`),
+          fetch(`/api/chat-foreigners/bots?type=check&botId=${personId}`),
+        ]);
+        const [personData, accessData] = await Promise.all([personRes.json(), accessRes.json()]);
+
+        if (personData.success) {
+          setPerson(personData.data);
         } else {
           router.push('/dashboard/chat-foreigners');
+          return;
+        }
+
+        if (accessData.success && accessData.hasAccess) {
+          setHasAccess(true);
         }
       } catch (err) {
         console.error('[v0] Error loading person:', err);
@@ -61,7 +83,6 @@ export default function UnlockPage() {
       try {
         const res = await fetch(`/api/chat-foreigners/payments/status?paymentId=${paymentId}`);
         const data = await res.json();
-
         setPollCount((prev) => prev + 1);
 
         if (data.success && data.data?.status === 'completed') {
@@ -72,7 +93,7 @@ export default function UnlockPage() {
           setStatus('failed');
           setError('Payment failed. Please try again.');
           clearInterval(interval);
-        } else if (pollCount > 20) {
+        } else if (pollCount > 24) {
           setStatus('failed');
           setError('Payment timed out. Please check your M-Pesa and try again.');
           clearInterval(interval);
@@ -88,12 +109,10 @@ export default function UnlockPage() {
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
     if (!phoneNumber.trim()) {
       setError('Please enter your M-Pesa phone number.');
       return;
     }
-
     setStatus('pending');
 
     try {
@@ -102,7 +121,6 @@ export default function UnlockPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ botId: personId, phoneNumber }),
       });
-
       const data = await res.json();
 
       if (data.success) {
@@ -121,8 +139,8 @@ export default function UnlockPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <Loader className="animate-spin text-blue-600" size={32} />
+      <div className="flex flex-col h-screen bg-zinc-950 items-center justify-center">
+        <Loader2 className="animate-spin text-primary" size={32} />
       </div>
     );
   }
@@ -131,146 +149,215 @@ export default function UnlockPage() {
 
   if (status === 'success') {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
-          <CheckCircle2 className="mx-auto text-green-500 mb-4" size={64} />
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Unlocked!</h2>
-          <p className="text-slate-600 mb-4">
-            You now have access to chat with {person.name}. Redirecting...
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl p-8 max-w-md w-full text-center text-zinc-100">
+          <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <MessageSquare className="w-8 h-8 text-primary" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2">Connected!</h2>
+          <p className="text-zinc-400 text-sm">
+            You can now chat with {person.name}. Redirecting...
           </p>
+          <Loader2 className="animate-spin text-primary mx-auto mt-4" size={20} />
         </div>
       </div>
     );
   }
 
+  const interestsList = person.interests?.split(',').map((i) => i.trim()).filter(Boolean) ?? [];
+  const categoryLabel =
+    INTEREST_LABELS[person.personalityType || ''] ??
+    INTEREST_LABELS[person.category] ??
+    person.category;
+  const unlockPrice = person.unlockPrice ?? (person.unlockCost_cents / 100);
+
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto">
+    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 overflow-y-auto">
+      {/* Header */}
+      <header className="px-4 py-4 flex items-center sticky top-0 bg-zinc-950/80 backdrop-blur-md z-10 border-b border-zinc-800">
         <Link
           href="/dashboard/chat-foreigners"
-          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6 transition"
+          className="p-2 -ml-2 mr-2 rounded-full hover:bg-zinc-800 transition-colors"
         >
-          <ArrowLeft size={20} />
-          Back to Chat Foreigners
+          <ArrowLeft className="w-5 h-5" />
         </Link>
+        <h1 className="font-bold">Profile</h1>
+      </header>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          {/* Person profile */}
-          {person.avatar_url ? (
-            <div className="h-48 bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center overflow-hidden">
-              <img
-                src={person.avatar_url}
-                alt={person.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ) : (
-            <div className="h-48 bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center">
-              <span className="text-white text-6xl font-bold">{person.name[0]}</span>
-            </div>
-          )}
-
-          <div className="p-6">
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold text-slate-900">{person.name}</h1>
-              {person.username && (
-                <p className="text-slate-500">@{person.username}</p>
-              )}
-              {person.bio && (
-                <p className="text-slate-600 mt-2">{person.bio}</p>
-              )}
-
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                {person.personalityType && (
-                  <div className="bg-blue-50 rounded-lg p-3">
-                    <p className="text-xs text-blue-500 font-semibold uppercase tracking-wide">Personality</p>
-                    <p className="text-sm text-blue-900 mt-1">{person.personalityType}</p>
-                  </div>
-                )}
-                {person.speakingStyle && (
-                  <div className="bg-purple-50 rounded-lg p-3">
-                    <p className="text-xs text-purple-500 font-semibold uppercase tracking-wide">Speaking Style</p>
-                    <p className="text-sm text-purple-900 mt-1">{person.speakingStyle}</p>
-                  </div>
-                )}
-                {person.mood && (
-                  <div className="bg-green-50 rounded-lg p-3">
-                    <p className="text-xs text-green-500 font-semibold uppercase tracking-wide">Mood</p>
-                    <p className="text-sm text-green-900 mt-1">{person.mood}</p>
-                  </div>
-                )}
-                {person.interests && (
-                  <div className="bg-orange-50 rounded-lg p-3">
-                    <p className="text-xs text-orange-500 font-semibold uppercase tracking-wide">Interests</p>
-                    <p className="text-sm text-orange-900 mt-1">{person.interests}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Payment form */}
-            <div className="border-t border-slate-200 pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Lock size={18} className="text-slate-500" />
-                  <span className="font-semibold text-slate-700">Unlock Access</span>
-                </div>
-                <span className="text-2xl font-bold text-slate-900">
-                  KES {(person.unlockCost_cents / 100).toFixed(0)}
-                </span>
-              </div>
-
-              {status === 'polling' ? (
-                <div className="text-center py-6">
-                  <Loader className="animate-spin text-blue-600 mx-auto mb-3" size={32} />
-                  <p className="font-semibold text-slate-900">Waiting for M-Pesa payment...</p>
-                  <p className="text-sm text-slate-500 mt-1">
-                    Check your phone and enter your M-Pesa PIN to complete payment.
-                  </p>
-                  <p className="text-xs text-slate-400 mt-2">Checking status... ({pollCount}/20)</p>
-                </div>
-              ) : (
-                <form onSubmit={handleUnlock} className="space-y-4">
-                  {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                      {error}
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">
-                      M-Pesa Phone Number
-                    </label>
-                    <input
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="254712345678"
-                      className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">Format: 254712345678</p>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={status === 'pending'}
-                    className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2"
-                  >
-                    {status === 'pending' ? (
-                      <>
-                        <Loader size={18} className="animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Lock size={18} />
-                        Pay KES {(person.unlockCost_cents / 100).toFixed(0)} &amp; Unlock
-                      </>
-                    )}
-                  </button>
-                </form>
-              )}
-            </div>
+      <div className="max-w-2xl mx-auto w-full px-6 py-6 space-y-6 pb-16">
+        {/* Hero gradient */}
+        <div className="relative -mx-6 -mt-6 h-36 bg-gradient-to-br from-primary/20 via-transparent to-transparent rounded-b-3xl overflow-hidden">
+          <div className="absolute inset-0 opacity-30 blur-3xl">
+            <div className="absolute -top-20 -right-20 w-80 h-80 bg-primary/40 rounded-full" />
           </div>
         </div>
+
+        {/* Avatar + info */}
+        <div className="flex flex-col items-center text-center space-y-4 -mt-20 relative z-10">
+          <div className="relative">
+            <div className="absolute inset-0 -m-1 bg-gradient-to-br from-primary to-primary/50 rounded-full blur opacity-75 animate-pulse" />
+            <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-zinc-950 shadow-2xl relative bg-zinc-900">
+              {person.avatar_url ? (
+                <img src={person.avatar_url} alt={person.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900">
+                  <span className="text-zinc-300 text-4xl font-bold">
+                    {person.name.substring(0, 2).toUpperCase()}
+                  </span>
+                </div>
+              )}
+            </div>
+            <span className="absolute bottom-1 right-1 w-6 h-6 bg-primary rounded-full border-4 border-zinc-950 shadow-lg" />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-center gap-2">
+              <h1 className="text-4xl font-bold text-balance">{person.name}</h1>
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+            {person.username && (
+              <p className="text-zinc-500 text-sm mt-1">@{person.username.replace('@', '')}</p>
+            )}
+            <div className="flex items-center justify-center gap-1 mt-2">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <p className="text-sm font-medium text-primary">Active now</p>
+            </div>
+          </div>
+
+          {/* Badges */}
+          <div className="flex flex-wrap gap-2 justify-center pt-1">
+            <span className="bg-primary/20 text-primary border border-primary/30 rounded-full text-xs font-medium px-3 py-1 flex items-center gap-1">
+              <Briefcase className="w-3 h-3" />
+              {categoryLabel}
+            </span>
+            {person.mood && (
+              <span className="bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-full text-xs font-medium px-3 py-1 flex items-center gap-1">
+                <Heart className="w-3 h-3" />
+                {person.mood.charAt(0).toUpperCase() + person.mood.slice(1)}
+              </span>
+            )}
+            {person.speakingStyle && (
+              <span className="bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-full text-xs font-medium px-3 py-1">
+                {person.speakingStyle}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* About */}
+        {person.bio && (
+          <div className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-primary/20 rounded-2xl p-6">
+            <h2 className="text-xs font-semibold text-primary uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5" /> About
+            </h2>
+            <p className="text-zinc-200 leading-relaxed text-base italic font-light">{person.bio}</p>
+          </div>
+        )}
+
+        {/* Interests */}
+        {interestsList.length > 0 && (
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
+            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Interests</h2>
+            <div className="flex flex-wrap gap-2">
+              {interestsList.map((interest, i) => (
+                <span
+                  key={i}
+                  className="bg-primary/15 text-primary border border-primary/40 rounded-full text-xs px-3 py-1.5 font-medium"
+                >
+                  {interest}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Conversations', value: '1.2k+' },
+            { label: 'Positive', value: '98%' },
+            { label: 'Rating', value: '4.8★' },
+          ].map((s) => (
+            <div key={s.label} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-center">
+              <p className="text-2xl font-bold text-primary">{s.value}</p>
+              <p className="text-[11px] text-zinc-500 mt-1">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA */}
+        {hasAccess ? (
+          <Link
+            href={`/dashboard/chat-foreigners/chat/${person.id}`}
+            className="flex items-center justify-center gap-2 w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-14 rounded-full text-lg shadow-[0_0_20px_rgba(0,168,132,0.3)] transition-colors"
+          >
+            <MessageSquare className="w-5 h-5" />
+            Open Chat
+          </Link>
+        ) : (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-zinc-400" />
+                <span className="font-semibold text-zinc-300">Unlock to Chat</span>
+              </div>
+              <span className="text-2xl font-bold text-zinc-100">KES {unlockPrice}</span>
+            </div>
+
+            {status === 'polling' ? (
+              <div className="flex flex-col items-center py-6 gap-3">
+                <Loader2 className="animate-spin text-primary" size={36} />
+                <p className="font-semibold text-zinc-200">Waiting for M-Pesa payment...</p>
+                <p className="text-sm text-zinc-500 text-center">
+                  Enter your PIN on the prompt sent to your phone.
+                </p>
+                <p className="text-xs text-zinc-600">Checking... ({pollCount}/24)</p>
+                <button
+                  onClick={() => { setStatus('idle'); setPollCount(0); }}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mt-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleUnlock} className="space-y-4">
+                {error && (
+                  <div className="bg-red-950/50 border border-red-900/50 text-red-400 px-4 py-3 rounded-xl text-sm">
+                    {error}
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-zinc-400">M-Pesa Number</label>
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="e.g. 0712345678"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    autoComplete="tel"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={status === 'pending'}
+                  className="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-bold h-12 rounded-full transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {status === 'pending' ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      Sending prompt...
+                    </>
+                  ) : (
+                    <>
+                      <Lock size={16} />
+                      Pay KES {unlockPrice} via M-Pesa
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

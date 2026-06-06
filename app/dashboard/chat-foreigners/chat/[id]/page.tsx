@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Send, Loader } from 'lucide-react';
+import { ArrowLeft, Send, Loader, MoreVertical, Phone, Video, CheckCircle2, Lock } from 'lucide-react';
+import { format } from 'date-fns';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -36,12 +37,13 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
+  const [milestoneReached, setMilestoneReached] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Load person details
         const personRes = await fetch(`/api/chat-foreigners/bots?type=details&botId=${personId}`);
         const personData = await personRes.json();
 
@@ -51,7 +53,6 @@ export default function ChatPage() {
         }
         setPerson(personData.data);
 
-        // Check access
         const accessRes = await fetch(`/api/chat-foreigners/bots?type=check&botId=${personId}`);
         const accessData = await accessRes.json();
 
@@ -63,13 +64,23 @@ export default function ChatPage() {
         setHasAccess(true);
         setMessageCount(accessData.data?.messageCount || 0);
 
-        // Add welcome message
+        if (accessData.data?.firstMilestoneComplete) {
+          setMilestoneReached(true);
+        }
+
         if (personData.data) {
           const p = personData.data;
+          const greetings = [
+            `Hey you! How are you doing today? Like really doing? 😊`,
+            `Hi! So glad you reached out. What's on your mind?`,
+            `Hey! Good timing — I was just thinking. How are you?`,
+            `Hello! You caught me at a great time. What's up?`,
+          ];
+          const greeting = greetings[Math.floor(Math.random() * greetings.length)];
           setMessages([
             {
               role: 'assistant',
-              content: `Hi! I am ${p.name}. ${p.bio || ''} How can I help you today?`,
+              content: greeting,
               timestamp: new Date(),
             },
           ]);
@@ -124,12 +135,15 @@ export default function ChatPage() {
           },
         ]);
         setMessageCount((prev) => prev + 1);
+        if (data.milestoneReached) {
+          setMilestoneReached(true);
+        }
       } else {
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            content: 'Sorry, I could not process your message. Please try again.',
+            content: 'Sorry, could not process your message right now. Try again in a moment.',
             timestamp: new Date(),
           },
         ]);
@@ -140,7 +154,7 @@ export default function ChatPage() {
         ...prev,
         {
           role: 'assistant',
-          content: 'Sorry, something went wrong. Please try again.',
+          content: 'Something went wrong. Please try again.',
           timestamp: new Date(),
         },
       ]);
@@ -158,105 +172,166 @@ export default function ChatPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <Loader className="animate-spin text-blue-600" size={32} />
+      <div className="flex flex-col h-screen bg-zinc-950 items-center justify-center">
+        <Loader className="animate-spin text-primary" size={32} />
+        <p className="text-zinc-500 mt-3 text-sm">Loading chat...</p>
       </div>
     );
   }
 
   if (!person || !hasAccess) return null;
 
-  return (
-    <div className="flex flex-col h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-4 shadow-sm">
-        <Link
-          href="/dashboard/chat-foreigners"
-          className="text-slate-500 hover:text-slate-800 transition"
-        >
-          <ArrowLeft size={20} />
-        </Link>
-        {person.avatar_url && (
-          <img
-            src={person.avatar_url}
-            alt={person.name}
-            className="w-10 h-10 rounded-full object-cover"
-          />
-        )}
-        <div className="flex-1">
-          <h2 className="font-bold text-slate-900">{person.name}</h2>
-          {person.username && (
-            <p className="text-xs text-slate-500">@{person.username} &bull; {person.category}</p>
-          )}
-        </div>
-        <div className="text-xs text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-          {messageCount} messages
-        </div>
-      </div>
+  const isOnline = true;
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-        {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-3`}
+  return (
+    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
+      {/* Header */}
+      <header className="px-3 py-3 border-b border-zinc-800 bg-zinc-900 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/chat-foreigners"
+            className="p-2 -ml-2 rounded-full hover:bg-zinc-800 transition-colors"
           >
-            {msg.role === 'assistant' && person.avatar_url && (
-              <img
-                src={person.avatar_url}
-                alt={person.name}
-                className="w-8 h-8 rounded-full object-cover self-end flex-shrink-0"
-              />
-            )}
-            <div
-              className={`max-w-[70%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                msg.role === 'user'
-                  ? 'bg-blue-600 text-white rounded-br-sm'
-                  : 'bg-white text-slate-800 border border-slate-200 rounded-bl-sm shadow-sm'
-              }`}
-            >
-              {msg.content}
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div className="flex items-center gap-3 cursor-pointer group">
+            <div className="relative">
+              <div className="w-10 h-10 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 flex items-center justify-center">
+                {person.avatar_url ? (
+                  <img src={person.avatar_url} alt={person.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-zinc-300 font-bold text-sm">
+                    {person.name.substring(0, 2).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              {isOnline && (
+                <span className="absolute bottom-0 right-0 w-3 h-3 bg-primary rounded-full border-2 border-zinc-900" />
+              )}
+            </div>
+            <div>
+              <h2 className="font-semibold text-sm">{person.name}</h2>
+              <p className="text-xs text-primary">{isOnline ? 'Active now' : 'Away'}</p>
             </div>
           </div>
-        ))}
-        {sending && (
-          <div className="flex justify-start gap-3">
-            {person.avatar_url && (
-              <img
-                src={person.avatar_url}
-                alt={person.name}
-                className="w-8 h-8 rounded-full object-cover self-end flex-shrink-0"
-              />
-            )}
-            <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        </div>
+        <div className="flex items-center gap-1">
+          <button className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition-colors">
+            <Video className="w-5 h-5" />
+          </button>
+          <button className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition-colors">
+            <Phone className="w-5 h-5" />
+          </button>
+          <button className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition-colors">
+            <MoreVertical className="w-5 h-5" />
+          </button>
+        </div>
+      </header>
+
+      {/* Milestone Banner */}
+      {milestoneReached && (
+        <div className="bg-primary/20 border-b border-primary/30 px-4 py-2 flex items-center gap-2 text-sm text-primary">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span className="font-medium">Milestone reached! Your referrer earned a bonus.</span>
+        </div>
+      )}
+
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-zinc-950 relative">
+        <div
+          className="absolute inset-0 opacity-5 pointer-events-none"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }}
+        />
+
+        <div className="text-center text-xs text-zinc-500 my-2">
+          Chat started today
+        </div>
+
+        {messages.map((msg, idx) => {
+          const isUser = msg.role === 'user';
+          return (
+            <div key={idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+              {!isUser && (
+                <div className="w-7 h-7 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 flex items-center justify-center mr-2 mt-1 shrink-0 self-end">
+                  {person.avatar_url ? (
+                    <img src={person.avatar_url} alt={person.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-zinc-300 font-bold text-[10px]">
+                      {person.name.substring(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              )}
+              <div
+                className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+                  isUser
+                    ? 'bg-primary text-primary-foreground rounded-tr-sm'
+                    : 'bg-zinc-800 text-zinc-100 rounded-tl-sm border border-zinc-700/50'
+                }`}
+              >
+                <p className="text-sm leading-relaxed">{msg.content}</p>
+                <div className={`text-[10px] mt-1 text-right ${isUser ? 'text-primary-foreground/70' : 'text-zinc-500'}`}>
+                  {format(new Date(msg.timestamp), 'HH:mm')}
+                </div>
               </div>
             </div>
+          );
+        })}
+
+        {sending && (
+          <div className="flex justify-start">
+            <div className="w-7 h-7 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 flex items-center justify-center mr-2 self-end shrink-0">
+              {person.avatar_url ? (
+                <img src={person.avatar_url} alt={person.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-zinc-300 font-bold text-[10px]">
+                  {person.name.substring(0, 2).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="bg-zinc-800 rounded-2xl rounded-tl-sm px-4 py-3 flex gap-1 items-center border border-zinc-700/50">
+              <div className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <div className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <div className="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" />
+            </div>
           </div>
         )}
+
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="bg-white border-t border-slate-200 px-4 py-3">
-        <div className="flex items-end gap-3 max-w-3xl mx-auto">
+      {/* Message count chip */}
+      <div className="flex justify-center pb-1 bg-zinc-950">
+        <span className="text-[11px] text-zinc-500 bg-zinc-900 border border-zinc-800 rounded-full px-3 py-0.5">
+          {messageCount} messages sent
+        </span>
+      </div>
+
+      {/* Input Area */}
+      <div className="px-3 py-3 bg-zinc-900 border-t border-zinc-800 shrink-0">
+        <div className="flex items-end gap-2">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={`Message ${person.name}...`}
             rows={1}
-            className="flex-1 resize-none px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm leading-relaxed"
+            className="flex-1 resize-none bg-zinc-800 border border-zinc-700 rounded-full px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 max-h-28 leading-relaxed"
+            style={{ scrollbarWidth: 'none' }}
           />
           <button
             onClick={sendMessage}
             disabled={sending || !input.trim()}
-            className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            className="p-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full w-10 h-10 flex items-center justify-center shrink-0 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {sending ? <Loader size={20} className="animate-spin" /> : <Send size={20} />}
+            {sending ? (
+              <Loader size={18} className="animate-spin" />
+            ) : (
+              <Send size={18} />
+            )}
           </button>
         </div>
       </div>
