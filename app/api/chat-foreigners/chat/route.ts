@@ -337,7 +337,77 @@ function buildSystemPrompt(bot: {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    const body = await request.json();
+    const { personId, message, history, freePreview } = body;
+
+    if (!personId || !message) {
+      return NextResponse.json({ success: false, error: 'Missing personId or message' }, { status: 400 });
+    }
+
+    // ── Free-preview path: no auth or DB access required ─────────────────────
+    if (freePreview) {
+      await connectToDatabase();
+      const person = await ChatForeignersBot.findById(personId).lean() as any;
+      if (!person) {
+        return NextResponse.json({ success: false, error: 'Person not found' }, { status: 404 });
+      }
+
+      let trainingData: Record<string, unknown> = {};
+      if (person.training_data) {
+        try {
+          trainingData =
+            typeof person.training_data === 'string'
+              ? JSON.parse(person.training_data)
+              : person.training_data;
+        } catch { trainingData = {}; }
+      }
+
+      const conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = (history || [])
+        .slice(-10)
+        .map((m: any) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+      let reply = '';
+
+      if (nvidiaClient) {
+        try {
+          const systemPrompt = buildSystemPrompt(person, trainingData);
+          const messages = [
+            { role: 'system' as const, content: systemPrompt },
+            ...conversationHistory,
+            { role: 'user' as const, content: message },
+          ];
+          const completion = await nvidiaClient.chat.completions.create({
+            model: 'meta/llama-3.3-70b-instruct',
+            messages,
+            temperature: 0.2,
+            top_p: 0.7,
+            max_tokens: 1024,
+            stream: false,
+          });
+          reply = completion.choices[0]?.message?.content ?? '';
+        } catch (err: any) {
+          console.warn('[CF Chat] NVIDIA error (free preview):', err?.message ?? err);
+          reply = fallbackReply(message, person.personalityType || person.category || 'relationship');
+        }
+      } else {
+        reply = fallbackReply(message, person.personalityType || person.category || 'relationship');
+      }
+
+      return NextResponse.json({ success: true, reply, messageCount: 0, milestoneReached: false });
+    }
+
+    // ── Authenticated path ────────────────────────────────────────────────────
+    let session: any;
+    try {
+      session = await auth();
+    } catch (err: any) {
+      console.error('[CF Chat] Auth error:', err?.message ?? err);
+      return NextResponse.json(
+        { success: false, error: 'Authentication service unavailable. Please try again.' },
+        { status: 503 }
+      );
+    }
+
     const sessionId = (session?.user as any)?.id || (session?.user as any)?.userId;
 
     if (!session?.user) {
@@ -356,12 +426,6 @@ export async function POST(request: NextRequest) {
 
     if (!currentUser) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
-    }
-
-    const { personId, message, history } = await request.json();
-
-    if (!personId || !message) {
-      return NextResponse.json({ success: false, error: 'Missing personId or message' }, { status: 400 });
     }
 
     // Verify access

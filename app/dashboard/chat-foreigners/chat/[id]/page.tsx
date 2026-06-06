@@ -176,9 +176,12 @@ export default function ChatPage() {
         ]);
         if (hasFullAccess) setMessageCount((prev) => prev + 1);
       } else {
+        const errMsg = data.error
+          ? `Could not get a response: ${data.error}`
+          : 'Sorry, could not process your message right now. Try again in a moment.';
         setMessages((prev) => [
           ...prev,
-          { role: 'assistant', content: 'Sorry, could not process your message right now. Try again in a moment.', timestamp: new Date() },
+          { role: 'assistant', content: errMsg, timestamp: new Date() },
         ]);
       }
     } catch {
