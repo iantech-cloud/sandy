@@ -28,7 +28,7 @@
  */
 
 import mongoose from 'mongoose';
-import { connectToDatabase, Profile, Referral } from '../app/lib/models';
+import { connectToDatabase, Profile, Referral } from '../app/lib/models.js';
 
 async function backfillChatForeignersReferrals() {
   try {
