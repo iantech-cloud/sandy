@@ -44,6 +44,23 @@ const ChatForeignersBotSchema = new Schema({
   nationality: {
     type: String,
   },
+  tagline: {
+    type: String,
+  },
+  welcomeMessage: {
+    type: String,
+  },
+  purpose: {
+    type: String,
+  },
+  languages: {
+    type: [String],
+    default: ['English'],
+  },
+  availabilityNote: {
+    type: String,
+    default: 'Available 24/7',
+  },
   category: { 
     type: String,
     default: 'general'

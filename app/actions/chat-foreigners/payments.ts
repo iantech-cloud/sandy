@@ -163,46 +163,130 @@ export async function initiateBotUnlockViaMpesa(
 }
 
 // ========================================================================
-// Check Bot Unlock Payment Status
+// Check Bot Unlock Payment Status — mirrors checkActivationPaymentStatus
+// Accepts the messageReference (checkout_request_id) used at STK push time,
+// queries the Co-op Bank Enquiry API (same as activation), persists the
+// result, and auto-triggers completeBotUnlockPayment when confirmed.
 // ========================================================================
-export async function checkBotUnlockMpesaStatus(paymentId: string) {
+export async function checkBotUnlockPaymentStatus(messageReference: string) {
   try {
     await connectToDatabase();
     const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
-      return { success: false, error: 'Not authenticated' };
+      return { success: false, message: 'User not authenticated' };
     }
 
-    const payment = await ChatForeignersPayment.findById(paymentId);
-    if (!payment) {
-      return { success: false, error: 'Payment not found' };
-    }
+    // Look up by checkout_request_id (= messageRef set at STK push time)
+    const mpesaTransaction = await ChatForeignersMpesaTransaction.findOne({
+      checkout_request_id: messageReference,
+    });
 
-    if (payment.user_id !== currentUser._id) {
-      return { success: false, error: 'Unauthorized' };
-    }
-
-    const mpesaTransaction = await ChatForeignersMpesaTransaction.findById(
-      payment.mpesa_transaction_id
-    );
     if (!mpesaTransaction) {
-      return { success: false, error: 'Transaction not found' };
+      return { success: false, message: 'Transaction not found' };
     }
 
-    return {
-      success: true,
-      data: {
-        status: payment.status,
-        transactionStatus: mpesaTransaction.status,
-        amount: payment.amount_cents / 100,
-      },
-    };
+    // Already in a terminal state — return cached result immediately
+    const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
+    if (terminalStatuses.includes(mpesaTransaction.status)) {
+      console.log('[ChatForeigners] Returning cached terminal status:', mpesaTransaction.status);
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultCode: mpesaTransaction.result_code?.toString(),
+          resultDesc: mpesaTransaction.result_desc,
+          mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+          amount: mpesaTransaction.amount_cents / 100,
+          source: mpesaTransaction.metadata?.callback_processed ? 'coop_callback' : 'database',
+        },
+      };
+    }
+
+    // Callback already flagged it as processed — return current status
+    if (mpesaTransaction.metadata?.callback_processed) {
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          source: 'callback_processed',
+        },
+      };
+    }
+
+    // Query Co-op Bank Enquiry API — same as activation flow
+    try {
+      const coopBank = createCoopBankService();
+      const statusResponse = await coopBank.getTransactionStatus(messageReference);
+      const { CoopBankService } = await import('@/app/lib/services/coop-bank');
+      const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+
+      console.log('[ChatForeigners] Status poll:', {
+        messageReference,
+        responseCode: statusResponse.ResponseCode,
+        mappedStatus,
+        description: statusResponse.ResponseDescription,
+      });
+
+      // Persist the updated status
+      const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
+      const safeResultCode = isNaN(resultCode) ? 1 : resultCode;
+
+      await ChatForeignersMpesaTransaction.findByIdAndUpdate(mpesaTransaction._id, {
+        status: mappedStatus,
+        result_code: safeResultCode,
+        result_desc: statusResponse.ResponseDescription || '',
+        ...(mappedStatus === 'completed' ? { completed_at: new Date() } : {}),
+        ...(['failed', 'cancelled', 'timeout'].includes(mappedStatus) ? { failed_at: new Date() } : {}),
+      });
+
+      // If completed via poll (callback missed), run unlock completion logic
+      if (mappedStatus === 'completed') {
+        console.log('[ChatForeigners] Unlock confirmed via status poll, completing...');
+        const payment = await ChatForeignersPayment.findOne({
+          mpesa_transaction_id: mpesaTransaction._id,
+        });
+        if (payment && payment.status !== 'completed') {
+          await completeBotUnlockPayment(mpesaTransaction._id.toString());
+        }
+      }
+
+      let userMessage = `Payment status: ${mappedStatus}`;
+      if (mappedStatus === 'completed') userMessage = 'Payment confirmed! Unlocking chat...';
+      else if (mappedStatus === 'failed') userMessage = `Payment failed: ${statusResponse.ResponseDescription || 'Transaction could not be processed'}`;
+      else if (mappedStatus === 'timeout') userMessage = 'Payment timed out. Please check your M-Pesa history and try again.';
+      else if (mappedStatus === 'cancelled') userMessage = 'Payment cancelled. You can try again.';
+      else if (mappedStatus === 'pending') userMessage = 'Payment still processing. Please wait...';
+
+      return {
+        success: true,
+        data: {
+          status: mappedStatus,
+          resultCode: statusResponse.ResponseCode,
+          resultDesc: statusResponse.ResponseDescription || '',
+          amount: mpesaTransaction.amount_cents / 100,
+          source: 'coop_api',
+        },
+        message: userMessage,
+      };
+    } catch (apiError) {
+      console.error('[ChatForeigners] Co-op Bank API error, returning DB status:', apiError);
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultDesc: 'Checking payment status...',
+          source: 'database_fallback',
+        },
+        message: 'Using last known status. Please wait for payment confirmation.',
+      };
+    }
   } catch (error) {
-    console.error('[ChatForeigners] Status check error:', error);
+    console.error('[ChatForeigners] checkBotUnlockPaymentStatus error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'An error occurred',
+      message: 'Failed to check payment status. Please try again.',
+      data: { status: 'error', resultDesc: 'Unable to verify payment status' },
     };
   }
 }
