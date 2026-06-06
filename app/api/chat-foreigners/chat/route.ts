@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersReferralEarning, ChatForeignersWallet, ChatForeignersTransaction, Profile, Referral } from '@/app/lib/models';
 import { auth } from '@/auth';
+import OpenAI from 'openai';
+
+const nvidiaClient = process.env.NVIDIA_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.NVIDIA_API_KEY,
+      baseURL: 'https://integrate.api.nvidia.com/v1',
+    })
+  : null;
 
 // ── Typing delays by personality style ───────────────────────────────────────
 const TYPING_DELAYS_MS: Record<string, number> = {
@@ -393,15 +401,8 @@ export async function POST(request: NextRequest) {
     let reply = '';
 
     // Try NVIDIA API (preferred)
-    const nvidiaKey = process.env.NVIDIA_API_KEY;
-    if (nvidiaKey) {
+    if (nvidiaClient) {
       try {
-        const OpenAI = (await import('openai')).default;
-        const nvidiaClient = new OpenAI({
-          apiKey: nvidiaKey,
-          baseURL: 'https://integrate.api.nvidia.com/v1',
-        });
-
         const systemPrompt = buildSystemPrompt(person, trainingData);
         const messages = [
           { role: 'system' as const, content: systemPrompt },
@@ -438,7 +439,7 @@ export async function POST(request: NextRequest) {
           ],
           maxTokens: 200,
           temperature: 0.88,
-        });
+        } as any);
         reply = result.text;
       } catch (err) {
         console.warn('[CF Chat] AI Gateway error:', err);
