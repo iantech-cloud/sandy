@@ -2,15 +2,36 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MessageSquare, Users, Wallet, Sparkles, LogOut } from 'lucide-react';
-import { useSession, signOut } from 'next-auth/react';
+import { MessageSquare, Users, Wallet, Coins } from 'lucide-react';
+
+// Country flag emoji map — nationality to flag
+const NATIONALITY_FLAGS: Record<string, string> = {
+  'American': '🇺🇸',
+  'African American': '🇺🇸',
+  'British': '🇬🇧',
+  'Canadian': '🇨🇦',
+  'Australian': '🇦🇺',
+  'German': '🇩🇪',
+  'French': '🇫🇷',
+  'Spanish': '🇪🇸',
+  'Mexican': '🇲🇽',
+  'Brazilian': '🇧🇷',
+  'Japanese': '🇯🇵',
+  'Chinese': '🇨🇳',
+  'Indian': '🇮🇳',
+  'South African': '🇿🇦',
+  'Nigerian': '🇳🇬',
+  'Kenyan': '🇰🇪',
+};
 
 interface Person {
   id: string;
   name: string;
   username?: string;
   bio?: string;
+  tagline?: string;
   avatar_url?: string;
+  nationality?: string;
   personalityType?: string;
   speakingStyle?: string;
   mood?: string;
@@ -19,42 +40,34 @@ interface Person {
   unlockPrice: number;
 }
 
-const INTEREST_LABELS: Record<string, string> = {
-  relationship_coach: 'Relationships',
-  finance_mentor: 'Finance',
-  social_friend: 'Lifestyle',
-  business_advisor: 'Business',
-  companion: 'Companion',
-  therapist: 'Wellness',
-  gaming_friend: 'Gaming',
-  tech_mentor: 'Tech',
-};
-
 export default function ChatForeignersPage() {
-  const { data: session } = useSession();
   const [persons, setPersons] = useState<Person[]>([]);
   const [userAccess, setUserAccess] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [wallet, setWallet] = useState({ balance_cents: 0 });
+  const [stats, setStats] = useState({ chats: 0, messages: 0, unlockCost: 100 });
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [personsRes, accessRes, walletRes] = await Promise.all([
+        const [personsRes, accessRes] = await Promise.all([
           fetch('/api/chat-foreigners/bots?type=list'),
           fetch('/api/chat-foreigners/bots?type=access'),
-          fetch('/api/chat-foreigners/wallet'),
         ]);
-        const [personsData, accessData, walletData] = await Promise.all([
+        const [personsData, accessData] = await Promise.all([
           personsRes.json(),
           accessRes.json(),
-          walletRes.json(),
         ]);
 
         if (personsData.success) setPersons(personsData.data);
-        if (accessData.success)
-          setUserAccess(new Set(accessData.data.map((a: any) => a.botId)));
-        if (walletData.success) setWallet(walletData.data);
+        if (accessData.success) {
+          const accessSet = new Set<string>(accessData.data.map((a: any) => a.botId));
+          setUserAccess(accessSet);
+          setStats((s) => ({
+            ...s,
+            chats: accessData.data.length,
+            messages: accessData.data.reduce((sum: number, a: any) => sum + (a.messageCount || 0), 0),
+          }));
+        }
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -66,163 +79,133 @@ export default function ChatForeignersPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col h-screen bg-zinc-950 items-center justify-center">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="flex flex-col h-screen bg-[#0d0d14] items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#00c97a] border-t-transparent rounded-full animate-spin" />
         <p className="text-zinc-500 mt-3 text-sm">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 overflow-y-auto">
+    <div className="flex flex-col min-h-screen bg-[#0d0d14] text-zinc-100 overflow-y-auto">
       {/* Header */}
-      <header className="px-6 pt-6 pb-2 shrink-0 flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold mb-1">Chat Foreigners</h1>
-          <p className="text-zinc-400 text-sm">
-            Connect with unique personalities. Each conversation is real.
-          </p>
+      <header className="px-4 pt-5 pb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="w-6 h-6 text-[#00c97a]" />
+          <h1 className="text-xl font-bold tracking-tight">Chat Foreigners</h1>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href="/dashboard/chat-foreigners/wallet"
-            className="flex items-center gap-1.5 bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white hover:border-primary/50 rounded-full px-3 py-1.5 text-sm transition-colors"
+            className="flex items-center gap-1.5 bg-zinc-800/80 border border-zinc-700 text-zinc-300 hover:text-white rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
           >
-            <Wallet className="w-4 h-4 text-primary" />
-            <span>KES {(wallet.balance_cents / 100).toFixed(0)}</span>
+            <Wallet className="w-3.5 h-3.5 text-[#00c97a]" />
+            Wallet
           </Link>
-          <button
-            onClick={() => signOut({ callbackUrl: '/auth/login' })}
-            className="p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-full transition-colors"
+          <Link
+            href="/dashboard/referrals"
+            className="flex items-center gap-1.5 bg-zinc-800/80 border border-zinc-700 text-zinc-300 hover:text-white rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
           >
-            <LogOut className="w-4 h-4" />
-          </button>
+            <Users className="w-3.5 h-3.5 text-[#00c97a]" />
+            Referrals
+          </Link>
         </div>
       </header>
 
-      {/* Quick Links */}
-      <div className="px-6 py-4 grid grid-cols-3 gap-3">
-        <Link
-          href="/dashboard/chat-foreigners/my-chats"
-          className="bg-zinc-900 border border-zinc-800 hover:border-primary/40 rounded-xl p-3 flex flex-col items-center gap-1.5 transition-colors"
-        >
-          <MessageSquare className="w-5 h-5 text-primary" />
-          <span className="text-xs text-zinc-400">My Chats</span>
-        </Link>
-        <Link
-          href="/dashboard/referrals"
-          className="bg-zinc-900 border border-zinc-800 hover:border-primary/40 rounded-xl p-3 flex flex-col items-center gap-1.5 transition-colors"
-        >
-          <Users className="w-5 h-5 text-primary" />
-          <span className="text-xs text-zinc-400">Referrals</span>
-        </Link>
-        <Link
-          href="/dashboard/chat-foreigners/wallet"
-          className="bg-zinc-900 border border-zinc-800 hover:border-primary/40 rounded-xl p-3 flex flex-col items-center gap-1.5 transition-colors"
-        >
-          <Wallet className="w-5 h-5 text-primary" />
-          <span className="text-xs text-zinc-400">Wallet</span>
-        </Link>
+      {/* Stats row */}
+      <div className="px-4 pb-3 grid grid-cols-3 gap-3">
+        <div className="bg-[#161622] border border-zinc-800 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-zinc-100">{stats.chats}</p>
+          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mt-0.5">Chats</p>
+        </div>
+        <div className="bg-[#161622] border border-zinc-800 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-zinc-100">{stats.messages}</p>
+          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mt-0.5">Messages</p>
+        </div>
+        <div className="bg-[#161622] border border-zinc-800 rounded-xl p-3 text-center">
+          <p className="text-lg font-bold text-zinc-100">Ksh {stats.unlockCost}</p>
+          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mt-0.5">Unlock</p>
+        </div>
       </div>
 
-      {/* Persons Grid */}
-      <div className="px-6 pb-10 flex-1">
-        <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-4">
-          Available Personalities
-        </h2>
+      {/* Section header */}
+      <div className="mx-4 mb-3 bg-[#161622] border border-zinc-800 rounded-2xl overflow-hidden">
+        {/* Rainbow top stripe */}
+        <div className="h-0.5 w-full bg-gradient-to-r from-[#00c97a] via-purple-500 via-pink-500 to-amber-400" />
+        <div className="px-4 py-3 flex items-center gap-2">
+          <span className="w-2.5 h-2.5 bg-[#00c97a] rounded-full animate-pulse" />
+          <div>
+            <p className="font-bold text-sm text-zinc-100">Foreigners online now</p>
+            <p className="text-[11px] text-zinc-500">Tap anyone to preview &middot; Unlock for unlimited chat</p>
+          </div>
+        </div>
 
+        {/* Bot grid */}
         {persons.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-600">
-            <MessageSquare className="w-12 h-12 mb-3 text-zinc-700" />
-            <p className="font-medium">No personalities available yet</p>
-            <p className="text-sm mt-1">Check back soon!</p>
+          <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
+            <MessageSquare className="w-10 h-10 mb-2 text-zinc-700" />
+            <p className="text-sm">No personalities available yet</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-3 gap-2 px-3 pb-4">
             {persons.map((person) => {
               const unlocked = userAccess.has(person.id);
-              const categoryLabel =
-                INTEREST_LABELS[person.personalityType || ''] ??
-                INTEREST_LABELS[person.category] ??
-                person.category;
+              const flag = NATIONALITY_FLAGS[person.nationality || ''] ?? '🌐';
+              const nationalityLabel = person.nationality || 'International';
 
               return (
                 <Link
                   key={person.id}
-                  href={unlocked ? `/dashboard/chat-foreigners/chat/${person.id}` : `/dashboard/chat-foreigners/unlock/${person.id}`}
-                  className="bg-zinc-900 border border-zinc-800 hover:border-primary/50 rounded-2xl overflow-hidden group transition-all cursor-pointer"
+                  href={unlocked
+                    ? `/dashboard/chat-foreigners/chat/${person.id}`
+                    : `/dashboard/chat-foreigners/unlock/${person.id}`}
+                  className="flex flex-col items-center bg-[#1c1c2e] rounded-2xl pt-4 pb-3 px-2 gap-2 hover:bg-[#212135] transition-colors active:scale-95 duration-150"
                 >
-                  {/* Cover + Avatar */}
-                  <div className="h-20 bg-gradient-to-r from-zinc-800 to-zinc-900 relative">
-                    <div className="absolute -bottom-8 left-4">
-                      <div className="relative">
-                        <div className="w-16 h-16 rounded-full overflow-hidden border-4 border-zinc-900 bg-zinc-800 shadow-xl">
-                          {person.avatar_url ? (
-                            <img
-                              src={person.avatar_url}
-                              alt={person.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/30 to-primary/10">
-                              <span className="text-zinc-200 font-bold text-xl">
-                                {person.name.substring(0, 2).toUpperCase()}
-                              </span>
-                            </div>
-                          )}
+                  {/* Avatar */}
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#2a2a40] bg-zinc-800">
+                      {person.avatar_url ? (
+                        <img
+                          src={person.avatar_url}
+                          alt={person.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#00c97a]/20 to-zinc-800">
+                          <span className="text-zinc-200 font-bold text-lg">
+                            {person.name.substring(0, 2).toUpperCase()}
+                          </span>
                         </div>
-                        {/* online indicator */}
-                        <span className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-primary rounded-full border-2 border-zinc-900" />
-                      </div>
+                      )}
                     </div>
+                    {/* Online dot */}
+                    <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-[#00c97a] rounded-full border-2 border-[#1c1c2e]" />
                     {unlocked && (
-                      <div className="absolute top-2 right-2 bg-primary/20 text-primary border border-primary/30 rounded-full text-[10px] font-semibold px-2 py-0.5">
-                        Unlocked
-                      </div>
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#00c97a] rounded-full border-2 border-[#1c1c2e] flex items-center justify-center">
+                        <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </span>
                     )}
                   </div>
 
-                  {/* Card body */}
-                  <div className="p-4 pt-10">
-                    <div className="flex justify-between items-start mb-1.5">
-                      <div>
-                        <h3 className="font-bold text-base leading-tight group-hover:text-primary transition-colors">
-                          {person.name}
-                        </h3>
-                        {person.username && (
-                          <p className="text-xs text-zinc-500">@{person.username.replace('@', '')}</p>
-                        )}
-                      </div>
-                      <span className="text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700 rounded-full px-2 py-0.5">
-                        {categoryLabel}
-                      </span>
-                    </div>
+                  {/* Name */}
+                  <p className="text-xs font-bold text-zinc-100 text-center leading-tight">
+                    {person.name}
+                  </p>
 
-                    {person.bio && (
-                      <p className="text-sm text-zinc-400 line-clamp-2 mb-3 h-10 leading-5">
-                        {person.bio}
-                      </p>
-                    )}
+                  {/* Nationality + flag */}
+                  <p className="text-[10px] text-zinc-400 text-center leading-none">
+                    {flag} {nationalityLabel}
+                  </p>
 
-                    <div
-                      className={`flex items-center justify-center gap-1.5 text-sm font-medium rounded-lg p-2 transition-colors ${
-                        unlocked
-                          ? 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground'
-                          : 'bg-zinc-800 text-zinc-300 group-hover:bg-zinc-700'
-                      }`}
-                    >
-                      {unlocked ? (
-                        <>
-                          <MessageSquare className="w-4 h-4" />
-                          Open Chat
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-4 h-4" />
-                          Connect &mdash; KES 100
-                        </>
-                      )}
-                    </div>
+                  {/* Earn button */}
+                  <div className="w-full mt-0.5 bg-[#2a1f00] border border-[#7a5500] hover:bg-[#3a2a00] rounded-xl px-1 py-2 flex items-center justify-center gap-1 transition-colors">
+                    <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="text-[10px] font-bold text-amber-400 text-center leading-tight">
+                      Earn Ksh{'\n'}1,000
+                    </span>
                   </div>
                 </Link>
               );
@@ -230,6 +213,9 @@ export default function ChatForeignersPage() {
           </div>
         )}
       </div>
+
+      {/* Bottom padding */}
+      <div className="h-6" />
     </div>
   );
 }

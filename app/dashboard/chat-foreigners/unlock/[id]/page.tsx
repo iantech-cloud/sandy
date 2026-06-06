@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, MessageSquare, Loader2, Briefcase, Sparkles, Heart, Lock } from 'lucide-react';
+import {
+  ArrowLeft, MessageSquare, Loader2, Lock, Sparkles, Globe,
+  Zap, ShieldCheck, Info, BadgeCheck, Heart, Clock, Star,
+} from 'lucide-react';
 
 interface Person {
   id: string;
@@ -11,6 +14,12 @@ interface Person {
   username: string;
   avatar_url?: string;
   bio?: string;
+  tagline?: string;
+  welcomeMessage?: string;
+  purpose?: string;
+  nationality?: string;
+  languages?: string[];
+  availabilityNote?: string;
   personalityType?: string;
   speakingStyle?: string;
   mood?: string;
@@ -22,15 +31,36 @@ interface Person {
 
 type UnlockStatus = 'idle' | 'pending' | 'polling' | 'success' | 'failed';
 
-const INTEREST_LABELS: Record<string, string> = {
+const CATEGORY_LABELS: Record<string, string> = {
   relationship_coach: 'Relationships',
   finance_mentor: 'Finance & Investing',
   social_friend: 'Lifestyle',
-  business_advisor: 'Business & Entrepreneurship',
-  companion: 'Deep Conversations',
+  business_advisor: 'Business',
+  companion: 'Companion',
   therapist: 'Mental Wellness',
-  gaming_friend: 'Gaming & Tech',
-  tech_mentor: 'Software & Career',
+  gaming_friend: 'Gaming',
+  tech_mentor: 'Tech & Design',
+};
+
+const NATIONALITY_FLAGS: Record<string, string> = {
+  'American': '🇺🇸',
+  'African American': '🇺🇸',
+  'British': '🇬🇧',
+  'Canadian': '🇨🇦',
+  'Australian': '🇦🇺',
+  'German': '🇩🇪',
+  'French': '🇫🇷',
+};
+
+// Credibility stats per personality category
+const CATEGORY_STATS: Record<string, { label: string; value: string }[]> = {
+  therapist: [{ label: 'Conversations', value: '3.1k+' }, { label: 'Positive', value: '99%' }, { label: 'Rating', value: '4.9' }],
+  relationship_coach: [{ label: 'Helped', value: '2.4k+' }, { label: 'Positive', value: '97%' }, { label: 'Rating', value: '4.8' }],
+  finance_mentor: [{ label: 'Sessions', value: '1.8k+' }, { label: 'Accurate', value: '96%' }, { label: 'Rating', value: '4.7' }],
+  business_advisor: [{ label: 'Advised', value: '1.5k+' }, { label: 'Positive', value: '98%' }, { label: 'Rating', value: '4.8' }],
+  tech_mentor: [{ label: 'Solved', value: '2.0k+' }, { label: 'Helpful', value: '97%' }, { label: 'Rating', value: '4.9' }],
+  gaming_friend: [{ label: 'Games', value: '500+' }, { label: 'Fun', value: '99%' }, { label: 'Rating', value: '4.8' }],
+  default: [{ label: 'Conversations', value: '1.2k+' }, { label: 'Positive', value: '98%' }, { label: 'Rating', value: '4.8' }],
 };
 
 export default function UnlockPage() {
@@ -67,7 +97,7 @@ export default function UnlockPage() {
           setHasAccess(true);
         }
       } catch (err) {
-        console.error('[v0] Error loading person:', err);
+        console.error('Error loading person:', err);
       } finally {
         setLoading(false);
       }
@@ -98,8 +128,8 @@ export default function UnlockPage() {
           setError('Payment timed out. Please check your M-Pesa and try again.');
           clearInterval(interval);
         }
-      } catch (err) {
-        console.error('[v0] Poll error:', err);
+      } catch {
+        console.error('Poll error');
       }
     }, 5000);
 
@@ -131,7 +161,7 @@ export default function UnlockPage() {
         setStatus('failed');
         setError(data.error || 'Failed to initiate payment.');
       }
-    } catch (err) {
+    } catch {
       setStatus('failed');
       setError('Something went wrong. Please try again.');
     }
@@ -139,8 +169,8 @@ export default function UnlockPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col h-screen bg-zinc-950 items-center justify-center">
-        <Loader2 className="animate-spin text-primary" size={32} />
+      <div className="flex flex-col h-screen bg-[#0d0d14] items-center justify-center">
+        <Loader2 className="animate-spin text-[#00c97a]" size={32} />
       </div>
     );
   }
@@ -149,16 +179,16 @@ export default function UnlockPage() {
 
   if (status === 'success') {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl p-8 max-w-md w-full text-center text-zinc-100">
-          <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <MessageSquare className="w-8 h-8 text-primary" />
+      <div className="min-h-screen bg-[#0d0d14] flex items-center justify-center p-6">
+        <div className="bg-[#161622] border border-zinc-800 rounded-2xl shadow-xl p-8 max-w-md w-full text-center text-zinc-100">
+          <div className="w-16 h-16 bg-[#00c97a]/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <MessageSquare className="w-8 h-8 text-[#00c97a]" />
           </div>
           <h2 className="text-2xl font-bold mb-2">Connected!</h2>
           <p className="text-zinc-400 text-sm">
             You can now chat with {person.name}. Redirecting...
           </p>
-          <Loader2 className="animate-spin text-primary mx-auto mt-4" size={20} />
+          <Loader2 className="animate-spin text-[#00c97a] mx-auto mt-4" size={20} />
         </div>
       </div>
     );
@@ -166,37 +196,36 @@ export default function UnlockPage() {
 
   const interestsList = person.interests?.split(',').map((i) => i.trim()).filter(Boolean) ?? [];
   const categoryLabel =
-    INTEREST_LABELS[person.personalityType || ''] ??
-    INTEREST_LABELS[person.category] ??
+    CATEGORY_LABELS[person.personalityType || ''] ??
+    CATEGORY_LABELS[person.category] ??
     person.category;
-  const unlockPrice = 100; // Fixed KSH 100 for all personalities
+  const flag = NATIONALITY_FLAGS[person.nationality || ''] ?? '🌐';
+  const stats = CATEGORY_STATS[person.personalityType || ''] ?? CATEGORY_STATS.default;
+  const unlockPrice = 100; // Fixed KSH 100
 
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 overflow-y-auto">
+    <div className="flex flex-col min-h-screen bg-[#0d0d14] text-zinc-100 overflow-y-auto">
       {/* Header */}
-      <header className="px-4 py-4 flex items-center sticky top-0 bg-zinc-950/80 backdrop-blur-md z-10 border-b border-zinc-800">
+      <header className="px-4 py-4 flex items-center sticky top-0 bg-[#0d0d14]/90 backdrop-blur-md z-10 border-b border-zinc-800/50">
         <Link
           href="/dashboard/chat-foreigners"
           className="p-2 -ml-2 mr-2 rounded-full hover:bg-zinc-800 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h1 className="font-bold">Profile</h1>
+        <h1 className="font-bold text-sm">Profile</h1>
+        <div className="ml-auto flex items-center gap-1.5 text-[10px] font-semibold text-[#00c97a] bg-[#00c97a]/10 border border-[#00c97a]/25 rounded-full px-2.5 py-1">
+          <BadgeCheck className="w-3 h-3" />
+          AI Verified
+        </div>
       </header>
 
-      <div className="max-w-2xl mx-auto w-full px-6 py-6 space-y-6 pb-16">
-        {/* Hero gradient */}
-        <div className="relative -mx-6 -mt-6 h-36 bg-gradient-to-br from-primary/20 via-transparent to-transparent rounded-b-3xl overflow-hidden">
-          <div className="absolute inset-0 opacity-30 blur-3xl">
-            <div className="absolute -top-20 -right-20 w-80 h-80 bg-primary/40 rounded-full" />
-          </div>
-        </div>
-
-        {/* Avatar + info */}
-        <div className="flex flex-col items-center text-center space-y-4 -mt-20 relative z-10">
+      <div className="max-w-lg mx-auto w-full px-4 pb-16 space-y-4">
+        {/* Hero + Avatar */}
+        <div className="relative bg-gradient-to-b from-[#00c97a]/10 to-transparent rounded-2xl pt-8 pb-6 flex flex-col items-center text-center gap-3 -mx-0 mt-2">
           <div className="relative">
-            <div className="absolute inset-0 -m-1 bg-gradient-to-br from-primary to-primary/50 rounded-full blur opacity-75 animate-pulse" />
-            <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-zinc-950 shadow-2xl relative bg-zinc-900">
+            <div className="absolute inset-0 -m-1 bg-[#00c97a]/30 rounded-full blur-md" />
+            <div className="w-28 h-28 rounded-full overflow-hidden border-3 border-[#0d0d14] shadow-2xl relative bg-zinc-900">
               {person.avatar_url ? (
                 <img src={person.avatar_url} alt={person.name} className="w-full h-full object-cover" />
               ) : (
@@ -207,62 +236,118 @@ export default function UnlockPage() {
                 </div>
               )}
             </div>
-            <span className="absolute bottom-1 right-1 w-6 h-6 bg-primary rounded-full border-4 border-zinc-950 shadow-lg" />
+            <span className="absolute bottom-1 right-1 w-5 h-5 bg-[#00c97a] rounded-full border-2 border-[#0d0d14]" />
           </div>
 
           <div>
-            <div className="flex items-center justify-center gap-2">
-              <h1 className="text-4xl font-bold text-balance">{person.name}</h1>
-              <Sparkles className="w-5 h-5 text-primary" />
+            <div className="flex items-center justify-center gap-1.5">
+              <h1 className="text-3xl font-bold">{person.name}</h1>
+              <BadgeCheck className="w-5 h-5 text-[#00c97a]" />
             </div>
             {person.username && (
-              <p className="text-zinc-500 text-sm mt-1">@{person.username.replace('@', '')}</p>
+              <p className="text-zinc-500 text-xs mt-0.5">@{person.username.replace('@', '')}</p>
             )}
-            <div className="flex items-center justify-center gap-1 mt-2">
-              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              <p className="text-sm font-medium text-primary">Active now</p>
+            <div className="flex items-center justify-center gap-2 mt-2 text-xs text-zinc-400">
+              <span>{flag} {person.nationality || 'International'}</span>
+              <span className="text-zinc-700">·</span>
+              <span className="text-[#00c97a] font-medium flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-[#00c97a] rounded-full animate-pulse" />
+                Active now
+              </span>
             </div>
           </div>
 
+          {/* Tagline */}
+          {person.tagline && (
+            <p className="text-sm text-zinc-300 italic max-w-xs leading-relaxed text-balance">
+              &ldquo;{person.tagline}&rdquo;
+            </p>
+          )}
+
           {/* Badges */}
-          <div className="flex flex-wrap gap-2 justify-center pt-1">
-            <span className="bg-primary/20 text-primary border border-primary/30 rounded-full text-xs font-medium px-3 py-1 flex items-center gap-1">
-              <Briefcase className="w-3 h-3" />
+          <div className="flex flex-wrap gap-1.5 justify-center">
+            <span className="text-[10px] bg-[#00c97a]/10 text-[#00c97a] border border-[#00c97a]/25 rounded-full px-2.5 py-1 flex items-center gap-1">
+              <Sparkles className="w-2.5 h-2.5" />
               {categoryLabel}
             </span>
             {person.mood && (
-              <span className="bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-full text-xs font-medium px-3 py-1 flex items-center gap-1">
-                <Heart className="w-3 h-3" />
+              <span className="text-[10px] bg-zinc-800 text-zinc-400 border border-zinc-700 rounded-full px-2.5 py-1 flex items-center gap-1">
+                <Heart className="w-2.5 h-2.5" />
                 {person.mood.charAt(0).toUpperCase() + person.mood.slice(1)}
               </span>
             )}
             {person.speakingStyle && (
-              <span className="bg-zinc-800 text-zinc-300 border border-zinc-700 rounded-full text-xs font-medium px-3 py-1">
+              <span className="text-[10px] bg-zinc-800 text-zinc-400 border border-zinc-700 rounded-full px-2.5 py-1">
                 {person.speakingStyle}
               </span>
             )}
           </div>
         </div>
 
-        {/* About */}
-        {person.bio && (
-          <div className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-primary/20 rounded-2xl p-6">
-            <h2 className="text-xs font-semibold text-primary uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5" /> About
-            </h2>
-            <p className="text-zinc-200 leading-relaxed text-base italic font-light">{person.bio}</p>
+        {/* Welcome message preview */}
+        {person.welcomeMessage && (
+          <div className="bg-[#161622] border border-[#00c97a]/20 rounded-2xl p-4">
+            <p className="text-[10px] font-semibold text-[#00c97a] uppercase tracking-wider mb-2 flex items-center gap-1">
+              <MessageSquare className="w-3 h-3" /> Welcome Message
+            </p>
+            <div className="flex gap-2">
+              <div className="w-7 h-7 rounded-full overflow-hidden border border-zinc-700 bg-zinc-800 shrink-0 mt-0.5">
+                {person.avatar_url ? (
+                  <img src={person.avatar_url} alt={person.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="w-full h-full flex items-center justify-center text-zinc-300 font-bold text-xs">
+                    {person.name.substring(0, 2).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="bg-[#1c1c2e] rounded-xl rounded-tl-sm px-3 py-2.5 border border-zinc-700/40">
+                <p className="text-sm text-zinc-200 leading-relaxed">{person.welcomeMessage}</p>
+              </div>
+            </div>
           </div>
         )}
 
+        {/* Purpose */}
+        {person.purpose && (
+          <div className="bg-[#161622] border border-zinc-800 rounded-2xl p-4">
+            <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <Zap className="w-3 h-3" /> Purpose
+            </p>
+            <p className="text-sm text-zinc-300 leading-relaxed">{person.purpose}</p>
+          </div>
+        )}
+
+        {/* Bio */}
+        {person.bio && (
+          <div className="bg-[#161622] border border-zinc-800 rounded-2xl p-4">
+            <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <Info className="w-3 h-3" /> About
+            </p>
+            <p className="text-sm text-zinc-300 leading-relaxed">{person.bio}</p>
+          </div>
+        )}
+
+        {/* Credibility stats */}
+        <div className="grid grid-cols-3 gap-2">
+          {stats.map((s) => (
+            <div key={s.label} className="bg-[#161622] border border-zinc-800 rounded-xl p-3 text-center">
+              <p className="text-xl font-bold text-[#00c97a]">{s.value}</p>
+              <p className="text-[10px] text-zinc-500 mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
         {/* Interests */}
         {interestsList.length > 0 && (
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
-            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Interests</h2>
-            <div className="flex flex-wrap gap-2">
+          <div className="bg-[#161622] border border-zinc-800 rounded-2xl p-4">
+            <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-2.5 flex items-center gap-1">
+              <Star className="w-3 h-3" /> Interests &amp; Specialties
+            </p>
+            <div className="flex flex-wrap gap-1.5">
               {interestsList.map((interest, i) => (
                 <span
                   key={i}
-                  className="bg-primary/15 text-primary border border-primary/40 rounded-full text-xs px-3 py-1.5 font-medium"
+                  className="text-[10px] bg-[#00c97a]/10 text-[#00c97a] border border-[#00c97a]/25 rounded-full px-2.5 py-1 font-medium"
                 >
                   {interest}
                 </span>
@@ -271,47 +356,119 @@ export default function UnlockPage() {
           </div>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Conversations', value: '1.2k+' },
-            { label: 'Positive', value: '98%' },
-            { label: 'Rating', value: '4.8★' },
-          ].map((s) => (
-            <div key={s.label} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-center">
-              <p className="text-2xl font-bold text-primary">{s.value}</p>
-              <p className="text-[11px] text-zinc-500 mt-1">{s.label}</p>
-            </div>
-          ))}
+        {/* Availability + languages */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-[#161622] border border-zinc-800 rounded-xl p-3">
+            <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+              <Clock className="w-3 h-3" /> Availability
+            </p>
+            <p className="text-xs text-zinc-300">
+              {person.availabilityNote || 'Available 24/7'}
+            </p>
+          </div>
+          <div className="bg-[#161622] border border-zinc-800 rounded-xl p-3">
+            <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+              <Globe className="w-3 h-3" /> Languages
+            </p>
+            <p className="text-xs text-zinc-300">
+              {(person.languages ?? ['English']).join(', ')}
+            </p>
+          </div>
         </div>
 
-        {/* CTA */}
+        {/* Trust & safety */}
+        <div className="bg-[#161622] border border-zinc-800 rounded-2xl p-4 space-y-3">
+          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3" /> Trust &amp; Safety
+          </p>
+          <div className="space-y-2">
+            <div className="flex items-start gap-2.5">
+              <div className="w-5 h-5 rounded-full bg-[#00c97a]/10 flex items-center justify-center shrink-0 mt-0.5">
+                <BadgeCheck className="w-3 h-3 text-[#00c97a]" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-zinc-200">AI Disclosure</p>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  {person.name} is an AI-powered personality. Conversations are automated and for entertainment and guidance purposes only.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <div className="w-5 h-5 rounded-full bg-[#00c97a]/10 flex items-center justify-center shrink-0 mt-0.5">
+                <ShieldCheck className="w-3 h-3 text-[#00c97a]" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-zinc-200">Privacy Protected</p>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  Your conversations are private and not shared with third parties. Chat data is used only to improve your experience.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <div className="w-5 h-5 rounded-full bg-[#00c97a]/10 flex items-center justify-center shrink-0 mt-0.5">
+                <Info className="w-3 h-3 text-[#00c97a]" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-zinc-200">Safe &amp; Moderated</p>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  All responses follow strict content guidelines. For support or concerns, contact support@sandy.co.ke.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* CTA / Unlock */}
         {hasAccess ? (
           <Link
             href={`/dashboard/chat-foreigners/chat/${person.id}`}
-            className="flex items-center justify-center gap-2 w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold h-14 rounded-full text-lg shadow-[0_0_20px_rgba(0,168,132,0.3)] transition-colors"
+            className="flex items-center justify-center gap-2 w-full bg-[#00c97a] hover:bg-[#00b06a] text-white font-bold h-14 rounded-full text-base shadow-lg transition-colors"
           >
             <MessageSquare className="w-5 h-5" />
             Open Chat
           </Link>
         ) : (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
+          <div className="bg-[#161622] border border-zinc-800 rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-zinc-400" />
-                <span className="font-semibold text-zinc-300">Unlock to Chat</span>
+                <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <Lock className="w-4 h-4 text-amber-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-zinc-200 text-sm">Unlock Full Access</p>
+                  <p className="text-[10px] text-zinc-500">One-time payment &middot; via M-Pesa</p>
+                </div>
               </div>
-              <span className="text-2xl font-bold text-zinc-100">KES {unlockPrice}</span>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-zinc-100">KES {unlockPrice}</p>
+              </div>
+            </div>
+
+            {/* Value proposition */}
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              {[
+                ['Unlimited messages', ''],
+                ['KES 100 reward after 20 chats', ''],
+                ['Private & secure', ''],
+                ['Cancel anytime', ''],
+              ].map(([label]) => (
+                <div key={label} className="flex items-center gap-1.5 text-zinc-400">
+                  <span className="w-3.5 h-3.5 rounded-full bg-[#00c97a]/10 flex items-center justify-center shrink-0">
+                    <svg className="w-2 h-2 text-[#00c97a]" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </span>
+                  {label}
+                </div>
+              ))}
             </div>
 
             {status === 'polling' ? (
-              <div className="flex flex-col items-center py-6 gap-3">
-                <Loader2 className="animate-spin text-primary" size={36} />
-                <p className="font-semibold text-zinc-200">Waiting for M-Pesa payment...</p>
-                <p className="text-sm text-zinc-500 text-center">
-                  Enter your PIN on the prompt sent to your phone.
-                </p>
-                <p className="text-xs text-zinc-600">Checking... ({pollCount}/24)</p>
+              <div className="flex flex-col items-center py-5 gap-3">
+                <Loader2 className="animate-spin text-[#00c97a]" size={32} />
+                <p className="font-semibold text-zinc-200 text-sm">Waiting for M-Pesa payment...</p>
+                <p className="text-xs text-zinc-500 text-center">Enter your PIN on the prompt sent to your phone.</p>
+                <p className="text-[10px] text-zinc-600">Checking... ({pollCount}/24)</p>
                 <button
                   onClick={() => { setStatus('idle'); setPollCount(0); }}
                   className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mt-1"
@@ -320,31 +477,31 @@ export default function UnlockPage() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleUnlock} className="space-y-4">
+              <form onSubmit={handleUnlock} className="space-y-3">
                 {error && (
-                  <div className="bg-red-950/50 border border-red-900/50 text-red-400 px-4 py-3 rounded-xl text-sm">
+                  <div className="bg-red-950/50 border border-red-900/50 text-red-400 px-3 py-2.5 rounded-xl text-xs">
                     {error}
                   </div>
                 )}
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-zinc-400">M-Pesa Number</label>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-400">M-Pesa Number</label>
                   <input
                     type="tel"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="e.g. 0712345678"
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    className="w-full bg-[#0d0d14] border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-[#00c97a]/50 focus:ring-1 focus:ring-[#00c97a]/20 text-sm"
                     autoComplete="tel"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={status === 'pending'}
-                  className="w-full bg-zinc-700 hover:bg-zinc-600 text-white font-bold h-12 rounded-full transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full bg-[#00c97a] hover:bg-[#00b06a] text-white font-bold h-12 rounded-full transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {status === 'pending' ? (
                     <>
-                      <Loader2 size={18} className="animate-spin" />
+                      <Loader2 size={17} className="animate-spin" />
                       Sending prompt...
                     </>
                   ) : (
@@ -358,6 +515,17 @@ export default function UnlockPage() {
             )}
           </div>
         )}
+
+        {/* Referral note */}
+        <div className="bg-amber-950/20 border border-amber-800/30 rounded-xl px-4 py-3 flex items-start gap-2.5">
+          <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold text-amber-400">Earn KES 1,000 by sharing</p>
+            <p className="text-[10px] text-amber-700 mt-0.5 leading-relaxed">
+              Share your referral link and earn KES 60 every time someone you invite unlocks a personality.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
