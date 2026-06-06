@@ -191,8 +191,8 @@ export default function ChatPage() {
       ]);
     } finally {
       setSending(false);
-      // After free messages used, show gate
-      if (!hasFullAccess && freeMessagesUsed + 1 >= FREE_PREVIEW_MESSAGES) {
+      // Show gate after the last free message completes (freeMessagesUsed is pre-increment here)
+      if (!hasFullAccess && freeMessagesUsed >= FREE_PREVIEW_MESSAGES - 1) {
         setTimeout(() => setShowUnlockGate(true), 1200);
       }
     }
