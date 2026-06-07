@@ -3,8 +3,6 @@
  * Handles communication with NVIDIA NIM APIs for LLM and embeddings
  */
 
-import fetch from 'node-fetch';
-
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_LLM_ENDPOINT = process.env.NVIDIA_LLM_ENDPOINT || 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_EMBED_ENDPOINT = process.env.NVIDIA_EMBED_ENDPOINT || 'https://integrate.api.nvidia.com/v1';

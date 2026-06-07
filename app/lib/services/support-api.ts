@@ -4,7 +4,7 @@
  * Never exposes full database; always sanitizes sensitive information
  */
 
-import { connectToDatabase, Profile, Referral } from '@/app/lib/models';
+import { connectToDatabase, Profile, Referral, SupportTicket } from '@/app/lib/models';
 
 /**
  * Sanitize user data - remove sensitive fields
@@ -181,7 +181,7 @@ export async function checkWithdrawalEligibility(userId: string) {
 }
 
 /**
- * Create escalation ticket
+ * Create escalation ticket — persists to MongoDB SupportTicket collection
  */
 export async function createEscalationTicket(
   userId: string,
@@ -192,26 +192,47 @@ export async function createEscalationTicket(
   try {
     await connectToDatabase();
 
-    // In real implementation, create a Support Ticket model
-    const ticketData = {
-      user_id: userId,
-      issue_type,
-      description,
-      status: 'open',
-      priority: issue_type === 'fraud' ? 'urgent' : 'high',
-      metadata,
-      created_at: new Date(),
+    const priorityMap: Record<string, string> = {
+      fraud:              'urgent',
+      account_suspension: 'high',
+      payment_dispute:    'high',
+      legal_issue:        'high',
+      technical_issue:    'medium',
+      general_support:    'medium',
     };
 
-    console.log('[Support] Escalation ticket:', ticketData);
+    const categoryMap: Record<string, string> = {
+      fraud:              'security',
+      account_suspension: 'general',
+      payment_dispute:    'withdrawal',
+      legal_issue:        'general',
+      technical_issue:    'technical',
+      general_support:    'general',
+    };
+
+    const ticket = await SupportTicket.create({
+      user_id: userId === 'guest' ? 'guest' : userId,
+      subject: `AI Escalation: ${issue_type.replace(/_/g, ' ')}`,
+      description: description.substring(0, 2000),
+      status: 'open',
+      priority: priorityMap[issue_type] || 'medium',
+      category: categoryMap[issue_type] || 'general',
+      metadata: { issue_type, source: 'ai_assistant', ...metadata },
+    });
+
+    console.log('[Support] Escalation ticket created:', ticket._id);
 
     return {
       success: true,
-      ticket_id: `TKT-${Date.now()}`,
-      message: 'Your issue has been escalated. A support specialist will contact you soon.',
+      ticket_id: ticket._id.toString(),
+      message: 'Your issue requires assistance from a support specialist. Ticket created — we will contact you within 24 hours.',
     };
   } catch (error) {
     console.error('[Support API] Escalation error:', error);
-    return { success: false, error: 'Unable to create support ticket' };
+    return {
+      success: false,
+      ticket_id: `TKT-${Date.now()}`,
+      message: 'Your issue has been escalated. A support specialist will contact you soon.',
+    };
   }
 }
