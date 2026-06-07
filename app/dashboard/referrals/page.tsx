@@ -82,7 +82,11 @@ export default function ReferralsPage() {
         }
 
         if (infoResult.success && infoResult.data) {
-          setReferralLink(infoResult.data.referralLink);
+          // Build the link using the browser's own origin so it always
+          // reflects the correct domain instead of the server-side NEXTAUTH_URL.
+          const code = infoResult.data.referralCode;
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          setReferralLink(`${origin}/auth/sign-up?ref=${code}`);
         }
 
       } catch (error) {
@@ -254,10 +258,6 @@ export default function ReferralsPage() {
                       <div className="w-2.5 h-2.5 bg-amber-500 rounded-full flex-shrink-0"></div>
                       <span>Level 2 (grandparent): <strong>KES 10</strong></span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 bg-gray-400 rounded-full flex-shrink-0"></div>
-                      <span>Company: <strong>KES 15</strong></span>
-                    </div>
                   </div>
                 </div>
                 {/* Chat Foreigners */}
@@ -271,10 +271,6 @@ export default function ReferralsPage() {
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 bg-amber-500 rounded-full flex-shrink-0"></div>
                       <span>Level 2 (grandparent): <strong>KES 10</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 bg-gray-400 rounded-full flex-shrink-0"></div>
-                      <span>Company: <strong>KES 20</strong></span>
                     </div>
                   </div>
                 </div>
