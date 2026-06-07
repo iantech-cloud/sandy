@@ -21,7 +21,7 @@ const faqData: FAQItem[] = [
   },
   {
     question: "Is there a registration fee?",
-    answer: "Yes, there is a one-time registration fee of KES 90. This covers your account setup and provides access to all platform features.",
+    answer: "Yes, there is a one-time registration fee of KES 95. This covers your account setup and provides access to all platform features.",
     category: "Registration & Account"
   },
   {

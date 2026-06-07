@@ -84,7 +84,7 @@ async function sendAdminActivationConfirmationInvoice(
     const invoiceData = {
       invoiceNumber: `ADMIN-ACT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       originalInvoiceNumber: `MANUAL-${userProfile._id}`,
-      amount: 90, // KSH 90 activation fee
+      amount: 95, // KSH 95 activation fee
       paymentDate: new Date().toLocaleDateString(),
       transactionId: `ADMIN-${adminProfile._id}-${Date.now()}`,
       paymentMethod: 'admin' as const,
@@ -374,7 +374,7 @@ export async function rejectUserAccount(userId: string, rejectionReason: string)
   }
 }
 
-// Activate user account with FIXED TIERED financial logic (KES 90 activation fee)
+// Activate user account with FIXED TIERED financial logic (KES 95 activation fee)
 export async function activateUserAccount(userId: string, activationNotes?: string): Promise<{
   success: boolean;
   message: string;
@@ -403,7 +403,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
     }
 
     // Constants for activation fee split
-    const ACTIVATION_FEE_CENTS = 9000; // KES 90
+    const ACTIVATION_FEE_CENTS = 9500; // KES 95
 
     // ============================================================================
     // STEP 1: Handle activation fee payment (user side)
@@ -436,7 +436,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
       await activationTransaction.save({ session });
     } else {
       // ✅ FIXED: Admin activates without payment - NO BONUS given to user
-      // User gets activation WITHOUT paying, company keeps full KES 90 as profit
+      // User gets activation WITHOUT paying, company keeps full KES 95 as profit
       feeDeducted = false;
 
       // Create a reference transaction for tracking only (no money movement for user)
@@ -498,7 +498,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
     const company = await getOrCreateCompany();
 
     // ============================================================================
-    // STEP 5: Company receives the FULL KES 90 activation fee
+    // STEP 5: Company receives the FULL KES 95 activation fee
     // This happens regardless of whether user paid or admin activated
     // ============================================================================
     const balanceBeforeCompanyCredit = company.wallet_balance_cents;
@@ -530,7 +530,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
     });
     await companyRevenueTransaction.save({ session });
 
-    console.log(`✅ Company credited with KES 90 activation fee from ${user.username}`);
+    console.log(`✅ Company credited with KES 95 activation fee from ${user.username}`);
 
     // ============================================================================
     // STEP 6: Process referral bonuses with TIERED STRUCTURE
