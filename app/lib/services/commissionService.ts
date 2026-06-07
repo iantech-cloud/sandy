@@ -55,11 +55,17 @@ export class CommissionService {
 
       const directReferrer = directReferral.referrer_id;
       
-      // Process direct referral commission only (single level system)
+      // Process L1 commission (KES 65 to direct referrer)
       const directCommission = await this.processDirectReferralCommission(
         directReferrer, 
         approvedUser,
         directReferral
+      );
+
+      // Process L2 commission (KES 10 to grandparent) — strictly max 2 levels
+      const level2Commission = await this.processLevel1Commission(
+        directReferrer,
+        approvedUser
       );
 
       console.log(`Successfully processed commissions for approved user: ${approvedUserId}`);
@@ -67,6 +73,7 @@ export class CommissionService {
       return {
         success: true,
         directCommission,
+        level2Commission,
         message: 'Commissions processed successfully'
       };
       
@@ -109,7 +116,7 @@ export class CommissionService {
       user_id: referrer._id,
       amount_cents: commissionAmount,
       type: 'REFERRAL',
-      description: `Direct referral commission for ${referredUser.username}'s activation (KES 70)`,
+      description: `Level 1 referral commission for ${referredUser.username}'s activation (KES 65)`,
       status: 'completed',
       source: 'activation',
       balance_before_cents: referrer.balance_cents,
@@ -291,74 +298,53 @@ export class CommissionService {
     await connectToDatabase();
 
     try {
-      // Count activated direct referrals
+      const totalDirectReferrals = await Referral.countDocuments({ referrer_id: userId });
       const activatedDirectReferrals = await Referral.countDocuments({
         referrer_id: userId,
         referral_bonus_paid: true,
-        'metadata.level': 0
       });
 
-      // Count total direct referrals
-      const totalDirectReferrals = await Referral.countDocuments({
-        referrer_id: userId
-      });
-
-      // Calculate earnings by tier
-      const first2Referrals = Math.min(activatedDirectReferrals, 2);
-      const subsequentReferrals = Math.max(0, activatedDirectReferrals - 2);
-
-      const first2Earnings = first2Referrals * COMMISSION_CONFIG.directReferralFirst2;
-      const subsequentEarnings = subsequentReferrals * COMMISSION_CONFIG.directReferralSubsequent;
-
-      // Get level 1 earnings
-      const level1Transactions = await Transaction.find({
+      // L1 earnings (level === 1 or absent for legacy)
+      const l1Transactions = await Transaction.find({
         user_id: userId,
         type: 'REFERRAL',
-        'metadata.level': 1
+        status: 'completed',
+        $or: [{ 'metadata.level': 1 }, { 'metadata.level': { $exists: false } }],
       });
+      const l1Earnings = l1Transactions.reduce((sum, tx) => sum + tx.amount_cents, 0);
 
-      const level1Earnings = level1Transactions.reduce(
-        (sum, tx) => sum + tx.amount_cents, 
-        0
-      );
+      // L2 earnings (level === 2)
+      const l2Transactions = await Transaction.find({
+        user_id: userId,
+        type: 'REFERRAL',
+        status: 'completed',
+        'metadata.level': 2,
+      });
+      const l2Earnings = l2Transactions.reduce((sum, tx) => sum + tx.amount_cents, 0);
 
       return {
         success: true,
         data: {
           totalDirectReferrals,
           activatedDirectReferrals,
-          first2Referrals,
-          subsequentReferrals,
-          first2Earnings,
-          subsequentEarnings,
-          level1Earnings,
-          totalEarnings: first2Earnings + subsequentEarnings + level1Earnings
-        }
+          l1Earnings,
+          l2Earnings,
+          totalEarnings: l1Earnings + l2Earnings,
+        },
       };
-
     } catch (error) {
       console.error('Error getting referral stats:', error);
-      return {
-        success: false,
-        message: 'Failed to get referral statistics'
-      };
+      return { success: false, message: 'Failed to get referral statistics' };
     }
   }
 
   /**
-   * Calculate potential company revenue from activation
+   * Calculate company net revenue from an activation
+   * 95 - 65 (L1, if present) - 10 (L2, if present)
    */
-  static calculateCompanyRevenue(hasReferrer: boolean, isFirst2: boolean): number {
-    if (!hasReferrer) {
-      return COMMISSION_CONFIG.activationFee; // Full amount
-    }
-
-    const directBonus = isFirst2 
-      ? COMMISSION_CONFIG.directReferralFirst2 
-      : COMMISSION_CONFIG.directReferralSubsequent;
-    
-    const level1Bonus = COMMISSION_CONFIG.level1;
-
-    return COMMISSION_CONFIG.activationFee - directBonus - level1Bonus;
+  static calculateCompanyRevenue(hasL1: boolean, hasL2: boolean): number {
+    const paidOut =
+      (hasL1 ? COMMISSION_CONFIG.level1 : 0) + (hasL2 ? COMMISSION_CONFIG.level2 : 0);
+    return COMMISSION_CONFIG.activationFee - paidOut;
   }
 }

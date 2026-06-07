@@ -661,15 +661,17 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     await activationFeeTransaction.save();
 
     // =============================================================================
-    // STEP 2: Process Referral Bonuses — 2-tier structure
+    // STEP 2: Process Referral Bonuses — strict 2-tier structure
     //   KES 95 activation split:
     //     Level 1 (direct referrer):   KES 65 (6,500 cents)
     //     Level 2 (grandparent):       KES 10 (1,000 cents)
-    //     Company:                     KES 15 (1,500 cents)  [or more if tiers absent]
+    //     Company minimum:             KES 20 (2,000 cents)  [both tiers present]
+    //     Company (only L1):           KES 30 (3,000 cents)  [no grandparent]
+    //     Company (no referrer):       KES 95 (9,500 cents)
     // =============================================================================
     const L1_BONUS_CENTS = 6500; // KES 65
     const L2_BONUS_CENTS = 1000; // KES 10
-    const COMPANY_FEE_CENTS = 1500; // KES 15 (when both L1 and L2 are paid)
+    const COMPANY_MINIMUM_CENTS = 2000; // KES 20 when both tiers paid
 
     let referralBonus: { referrer_id: any; referrer_username: string; amount_cents: number; transaction_id: any; level: number } | null = null;
     let level2Bonus: { referrer_id: any; referrer_username: string; amount_cents: number; transaction_id: any; level: number } | null = null;
@@ -825,25 +827,22 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     // =============================================================================
     // STEP 3: Record Company Revenue
     //   KES 95 breakdown:
-    //     Both L1 + L2 paid  → company gets KES 15
-    //     Only L1 paid       → company gets KES 25 (L2 unclaimed = KES 10)
-    //     Neither paid       → company gets KES 95
+    //     Both L1 + L2 paid  → company gets KES 20  (95 - 65 - 10)
+    //     Only L1 paid       → company gets KES 30  (95 - 65, L2 unclaimed)
+    //     Neither paid       → company gets KES 95  (full fee)
     // =============================================================================
     const paidOut = (referralBonus ? L1_BONUS_CENTS : 0) + (level2Bonus ? L2_BONUS_CENTS : 0);
-    let companyRevenueCents = COMPANY_FEE_CENTS; // KES 15 baseline
+    const companyRevenueCents = 9500 - paidOut; // always = 95 total − what was paid out
     let unclaimedReferralCents = 0;
 
     if (!referralBonus && !level2Bonus) {
-      // No referrer at all
-      companyRevenueCents = COMPANY_FEE_CENTS;
-      unclaimedReferralCents = L1_BONUS_CENTS + L2_BONUS_CENTS; // KES 75
+      // No referrer at all — company keeps everything
+      unclaimedReferralCents = L1_BONUS_CENTS + L2_BONUS_CENTS; // KES 75 logged as unclaimed
     } else if (referralBonus && !level2Bonus) {
-      // L1 paid, no grandparent → L2 goes to company
-      companyRevenueCents = COMPANY_FEE_CENTS;
+      // L1 paid, no grandparent → L2 amount stays with company
       unclaimedReferralCents = L2_BONUS_CENTS; // KES 10
     } else {
       // Both paid
-      companyRevenueCents = COMPANY_FEE_CENTS;
       unclaimedReferralCents = 0;
     }
 

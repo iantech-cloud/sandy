@@ -87,7 +87,7 @@ export async function getReferralDashboardData() {
       activationStatus: ref.referred_id?.activation_status || 'pending',
       bonusPaid: ref.referral_bonus_paid || false,
       bonusAmount: (ref.referral_bonus_amount_cents || 0) / 100,
-      commission: 70 // KES 70 per level 1 referral
+      commission: 65 // KES 65 per level 1 activation referral
     }));
 
     return {
@@ -106,12 +106,12 @@ export async function getReferralDashboardData() {
           activation: {
             level1: 65, // KES 65 per direct referral activation
             level2: 10, // KES 10 per grandparent referral activation
-            company: 15 // KES 15 company fee per activation
+            company: 20 // KES 20 company fee per activation (95 - 65 - 10)
           },
           chatForeigners: {
             level1: 70, // KES 70 per L1 CF chat unlock
             level2: 10, // KES 10 per L2 CF chat unlock
-            company: 20 // KES 20 company fee per CF unlock
+            company: 20 // KES 20 company fee per CF unlock (100 - 70 - 10)
           }
         }
       }
