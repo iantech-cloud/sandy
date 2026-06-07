@@ -2,12 +2,21 @@ import { connectToDatabase, Profile, Referral, DownlineUser, Transaction, Activa
 
 // Commission configuration - Fixed to proper values
 // KES amounts are converted to cents (multiply by 100)
+// Commission configuration - Fixed to proper values
+// KES amounts are converted to cents (multiply by 100)
 export const COMMISSION_CONFIG = {
-  level1: 7000,              // KES 70 for direct referrals (7000 cents)
-  activationFee: 9500,       // KES 95 activation fee (9500 cents)
-  companyFee: 2500,          // KES 25 company fee per activation (2500 cents)
-  unclaimedReferral: 7000,  // KES 70 unclaimed referral bonus (7000 cents)
-  level2: 1000               // KES 10 for level 2 (if ever implemented)
+  // Activation fee: KES 95 total
+  activationFee: 9500,        // KES 95  — total collected from user
+  level1: 6500,               // KES 65  — credited to direct referrer (L1)
+  level2: 1000,               // KES 10  — credited to grandparent referrer (L2)
+  companyFee: 2000,           // KES 20  — kept by platform (95 - 65 - 10 = 20)
+  unclaimedReferral: 6500,    // KES 65  — goes to company if L1 not present
+
+  // Chat foreigners unlock fee: KES 100 total
+  chatUnlockFee: 10000,       // KES 100 — total collected from user
+  chatLevel1: 7000,           // KES 70  — credited to direct referrer (L1)
+  chatLevel2: 1000,           // KES 10  — credited to grandparent referrer (L2)
+  chatCompanyFee: 2000,       // KES 20  — kept by platform (100 - 70 - 10 = 20)
 };
 
 export class CommissionService {
