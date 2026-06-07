@@ -174,7 +174,15 @@ export async function checkSpinDepositStatus(messageReference: string) {
 
     await connectToDatabase()
 
-    const spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id })
+    // Resolve canonical user _id
+    let user = await (Profile as any).findById(session.user.id).lean()
+    if (!user && session.user.email) {
+      user = await (Profile as any).findOne({ email: session.user.email }).lean()
+    }
+    if (!user) return { success: false, message: 'User not found' }
+    const userId = (user as any)._id.toString()
+
+    const spinWallet = await (SpinWallet as any).findOne({ user_id: userId })
     if (!spinWallet) {
       return { success: false, message: 'Spin wallet not found' }
     }
@@ -279,11 +287,22 @@ export async function getSpinWalletBalance() {
 
     await connectToDatabase()
 
-    let spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id }).lean()
+    // Resolve the canonical user _id via the Profile collection, the same
+    // way the deposit flow does it, to guarantee the lookup key matches.
+    let user = await (Profile as any).findById(session.user.id).lean()
+    if (!user && session.user.email) {
+      user = await (Profile as any).findOne({ email: session.user.email }).lean()
+    }
+    if (!user) {
+      return { success: false, message: 'User not found' }
+    }
+    const userId = (user as any)._id.toString()
+
+    let spinWallet = await (SpinWallet as any).findOne({ user_id: userId }).lean()
 
     if (!spinWallet) {
       spinWallet = await (SpinWallet as any).create({
-        user_id: session.user.id,
+        user_id: userId,
         balance_cents: 0,
         total_deposited_cents: 0,
         total_used_cents: 0,
@@ -293,13 +312,11 @@ export async function getSpinWalletBalance() {
 
     return {
       success: true,
-      // balance_cents = user's spendable spin wallet balance (from deposits)
-      // This is the amount the user can use to spin
-      balance_cents: spinWallet.balance_cents,
-      balance_kes: (spinWallet.balance_cents / 100).toFixed(2),
-      total_deposited: spinWallet.total_deposited_cents,
-      total_used: spinWallet.total_used_cents,
-      total_spins: spinWallet.total_spins,
+      balance_cents: (spinWallet as any).balance_cents,
+      balance_kes: ((spinWallet as any).balance_cents / 100).toFixed(2),
+      total_deposited: (spinWallet as any).total_deposited_cents,
+      total_used: (spinWallet as any).total_used_cents,
+      total_spins: (spinWallet as any).total_spins,
     }
   } catch (error) {
     console.error('[SpinWallet] Error getting balance:', error)
@@ -320,7 +337,15 @@ export async function getSpinWalletHistory(limit: number = 20) {
 
     await connectToDatabase()
 
-    const spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id }).lean()
+    // Resolve canonical user _id
+    let user = await (Profile as any).findById(session.user.id).lean()
+    if (!user && session.user.email) {
+      user = await (Profile as any).findOne({ email: session.user.email }).lean()
+    }
+    if (!user) return { success: true, deposits: [] }
+    const userId = (user as any)._id.toString()
+
+    const spinWallet = await (SpinWallet as any).findOne({ user_id: userId }).lean()
 
     if (!spinWallet) {
       return { success: true, deposits: [] }
@@ -381,10 +406,16 @@ export async function transferMainToSpinWallet(amountKes: number) {
 
     await connectToDatabase()
 
-    const user = await (Profile as any).findById(session.user.id).lean()
+    // Resolve canonical user _id
+    let userDoc = await (Profile as any).findById(session.user.id).lean()
+    if (!userDoc && session.user.email) {
+      userDoc = await (Profile as any).findOne({ email: session.user.email }).lean()
+    }
+    const user = userDoc
     if (!user) {
       return { success: false, message: 'User not found' }
     }
+    const userId = (user as any)._id.toString()
 
     const amountCents = Math.round(amountKes * 100)
     if ((user as any).balance_cents < amountCents) {
@@ -399,10 +430,10 @@ export async function transferMainToSpinWallet(amountKes: number) {
     const spinCreditsToAdd = Math.floor(amountKes / 30)
 
     // Get or create spin wallet
-    let spinWallet = await (SpinWallet as any).findOne({ user_id: session.user.id })
+    let spinWallet = await (SpinWallet as any).findOne({ user_id: userId })
     if (!spinWallet) {
       spinWallet = await (SpinWallet as any).create({
-        user_id: session.user.id,
+        user_id: userId,
         balance_cents: 0,
         total_deposited_cents: 0,
         total_used_cents: 0,
@@ -412,7 +443,7 @@ export async function transferMainToSpinWallet(amountKes: number) {
     }
 
     // Deduct from user's main wallet
-    await (Profile as any).findByIdAndUpdate(session.user.id, {
+    await (Profile as any).findByIdAndUpdate((user as any)._id, {
       $inc: { balance_cents: -amountCents },
     })
 
