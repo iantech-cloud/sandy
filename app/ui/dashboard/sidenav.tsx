@@ -1,7 +1,6 @@
 // app/ui/dashboard/sidenav.tsx
 'use client';
 
-import React from 'react';
 import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -54,13 +53,6 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
     { path: '/dashboard/settings', label: 'Settings', icon: Settings },
   ];
 
-  // Direct sign-up link — points to the platform's own sign-up page with the
-  // default referral code so users who join without a personal referral link
-  // still land on a valid, pre-filled registration flow.
-  const externalLinks = [
-    { url: '/auth/sign-up?ref=SANDY001', label: 'Invite & Register', icon: MessageCircle, afterLink: '/dashboard/referrals' },
-  ];
-
   return (
     <nav className="hidden lg:flex flex-col w-64 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 shadow-2xl relative overflow-y-auto overflow-x-hidden fixed top-0 left-0 h-screen custom-scrollbar">
       {/* Animated background gradient overlay */}
@@ -100,62 +92,41 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
             const isActive = pathname === path;
             
             return (
-              <React.Fragment key={path}>
-                <Link
-                  href={path}
-                  className={`
-                    relative flex items-center p-3.5 rounded-xl font-medium transition-all duration-250 ease-in-out group
-                    ${isActive 
-                      ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/30' 
-                      : 'text-slate-300 hover:bg-white/5 hover:text-white'
-                    }
-                  `}
-                >
-                  {/* Active indicator bar */}
+              <Link
+                key={path}
+                href={path}
+                className={`
+                  relative flex items-center p-3.5 rounded-xl font-medium transition-all duration-250 ease-in-out group
+                  ${isActive 
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/30' 
+                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                  }
+                `}
+              >
+                {/* Active indicator bar */}
+                {isActive && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-cyan-400 to-blue-400 rounded-r-full shadow-lg shadow-cyan-400/50"></div>
+                )}
+                
+                <div className={`
+                  mr-3 transition-all duration-250
+                  ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-cyan-400'}
+                `}>
+                  <Icon size={20} />
+                </div>
+                
+                <span className="relative">
+                  {label}
                   {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-cyan-400 to-blue-400 rounded-r-full shadow-lg shadow-cyan-400/50"></div>
+                    <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-300 to-transparent"></div>
                   )}
-                  
-                  <div className={`
-                    mr-3 transition-all duration-250
-                    ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-cyan-400'}
-                  `}>
-                    <Icon size={20} />
-                  </div>
-                  
-                  <span className="relative">
-                    {label}
-                    {isActive && (
-                      <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-300 to-transparent"></div>
-                    )}
-                  </span>
+                </span>
 
-                  {/* Hover glow effect */}
-                  {!isActive && (
-                    <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/0 via-cyan-500/0 to-blue-500/0 group-hover:from-blue-500/10 group-hover:via-cyan-500/10 group-hover:to-blue-500/10 transition-all duration-300"></div>
-                  )}
-                </Link>
-
-                {/* Insert Chat Online link after Referrals */}
-                {path === '/dashboard/referrals' && externalLinks.map(({ url, label: extLabel, icon: ExtIcon }) => (
-                  <Link
-                    key={url}
-                    href={url}
-                    className="relative flex items-center p-3.5 rounded-xl font-medium transition-all duration-250 ease-in-out group text-slate-300 hover:bg-white/5 hover:text-white"
-                  >
-                    <div className="mr-3 transition-all duration-250 text-slate-400 group-hover:text-green-400">
-                      <ExtIcon size={20} />
-                    </div>
-                    
-                    <span className="relative">
-                      {extLabel}
-                    </span>
-
-                    {/* Hover glow effect */}
-                    <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-green-500/0 via-cyan-500/0 to-green-500/0 group-hover:from-green-500/10 group-hover:via-cyan-500/10 group-hover:to-green-500/10 transition-all duration-300"></div>
-                  </Link>
-                ))}
-              </React.Fragment>
+                {/* Hover glow effect */}
+                {!isActive && (
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/0 via-cyan-500/0 to-blue-500/0 group-hover:from-blue-500/10 group-hover:via-cyan-500/10 group-hover:to-blue-500/10 transition-all duration-300"></div>
+                )}
+              </Link>
             );
           })}
         </div>
