@@ -54,9 +54,11 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
     { path: '/dashboard/settings', label: 'Settings', icon: Settings },
   ];
 
-  // Chat Online link between Referrals and Profile
+  // Direct sign-up link — points to the platform's own sign-up page with the
+  // default referral code so users who join without a personal referral link
+  // still land on a valid, pre-filled registration flow.
   const externalLinks = [
-    { url: 'https://chatvibe.co.ke/register.php?ref=Scholine', label: 'Chat Online', icon: MessageCircle, afterLink: '/dashboard/referrals' },
+    { url: '/auth/sign-up?ref=SANDY001', label: 'Invite & Register', icon: MessageCircle, afterLink: '/dashboard/referrals' },
   ];
 
   return (
@@ -136,11 +138,9 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
 
                 {/* Insert Chat Online link after Referrals */}
                 {path === '/dashboard/referrals' && externalLinks.map(({ url, label: extLabel, icon: ExtIcon }) => (
-                  <a
+                  <Link
                     key={url}
                     href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="relative flex items-center p-3.5 rounded-xl font-medium transition-all duration-250 ease-in-out group text-slate-300 hover:bg-white/5 hover:text-white"
                   >
                     <div className="mr-3 transition-all duration-250 text-slate-400 group-hover:text-green-400">
@@ -153,7 +153,7 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
 
                     {/* Hover glow effect */}
                     <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-green-500/0 via-cyan-500/0 to-green-500/0 group-hover:from-green-500/10 group-hover:via-cyan-500/10 group-hover:to-green-500/10 transition-all duration-300"></div>
-                  </a>
+                  </Link>
                 ))}
               </React.Fragment>
             );

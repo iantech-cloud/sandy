@@ -348,14 +348,37 @@ export async function createChatForeignersBot(data: {
   speakingStyle?: string;
   mood?: string;
   interests?: string;
+  nationality?: string;
   unlockPrice?: number;
 }) {
   try {
     await connectToDatabase();
 
+    // Validate username format: only lowercase letters, digits, and underscores
+    const cleanUsername = data.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+
+    // Pre-creation uniqueness check (application-level) before hitting DB index
+    const existing = await ChatForeignersBot.findOne({ username: cleanUsername }).lean();
+    if (existing) {
+      return {
+        success: false,
+        error: `Username "@${cleanUsername}" is already taken. Please choose a different username.`,
+      };
+    }
+
+    const nameDuplicate = await ChatForeignersBot.findOne({
+      name: { $regex: new RegExp(`^${data.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    }).lean();
+    if (nameDuplicate) {
+      return {
+        success: false,
+        error: `A person named "${data.name}" already exists. Please use a different name.`,
+      };
+    }
+
     const bot = await ChatForeignersBot.create({
-      name: data.name,
-      username: data.username,
+      name: data.name.trim(),
+      username: cleanUsername,
       avatar_url: data.avatar,
       bio: data.bio,
       description: data.bio,
@@ -363,7 +386,8 @@ export async function createChatForeignersBot(data: {
       speakingStyle: data.speakingStyle,
       mood: data.mood,
       interests: data.interests,
-      unlockCost_cents: (data.unlockPrice || 60) * 100,
+      nationality: data.nationality,
+      unlockCost_cents: (data.unlockPrice || 100) * 100,
       isActive: true,
     });
 
@@ -382,7 +406,15 @@ export async function createChatForeignersBot(data: {
         unlockPrice: bot.unlockCost_cents / 100,
       },
     };
-  } catch (error) {
+  } catch (error: any) {
+    // Catch DB-level unique index violation as a last resort
+    if (error?.code === 11000) {
+      const field = Object.keys(error.keyValue ?? {})[0] ?? 'field';
+      return {
+        success: false,
+        error: `A person with that ${field} already exists. Please choose a different value.`,
+      };
+    }
     console.error('[ChatForeigners] Bot creation error:', error);
     return {
       success: false,
