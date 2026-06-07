@@ -789,6 +789,33 @@ export async function depositSpinWalletViaMpesa(depositData: {
 
     const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
+    // Get or create the SpinWallet document and pre-register this deposit so
+    // the callback can reliably find the embedded record by mpesa_checkout_request_id.
+    let spinWallet = await (SpinWallet as any).findOne({ user_id: currentUser._id.toString() });
+    if (!spinWallet) {
+      spinWallet = await (SpinWallet as any).create({
+        user_id: currentUser._id.toString(),
+        balance_cents: 0,
+        total_deposited_cents: 0,
+        total_used_cents: 0,
+        total_spins: 0,
+        deposits: [],
+      });
+    }
+
+    // Pre-register the deposit record — status starts as 'pending'.
+    // The callback (or fallback status-poll credit) will update it to 'completed'.
+    spinWallet.deposits.push({
+      amount_cents: amountCents,
+      mpesa_checkout_request_id: messageReference,
+      mpesa_status: 'initiated',
+      overall_status: 'pending',
+      status: 'pending',
+      phone_number: formattedPhone,
+      created_at: new Date(),
+    });
+    await spinWallet.save();
+
     // Create MpesaTransaction BEFORE calling the API
     const mpesaTransaction = await (MpesaTransaction as any).create({
       user_id: currentUser._id,
@@ -941,10 +968,62 @@ export async function checkSpinDepositMpesaStatus(messageReference: string): Pro
       await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: mappedStatus,
         result_desc: statusResponse.ResponseDescription || '',
+        'metadata.callback_processed': true,
+        'metadata.callback_processed_at': new Date().toISOString(),
+        'metadata.credited_by': 'status_poll_fallback',
         ...(mappedStatus === 'completed'
           ? { completed_at: new Date() }
           : { failed_at: new Date() }),
       });
+
+      // ── Fallback wallet credit ───────────────────────────────────────────
+      // If payment is confirmed completed by the Co-op Bank API but the
+      // callback never arrived (or was missed), credit the SpinWallet here.
+      // This is idempotency-guarded so we never double-credit.
+      if (mappedStatus === 'completed') {
+        const spinWallet = await (SpinWallet as any).findOne({
+          user_id: mpesaTransaction.user_id.toString(),
+        });
+
+        if (spinWallet) {
+          const existingDeposit = spinWallet.deposits.find(
+            (d: any) => d.mpesa_checkout_request_id === messageReference
+          );
+
+          const alreadyCredited = existingDeposit?.status === 'completed';
+
+          if (!alreadyCredited) {
+            // Credit the balance
+            spinWallet.balance_cents = (spinWallet.balance_cents || 0) + mpesaTransaction.amount_cents;
+            spinWallet.total_deposited_cents = (spinWallet.total_deposited_cents || 0) + mpesaTransaction.amount_cents;
+
+            if (existingDeposit) {
+              existingDeposit.status = 'completed';
+              existingDeposit.overall_status = 'completed';
+              existingDeposit.mpesa_status = 'completed';
+              existingDeposit.deposited_at = new Date();
+            } else {
+              spinWallet.deposits.push({
+                amount_cents: mpesaTransaction.amount_cents,
+                mpesa_checkout_request_id: messageReference,
+                mpesa_transaction_id: mpesaTransaction._id,
+                mpesa_status: 'completed',
+                overall_status: 'completed',
+                status: 'completed',
+                phone_number: mpesaTransaction.phone_number,
+                deposited_at: new Date(),
+                created_at: new Date(),
+              });
+            }
+
+            await spinWallet.save();
+
+            console.log(
+              `[Spin] Fallback credit: +KES ${mpesaTransaction.amount_cents / 100} to SpinWallet for user ${mpesaTransaction.user_id}`
+            );
+          }
+        }
+      }
 
       // Sync the linked Transaction record status
       await syncSpinDepositTransactionWithMpesaStatus(
