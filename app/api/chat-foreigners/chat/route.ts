@@ -3,6 +3,7 @@ import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, ChatFore
 import { auth } from '@/auth';
 import OpenAI from 'openai';
 import { generateText } from 'ai';
+import { rateLimit } from '@/app/lib/rate-limit';
 
 const nvidiaClient = process.env.NVIDIA_API_KEY
   ? new OpenAI({
@@ -331,6 +332,56 @@ function buildSystemPrompt(bot: {
     .join('\n');
 }
 
+// ── GET: return persisted message history for an active session ──────────────
+export async function GET(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+
+    const sessionId = (session.user as any)?.id || (session.user as any)?.userId;
+    const { searchParams } = new URL(request.url);
+    const personId = searchParams.get('personId');
+
+    if (!personId) {
+      return NextResponse.json({ success: false, error: 'Missing personId' }, { status: 400 });
+    }
+
+    // Rate limit: 60 history fetches per minute per user
+    const { exceeded } = rateLimit(`cf:history:${sessionId}`, 60, 60_000);
+    if (exceeded) {
+      return NextResponse.json({ success: false, error: 'Too many requests. Please slow down.' }, { status: 429 });
+    }
+
+    await connectToDatabase();
+
+    let currentUser: any = null;
+    if (sessionId) currentUser = await Profile.findOne({ _id: sessionId }).lean();
+    if (!currentUser && session.user.email) currentUser = await Profile.findOne({ email: session.user.email }).lean();
+    if (!currentUser) return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+
+    const access = await ChatForeignersBotAccess.findOne({
+      user_id: (currentUser as any)._id,
+      bot_id: personId,
+      isClosed: { $ne: true },
+    }).lean() as any;
+
+    if (!access) {
+      return NextResponse.json({ success: true, messages: [], messageCount: 0 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      messages: access.messages || [],
+      messageCount: access.messageCount || 0,
+    });
+  } catch (error) {
+    console.error('[CF Chat] GET error:', error);
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -408,6 +459,15 @@ export async function POST(request: NextRequest) {
 
     if (!session?.user) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+
+    // Rate limit: 30 chat messages per minute per user (anti-spam / cost protection)
+    const { exceeded: chatRateLimited } = rateLimit(`cf:chat:${sessionId}`, 30, 60_000);
+    if (chatRateLimited) {
+      return NextResponse.json(
+        { success: false, error: 'You are sending messages too fast. Please wait a moment.' },
+        { status: 429 }
+      );
     }
 
     await connectToDatabase();
@@ -572,6 +632,24 @@ export async function POST(request: NextRequest) {
     }
 
     await access.save();
+
+    // Persist the new user + assistant message pair to the DB so the history
+    // survives page refreshes and navigation away. Messages are only cleared
+    // when closeChat() marks the session as isClosed=true (completion).
+    const now = new Date();
+    await ChatForeignersBotAccess.updateOne(
+      { _id: access._id },
+      {
+        $push: {
+          messages: {
+            $each: [
+              { role: 'user', content: message, timestamp: now },
+              { role: 'assistant', content: reply, timestamp: now },
+            ],
+          },
+        },
+      }
+    );
 
     return NextResponse.json({
       success: true,

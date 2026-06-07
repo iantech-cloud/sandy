@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto';
 import { Profile, Referral, DownlineUser, connectToDatabase } from '@/app/lib/models'; 
 import { CommissionService } from '@/app/lib/services/commissionService';
 import { formatPhoneNumber, isValidPhoneNumber } from '@/app/lib/utils/phoneFormatter';
+import { rateLimit, API_RATE_LIMITS } from '@/app/lib/rate-limit';
 
 // Configuration for generating new referral IDs
 const REFERRAL_ID_LENGTH = 8;
@@ -33,6 +34,16 @@ function generateReferralId(): string {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: 10 registration attempts per minute per IP (brute-force / spam protection)
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    const { exceeded, resetTime } = rateLimit(`auth:register:${ip}`, API_RATE_LIMITS.auth.limit, API_RATE_LIMITS.auth.windowMs);
+    if (exceeded) {
+      return NextResponse.json({ success: false, error: 'Too many registration attempts. Please wait and try again.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil((resetTime - Date.now()) / 1000)) },
+      });
+    }
+
     // 1. Establish MongoDB Connection
     await connectToDatabase();
 

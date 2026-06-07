@@ -145,6 +145,18 @@ const ChatForeignersBotAccessSchema = new Schema({
   expiresAt: {
     type: Date // For subscription-based access
   },
+  // Persisted message history — kept for the full duration of the active chat
+  // session and cleared only when the chat is explicitly completed (isClosed = true).
+  messages: {
+    type: [
+      {
+        role: { type: String, enum: ['user', 'assistant'], required: true },
+        content: { type: String, required: true },
+        timestamp: { type: Date, default: Date.now },
+      },
+    ],
+    default: [],
+  },
   isClosed: {
     type: Boolean,
     default: false,

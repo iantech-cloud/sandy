@@ -162,6 +162,26 @@ export default function ChatPage() {
         if (accessData.success && accessData.hasAccess) {
           setHasFullAccess(true);
           setMessageCount(accessData.data?.messageCount || 0);
+
+          // Restore persisted message history from the DB so the conversation
+          // is intact after navigation away or a page refresh.
+          try {
+            const historyRes = await fetch(`/api/chat-foreigners/chat?personId=${personId}`);
+            const historyData = await historyRes.json();
+            if (historyData.success && Array.isArray(historyData.messages) && historyData.messages.length > 0) {
+              setMessages(
+                historyData.messages.map((m: { role: string; content: string; timestamp?: string }) => ({
+                  role: m.role as 'user' | 'assistant',
+                  content: m.content,
+                  timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+                }))
+              );
+              // History loaded — skip the intro screen and go straight to chat
+              setShowIntro(false);
+            }
+          } catch {
+            // Non-fatal: if history fetch fails, chat still works; history just starts fresh
+          }
         }
         // If no full access, free preview mode is active — showIntro stays true
       } catch (error) {

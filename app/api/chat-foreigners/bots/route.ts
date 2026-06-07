@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listChatForeignersBots, getUserBotAccess, checkBotAccess, getBotDetails, createChatForeignersBot, updateChatForeignersBot, deleteChatForeignersBot } from '@/app/actions/chat-foreigners/bots';
 import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess } from '@/app/lib/models';
+import { rateLimit, API_RATE_LIMITS } from '@/app/lib/rate-limit';
+import { auth } from '@/auth';
 
 export async function GET(request: NextRequest) {
   try {
+    // Rate limit by IP for public listing; by user for authenticated lookups
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    const session = await auth().catch(() => null);
+    const limitKey = `cf:bots:${(session?.user as any)?.id ?? ip}`;
+    const { exceeded, resetTime } = rateLimit(limitKey, API_RATE_LIMITS.cfBots.limit, API_RATE_LIMITS.cfBots.windowMs);
+    if (exceeded) {
+      return NextResponse.json({ success: false, error: 'Too many requests. Please slow down.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil((resetTime - Date.now()) / 1000)) },
+      });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') || 'list';
     const botId = searchParams.get('botId');
