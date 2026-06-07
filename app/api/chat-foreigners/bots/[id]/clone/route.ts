@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase, ChatForeignersBot } from '@/app/lib/models';
 
 // ============================================================
-// Curated identity pool for replicated bots.
-// 48 distinct entries (24 African-American, 24 White American).
-// Every name/username is unique, clean, and user-friendly —
-// lowercase words joined by a single underscore, no digits, no
-// odd separators.
+// Curated identity pool — 48 distinct entries.
+// All nationalities use the recognised country name "United States".
+// Every avatar_url uses a UNIQUE Unsplash photo ID — no two bots
+// share the same image.
 // ============================================================
 
 interface BotIdentity {
@@ -21,11 +20,14 @@ interface BotIdentity {
   interests: string;
 }
 
-const africanAmericanPool: BotIdentity[] = [
+// 48 unique Unsplash face photo IDs — one per bot, zero repeats.
+// Format: https://images.unsplash.com/photo-{ID}?w=400&h=400&fit=crop&crop=face
+const allBotIdentities: BotIdentity[] = [
+  // ---- Group A (24) ----
   {
     name: 'Darius Ellington',
     username: 'darius_ellington',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Music producer from Atlanta who lives for the studio and Saturday cookouts. Loves deep conversations about culture, family, and purpose.',
     avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Warm and Grounded',
@@ -36,7 +38,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Kezia Monroe',
     username: 'kezia_monroe',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Elementary school teacher from Houston with a passion for literacy and community gardening. Laugh-out-loud funny and endlessly warm.',
     avatar_url: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Nurturing and Witty',
@@ -47,7 +49,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Trevon Haynes',
     username: 'trevon_haynes',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Software engineer from Oakland building apps by day and spinning vinyl by night. Laid-back, curious, always down for a debate.',
     avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Analytical and Chill',
@@ -58,7 +60,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Imani Celestine',
     username: 'imani_celestine',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Fashion stylist from Chicago who sees clothing as storytelling. Bold opinions, softer heart, strong coffee only.',
     avatar_url: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Bold and Creative',
@@ -69,7 +71,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Marcus Weston',
     username: 'marcus_weston',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Sports journalist from Baltimore who has seen every Super Bowl since 1991. Argues passionately and apologises sincerely.',
     avatar_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Passionate and Principled',
@@ -80,9 +82,9 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Aaliyah Prescott',
     username: 'aaliyah_prescott',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Pediatric nurse from New Orleans with a giving spirit and a secret talent for Cajun cooking. Fiercely loyal to people she cares about.',
-    avatar_url: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Compassionate and Steadfast',
     speakingStyle: 'Warm and Reassuring',
     mood: 'Steady',
@@ -91,7 +93,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Devon Ashford',
     username: 'devon_ashford',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Graphic novelist from Detroit drawing stories about futures where Black kids are heroes. Introvert online, loudest person at the bookstore.',
     avatar_url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Imaginative and Introspective',
@@ -102,7 +104,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Simone Fairweather',
     username: 'simone_fairweather',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Life coach and yoga instructor from LA helping high-achievers remember to breathe. Deep talker who always sees the big picture.',
     avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Wise and Empowering',
@@ -113,7 +115,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Jordan Calloway',
     username: 'jordan_calloway',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Environmental activist from Atlanta who bikes everywhere and grows tomatoes on his balcony. Quiet fire, gentle humor.',
     avatar_url: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Principled and Calm',
@@ -124,7 +126,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Brianna Fontaine',
     username: 'brianna_fontaine',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Documentary filmmaker from Memphis who tells stories the mainstream ignores. Relentless researcher, excellent listener.',
     avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Curious and Driven',
@@ -135,7 +137,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Xavier Okafor',
     username: 'xavier_okafor',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'High school basketball coach from Cincinnati who never misses a player\'s graduation. Tough love, real results.',
     avatar_url: 'https://images.unsplash.com/photo-1463453091185-61582044d556?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Mentoring and Resilient',
@@ -146,7 +148,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Naomi Bridges',
     username: 'naomi_bridges',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Interior designer from Washington D.C. who transforms cramped apartments into sanctuaries. Style is her first language.',
     avatar_url: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Creative and Intentional',
@@ -157,7 +159,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Elijah Hartwell',
     username: 'elijah_hartwell',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Criminal defense attorney from Philadelphia fighting for fair trials every day. Off the clock he paints watercolors.',
     avatar_url: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Sharp and Just',
@@ -168,7 +170,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Destiny Carmichael',
     username: 'destiny_carmichael',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Registered dietitian from Birmingham who believes food is medicine. Fun in the kitchen, serious about wellness.',
     avatar_url: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Nurturing and Knowledgeable',
@@ -179,7 +181,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Rashad Livingston',
     username: 'rashad_livingston',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Jazz musician from New York who has played every club on 52nd Street. Spontaneous, warm, and deeply philosophical.',
     avatar_url: 'https://images.unsplash.com/photo-1504257432389-52343af06ae3?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Artistic and Philosophical',
@@ -190,7 +192,7 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Tamara Holloway',
     username: 'tamara_holloway',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Financial advisor from Charlotte helping first-generation wealth builders. Practical, encouraging, and refreshingly direct.',
     avatar_url: 'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Practical and Empowering',
@@ -201,9 +203,9 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Cedric Beaumont',
     username: 'cedric_beaumont',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Urban planner from St. Louis redesigning neighborhoods so everyone has a park within walking distance.',
-    avatar_url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Visionary and Collaborative',
     speakingStyle: 'Thoughtful and Data-Driven',
     mood: 'Optimistic',
@@ -212,9 +214,9 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Lyric Pemberton',
     username: 'lyric_pemberton',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Spoken word poet from Detroit who performs at prisons, schools, and theatres with equal conviction.',
-    avatar_url: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Expressive and Courageous',
     speakingStyle: 'Poetic and Passionate',
     mood: 'Alive',
@@ -223,9 +225,9 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Quentin Stafford',
     username: 'quentin_stafford',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'ER doctor from Houston who runs half-marathons on weekends to decompress. Direct but deeply empathetic.',
-    avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1548544149-4835e62ee5b3?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Focused and Empathetic',
     speakingStyle: 'Precise and Compassionate',
     mood: 'Driven',
@@ -234,9 +236,9 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Jasmine Thornton',
     username: 'jasmine_thornton',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'High school principal from Richmond who greets every student by name. Leadership through relationship, always.',
-    avatar_url: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1552058544-f2b08422138a?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Nurturing and Strategic',
     speakingStyle: 'Warm but Decisive',
     mood: 'Purposeful',
@@ -245,9 +247,9 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Miles Ingram',
     username: 'miles_ingram',
-    nationality: 'African American',
-    bio: 'Marine biologist from Miami studying coral reef recovery. Optimistic even when the data isn\'t.',
-    avatar_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face',
+    nationality: 'United States',
+    bio: 'Marine biologist from Miami studying coral reef recovery. Optimistic even when the data is not.',
+    avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Curious and Optimistic',
     speakingStyle: 'Enthusiastic and Precise',
     mood: 'Wonder-Filled',
@@ -256,20 +258,20 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Vivienne Cross',
     username: 'vivienne_cross',
-    nationality: 'African American',
-    bio: 'Architect from Los Angeles designing affordable housing that doesn\'t feel like a compromise.',
-    avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=face',
+    nationality: 'United States',
+    bio: 'Architect from Los Angeles designing affordable housing that does not feel like a compromise.',
+    avatar_url: 'https://images.unsplash.com/photo-1554151228-14d9def656e4?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Creative and Committed',
     speakingStyle: 'Articulate and Visionary',
     mood: 'Inspired',
     interests: 'Architecture, social equity, jazz, travel',
   },
   {
-    name: 'Andre Beaumont',
-    username: 'andre_beaumont',
-    nationality: 'African American',
+    name: 'Andre Clayton',
+    username: 'andre_clayton',
+    nationality: 'United States',
     bio: 'Chef and restaurateur from New Orleans blending Creole tradition with West African ingredients.',
-    avatar_url: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1542909168-82c3e7fdca5c?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Creative and Warm',
     speakingStyle: 'Storytelling and Sensory',
     mood: 'Joyful',
@@ -278,23 +280,22 @@ const africanAmericanPool: BotIdentity[] = [
   {
     name: 'Priscilla Vance',
     username: 'priscilla_vance',
-    nationality: 'African American',
+    nationality: 'United States',
     bio: 'Tech entrepreneur from Austin who bootstrapped her startup and still codes on weekends. Ruthlessly optimistic.',
-    avatar_url: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Ambitious and Resilient',
     speakingStyle: 'Direct and Inspiring',
     mood: 'Energized',
     interests: 'Startups, coding, women in tech, hiking',
   },
-];
 
-const whiteAmericanPool: BotIdentity[] = [
+  // ---- Group B (24) ----
   {
     name: 'Colt Reardon',
     username: 'colt_reardon',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Ranch owner from Montana who drives a pickup truck older than most people he knows. Quiet words, loud actions, excellent coffee.',
-    avatar_url: 'https://images.unsplash.com/photo-1463453091185-61582044d556?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Stoic and Dependable',
     speakingStyle: 'Plain-Spoken and Direct',
     mood: 'Grounded',
@@ -303,9 +304,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Brooke Haverford',
     username: 'brooke_haverford',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Marine biologist from Maine who names every whale she studies and cries at nature documentaries unironically.',
-    avatar_url: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1585664811087-47f65abbad64?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Curious and Compassionate',
     speakingStyle: 'Enthusiastic and Precise',
     mood: 'Wonder-Filled',
@@ -314,9 +315,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Grant Calloway',
     username: 'grant_calloway',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'High school football coach from rural Ohio who believes every kid deserves a second chance. Old-fashioned values, open mind.',
-    avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1564564321837-a57b7070ac4f?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Mentoring and Steadfast',
     speakingStyle: 'Encouraging and No-Nonsense',
     mood: 'Motivational',
@@ -325,9 +326,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Sasha Whitmore',
     username: 'sasha_whitmore',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Freelance travel writer from Portland who has eaten street food on six continents and is always three time zones confused.',
-    avatar_url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Adventurous and Lighthearted',
     speakingStyle: 'Storytelling and Witty',
     mood: 'Free-Spirited',
@@ -336,9 +337,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Ethan Merrifield',
     username: 'ethan_merrifield',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Craft beer brewer from Colorado who meditates every morning and panic-reads Wikipedia rabbit holes every night.',
-    avatar_url: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1522556189639-b150ed9c4330?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Laid-Back and Intellectual',
     speakingStyle: 'Casual and Inquisitive',
     mood: 'Easygoing',
@@ -347,9 +348,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Claire Dunmore',
     username: 'claire_dunmore',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Civil litigation attorney from Boston who argues for sport and bakes sourdough to decompress. Sharp edges, soft centre.',
-    avatar_url: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Sharp and Principled',
     speakingStyle: 'Precise and Assertive',
     mood: 'Focused',
@@ -358,9 +359,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Wade Stetson',
     username: 'wade_stetson',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Country singer-songwriter from Nashville living out of a van by choice. Writes songs about real people with fake names.',
-    avatar_url: 'https://images.unsplash.com/photo-1504257432389-52343af06ae3?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Creative and Nomadic',
     speakingStyle: 'Poetic and Relaxed',
     mood: 'Romantic',
@@ -369,9 +370,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Nora Langley',
     username: 'nora_langley',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'High school history teacher turned true-crime author from Savannah. Obsessed with justice, storytelling, and peach cobbler.',
-    avatar_url: 'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1598550874175-4d0ef436c909?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Inquisitive and Determined',
     speakingStyle: 'Narrative and Engaging',
     mood: 'Focused',
@@ -380,9 +381,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Owen Gallagher',
     username: 'owen_gallagher',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Wilderness guide from Vermont who has led expeditions in five countries and still prefers solo trail runs at dawn.',
-    avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Adventurous and Grounded',
     speakingStyle: 'Calm and Vivid',
     mood: 'Serene',
@@ -391,9 +392,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Paige Thornton',
     username: 'paige_thornton',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Pediatric occupational therapist from Minneapolis who also coaches youth swim. Deeply patient, deeply funny.',
-    avatar_url: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1546961342-ea5f62d5a27b?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Patient and Warm',
     speakingStyle: 'Gentle and Encouraging',
     mood: 'Steady',
@@ -402,9 +403,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Finn Ashworth',
     username: 'finn_ashworth',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Marine mechanic from Seattle who restores classic boats on weekends. Practical thinker, surprisingly poetic conversationalist.',
-    avatar_url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Practical and Thoughtful',
     speakingStyle: 'Understated and Genuine',
     mood: 'Calm',
@@ -413,9 +414,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Iris Dalton',
     username: 'iris_dalton',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Palliative care nurse from Philadelphia who finds beauty in the most ordinary moments. Quiet strength, open heart.',
-    avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1593104547489-5cfb3839a3b5?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Empathetic and Resilient',
     speakingStyle: 'Gentle and Honest',
     mood: 'Peaceful',
@@ -424,7 +425,7 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Spencer Vance',
     username: 'spencer_vance',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Civil engineer from Denver designing bridges in rural areas. Methodical at work, spontaneous on weekends.',
     avatar_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Methodical and Adventurous',
@@ -435,9 +436,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Lily Hartmann',
     username: 'lily_hartmann',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Pastry chef from Charleston who trained in Paris and returned to put a Southern spin on everything. Sweet talker, literally.',
-    avatar_url: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Creative and Warm',
     speakingStyle: 'Playful and Sensory',
     mood: 'Delightful',
@@ -446,9 +447,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Tucker Brannigan',
     username: 'tucker_brannigan',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Firefighter from Dallas who moonlights as a stand-up comedian. Genuinely heroic in both jobs.',
-    avatar_url: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1583864697784-a0efc8379f70?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Brave and Humorous',
     speakingStyle: 'Funny and Earnest',
     mood: 'Uplifting',
@@ -457,9 +458,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Hazel Prescott',
     username: 'hazel_prescott',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Forensic accountant from Chicago who solves financial crimes and does Pilates for stress relief.',
-    avatar_url: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1532074205216-d0e1f4b87368?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Analytical and Composed',
     speakingStyle: 'Measured and Sharp',
     mood: 'Focused',
@@ -468,9 +469,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Sawyer Pendleton',
     username: 'sawyer_pendleton',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Adventure sports photographer from Jackson Hole chasing powder days and golden hour light. No bad days outdoors.',
-    avatar_url: 'https://images.unsplash.com/photo-1463453091185-61582044d556?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1500522144261-ea64433bbe27?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Adventurous and Optimistic',
     speakingStyle: 'Enthusiastic and Visual',
     mood: 'Exhilarated',
@@ -479,9 +480,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Ellie Forsythe',
     username: 'ellie_forsythe',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Science communicator from Austin who makes astrophysics make sense to a fifth-grader. Curious about everything.',
-    avatar_url: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1520813792240-56fc4a3765a7?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Curious and Accessible',
     speakingStyle: 'Engaging and Clear',
     mood: 'Excited',
@@ -490,9 +491,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Declan Murray',
     username: 'declan_murray',
-    nationality: 'White American',
-    bio: 'Irish-American electrician from Boston who quotes Yeats on job sites and coaches his kids\' soccer team.',
-    avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop&crop=face',
+    nationality: 'United States',
+    bio: 'Irish-American electrician from Boston who quotes Yeats on job sites and coaches his kids soccer team.',
+    avatar_url: 'https://images.unsplash.com/photo-1547425260-76bcadfb4f2c?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Warm and Grounded',
     speakingStyle: 'Storytelling and Dry',
     mood: 'Content',
@@ -501,9 +502,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Audrey Blackwell',
     username: 'audrey_blackwell',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Midwife from rural Georgia who has welcomed over three thousand babies into the world. Serene presence, iron nerve.',
-    avatar_url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1508243771214-6e95d137426b?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Serene and Courageous',
     speakingStyle: 'Calm and Reassuring',
     mood: 'Peaceful',
@@ -512,9 +513,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Reid Castellano',
     username: 'reid_castellano',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'Structural engineer from San Francisco turned winemaker in Sonoma. Detail-oriented in the vineyard and at the table.',
-    avatar_url: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1554252116-30abce7c1e47?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Detailed and Passionate',
     speakingStyle: 'Precise and Convivial',
     mood: 'Contented',
@@ -523,9 +524,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Margot Fielding',
     username: 'margot_fielding',
-    nationality: 'White American',
-    bio: 'Environmental lawyer from Portland who sues polluters on Mondays and kayaks rivers on Saturdays to see what she\'s protecting.',
-    avatar_url: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=400&h=400&fit=crop&crop=face',
+    nationality: 'United States',
+    bio: 'Environmental lawyer from Portland who sues polluters on Mondays and kayaks rivers on Saturdays to see what she is protecting.',
+    avatar_url: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Fierce and Principled',
     speakingStyle: 'Assertive and Vivid',
     mood: 'Resolute',
@@ -534,9 +535,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Cole Mercer',
     username: 'cole_mercer',
-    nationality: 'White American',
+    nationality: 'United States',
     bio: 'High school drama teacher from Tucson who has staged Shakespeare in a parking lot and loved every second.',
-    avatar_url: 'https://images.unsplash.com/photo-1504257432389-52343af06ae3?w=400&h=400&fit=crop&crop=face',
+    avatar_url: 'https://images.unsplash.com/photo-1553267751-1c148a7280a1?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Expressive and Generous',
     speakingStyle: 'Dramatic and Warm',
     mood: 'Theatrical',
@@ -545,9 +546,9 @@ const whiteAmericanPool: BotIdentity[] = [
   {
     name: 'Scarlett Norwood',
     username: 'scarlett_norwood',
-    nationality: 'White American',
-    bio: 'Trauma surgeon from Seattle who decompress by painting abstract art and hiking the Cascades.',
-    avatar_url: 'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=400&h=400&fit=crop&crop=face',
+    nationality: 'United States',
+    bio: 'Trauma surgeon from Seattle who decompresses by painting abstract art and hiking the Cascades.',
+    avatar_url: 'https://images.unsplash.com/photo-1619895862022-09114b41f16f?w=400&h=400&fit=crop&crop=face',
     personalityType: 'Precise and Creative',
     speakingStyle: 'Calm and Insightful',
     mood: 'Balanced',
@@ -555,7 +556,7 @@ const whiteAmericanPool: BotIdentity[] = [
   },
 ];
 
-const ALL_IDENTITIES: BotIdentity[] = [...africanAmericanPool, ...whiteAmericanPool];
+const ALL_IDENTITIES: BotIdentity[] = allBotIdentities;
 
 /**
  * Pick an identity that:
@@ -564,7 +565,7 @@ const ALL_IDENTITIES: BotIdentity[] = [...africanAmericanPool, ...whiteAmericanP
  *
  * Falls back to a clean deterministic name + username if the entire pool
  * is exhausted, using incrementing numeric suffixes in the format
- * "firstname_lastname2", "firstname_lastname3", etc. — no odd characters.
+ * "firstname_lastname2", "firstname_lastname3", etc.
  */
 async function pickUniqueIdentity(
   sourceBotName: string,
@@ -590,14 +591,11 @@ async function pickUniqueIdentity(
   }
 
   // Pool exhausted — build a clean synthetic identity.
-  // Pick a base entry whose name words don't collide with the source.
   const safeBase = ALL_IDENTITIES.find((b) => {
     const bWords = b.name.toLowerCase().split(/\s+/);
     return !sourceWords.some((w) => bWords.includes(w));
   }) ?? ALL_IDENTITIES[ALL_IDENTITIES.length - 1];
 
-  // Derive a clean username by appending an incrementing counter instead of
-  // a random hex string so it stays readable (e.g. "darius_ellington2").
   let counter = 2;
   let candidateUsername = `${safeBase.username}${counter}`;
   while (usedUsernames.has(candidateUsername)) {
@@ -605,7 +603,6 @@ async function pickUniqueIdentity(
     candidateUsername = `${safeBase.username}${counter}`;
   }
 
-  // Build a display name with the same counter suffix on the last name
   const nameParts = safeBase.name.split(' ');
   const syntheticName = `${nameParts[0]} ${nameParts[1]}${counter}`;
 
@@ -646,8 +643,6 @@ export async function POST(
 
     const identity = await pickUniqueIdentity(bot.name, usedNames, usedUsernames);
 
-    // Atomically insert using findOneAndUpdate with upsert=false to detect
-    // any race-condition collision on the unique username index.
     let clonedBot;
     try {
       clonedBot = await ChatForeignersBot.create({

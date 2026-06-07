@@ -49,13 +49,22 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const NATIONALITY_FLAGS: Record<string, string> = {
+  'United States': '🇺🇸',
   'American': '🇺🇸',
-  'African American': '🇺🇸',
   'British': '🇬🇧',
   'Canadian': '🇨🇦',
   'Australian': '🇦🇺',
   'German': '🇩🇪',
   'French': '🇫🇷',
+  'Spanish': '🇪🇸',
+  'Mexican': '🇲🇽',
+  'Brazilian': '🇧🇷',
+  'Japanese': '🇯🇵',
+  'Chinese': '🇨🇳',
+  'Indian': '🇮🇳',
+  'South African': '🇿🇦',
+  'Nigerian': '🇳🇬',
+  'Kenyan': '🇰🇪',
 };
 
 // Credibility stats per personality category

@@ -50,11 +50,22 @@ const MIN_MESSAGES_TO_CLOSE = 20;
 const FREE_PREVIEW_MESSAGES = 2; // messages allowed before unlock gate
 
 const NATIONALITY_FLAGS: Record<string, string> = {
+  'United States': '🇺🇸',
   'American': '🇺🇸',
-  'African American': '🇺🇸',
   'British': '🇬🇧',
   'Canadian': '🇨🇦',
   'Australian': '🇦🇺',
+  'German': '🇩🇪',
+  'French': '🇫🇷',
+  'Spanish': '🇪🇸',
+  'Mexican': '🇲🇽',
+  'Brazilian': '🇧🇷',
+  'Japanese': '🇯🇵',
+  'Chinese': '🇨🇳',
+  'Indian': '🇮🇳',
+  'South African': '🇿🇦',
+  'Nigerian': '🇳🇬',
+  'Kenyan': '🇰🇪',
 };
 
 export default function ChatPage() {

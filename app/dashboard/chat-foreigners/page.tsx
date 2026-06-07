@@ -6,8 +6,8 @@ import { MessageSquare, Users, Wallet, Coins } from 'lucide-react';
 
 // Country flag emoji map — nationality to flag
 const NATIONALITY_FLAGS: Record<string, string> = {
+  'United States': '🇺🇸',
   'American': '🇺🇸',
-  'African American': '🇺🇸',
   'British': '🇬🇧',
   'Canadian': '🇨🇦',
   'Australian': '🇦🇺',

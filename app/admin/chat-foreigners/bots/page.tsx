@@ -323,7 +323,7 @@ export default function BotsAdminPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Nationality</label>
                   <input
                     type="text"
-                    placeholder="e.g. African American, White American"
+                    placeholder="e.g. United States, British, Canadian"
                     value={formData.nationality}
                     onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
