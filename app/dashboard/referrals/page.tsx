@@ -252,11 +252,11 @@ export default function ReferralsPage() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 bg-green-500 rounded-full flex-shrink-0"></div>
-                      <span>Level 1 (direct referrer): <strong>KES 65</strong></span>
+                      <span>Level 1: <strong>KES 65</strong></span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 bg-amber-500 rounded-full flex-shrink-0"></div>
-                      <span>Level 2 (grandparent): <strong>KES 10</strong></span>
+                      <span>Level 2: <strong>KES 10</strong></span>
                     </div>
                   </div>
                 </div>
@@ -266,11 +266,11 @@ export default function ReferralsPage() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 bg-green-500 rounded-full flex-shrink-0"></div>
-                      <span>Level 1 (direct referrer): <strong>KES 70</strong></span>
+                      <span>Level 1: <strong>KES 70</strong></span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 bg-amber-500 rounded-full flex-shrink-0"></div>
-                      <span>Level 2 (grandparent): <strong>KES 10</strong></span>
+                      <span>Level 2: <strong>KES 10</strong></span>
                     </div>
                   </div>
                 </div>

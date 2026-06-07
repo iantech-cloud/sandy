@@ -9,9 +9,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase, MpesaTransaction, Transaction, Profile } from '@/app/lib/models';
 import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank';
+import { rateLimit, API_RATE_LIMITS } from '@/app/lib/rate-limit';
+import { auth } from '@/auth';
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth().catch(() => null);
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    const key = `mpesa:status:${(session?.user as any)?.id ?? ip}`;
+    const { exceeded, resetTime } = rateLimit(key, API_RATE_LIMITS.mpesa.limit, API_RATE_LIMITS.mpesa.windowMs);
+    if (exceeded) {
+      return NextResponse.json({ success: false, error: 'Too many status checks. Please wait.' }, {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil((resetTime - Date.now()) / 1000)) },
+      });
+    }
+
     const { checkoutRequestId, messageReference } = await request.json();
 
     // Support both old checkoutRequestId and new messageReference parameter names

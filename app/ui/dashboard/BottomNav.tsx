@@ -54,12 +54,6 @@ export default function BottomNav({ userName }: BottomNavProps) {
       path: '/dashboard/referrals' 
     },
     { 
-      id: 'invite', 
-      label: 'Invite', 
-      icon: MessageCircle, 
-      path: '/auth/sign-up?ref=SANDY001'
-    },
-    { 
       id: 'profile', 
       label: 'Profile', 
       icon: UserIcon, 

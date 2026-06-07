@@ -748,10 +748,12 @@ export async function closeChat(botId: string) {
       target_id: userId.toString(),
     });
 
-    // Mark access as closed and credit paid
+    // Mark access as closed, credit paid, and clear the persisted message
+    // history — this is the ONLY point where stored messages are deleted.
     access.isClosed = true;
     access.closedAt = new Date();
     access.chatCreditPaid = true;
+    (access as any).messages = [];
     await access.save();
 
     console.log('[ChatForeigners] Chat closed and credited:', {
