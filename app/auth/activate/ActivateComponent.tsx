@@ -131,7 +131,7 @@ export default function ActivateComponent() {
       <div className="bg-white rounded-xl shadow-sm p-8 w-full max-w-md border border-gray-200">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Complete Registration</h1>
-          <p className="text-gray-600">Pay the registration fee to access the platform</p>
+          <p className="text-gray-600">Pay to access the platform</p>
         </div>
 
         {message && (
@@ -148,94 +148,29 @@ export default function ActivateComponent() {
           </div>
         )}
 
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 space-y-4">
-
-          {/* Activation fee block */}
-          <div>
-            <p className="text-gray-700 font-semibold mb-1">
-              Activation Fee: <span className="text-indigo-600">KES 95</span>
-            </p>
-            <p className="text-gray-600 text-sm mb-3">
-              One-time fee that activates your account and unlocks all earning features.
-            </p>
-
-            {/* Activation referral split */}
-            <div className="bg-white border border-gray-200 rounded-md p-3 mb-3">
-              <p className="text-gray-700 text-xs font-semibold uppercase tracking-wide mb-2">Referral Commission Split (KES 95)</p>
-              <div className="space-y-1 text-xs text-gray-600">
-                <div className="flex justify-between">
-                  <span>Level 1 — Direct referrer</span>
-                  <span className="font-medium text-green-700">KES 65</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Level 2 — Grandparent referrer</span>
-                  <span className="font-medium text-green-700">KES 10</span>
-                </div>
-                <div className="flex justify-between border-t border-gray-100 pt-1 mt-1">
-                  <span>Platform fee</span>
-                  <span className="font-medium text-gray-500">KES 20</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Ways to earn */}
-            <p className="text-gray-700 text-sm font-medium mb-2">Ways to earn after activation:</p>
-            <ul className="text-gray-600 text-sm space-y-1.5">
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
-                Freelance tasks &amp; writing projects
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
-                Research surveys
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
-                Chat with foreigners
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
-                Referral commissions
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
-                Sales &amp; marketing
-              </li>
-            </ul>
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-gray-200"></div>
-
-          {/* Chat foreigners unlock fee block */}
-          <div>
-            <p className="text-gray-700 font-semibold mb-1">
-              Chat Foreigners Unlock Fee: <span className="text-indigo-600">KES 100</span>
-            </p>
-            <p className="text-gray-600 text-sm mb-3">
-              After activation, unlock a chat bot for KES 100 and start earning from chatting sessions.
-            </p>
-
-            {/* Chat foreigners referral split */}
-            <div className="bg-white border border-gray-200 rounded-md p-3">
-              <p className="text-gray-700 text-xs font-semibold uppercase tracking-wide mb-2">Referral Commission Split (KES 100)</p>
-              <div className="space-y-1 text-xs text-gray-600">
-                <div className="flex justify-between">
-                  <span>Level 1 — Direct referrer</span>
-                  <span className="font-medium text-green-700">KES 70</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Level 2 — Grandparent referrer</span>
-                  <span className="font-medium text-green-700">KES 10</span>
-                </div>
-                <div className="flex justify-between border-t border-gray-100 pt-1 mt-1">
-                  <span>Platform fee</span>
-                  <span className="font-medium text-gray-500">KES 20</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+          <p className="text-gray-600 text-sm mb-3">
+            This one-time fee covers your account setup and provides access to all platform features.
+          </p>
+          <p className="text-gray-700 text-sm font-medium mb-2">Ways to earn after activation:</p>
+          <ul className="text-gray-600 text-sm space-y-1.5">
+            <li className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
+              Freelance opportunities
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
+              Surveys
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
+              Content writing projects
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>
+              Chat with foreigners
+            </li>
+          </ul>
         </div>
 
         <form onSubmit={handlePayment}>
@@ -273,7 +208,7 @@ export default function ActivateComponent() {
                 Processing...
               </>
             ) : (
-              'Pay KES 95 via Co-op Bank'
+              'Pay via Co-op Bank M-Pesa'
             )}
           </button>
         </form>
