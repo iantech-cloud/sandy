@@ -165,7 +165,7 @@ export default function ReferralProgram() {
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <Link 
-                href="/auth/sign-up"
+                href="/auth/sign-up?ref=SANDY001"
                 className="px-8 py-3 bg-white text-indigo-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
               >
                 Create Account

@@ -451,7 +451,7 @@ export default function DashboardPage() {
                 <div className="bg-gradient-to-br from-teal-50 to-cyan-50 p-2 sm:p-3 rounded-lg border border-teal-200">
                   <p className="text-[10px] text-teal-700 mb-1 uppercase tracking-wide font-semibold">Your Referral Link</p>
                   <p className="text-[10px] sm:text-[11px] font-medium text-teal-600 mb-2 font-mono break-all leading-tight">
-                    {typeof window !== 'undefined' ? `${window.location.origin}/auth/register?ref=${profile.referral_id}` : `/auth/register?ref=${profile.referral_id}`}
+                    {typeof window !== 'undefined' ? `${window.location.origin}/auth/sign-up?ref=${profile.referral_id}` : `/auth/sign-up?ref=${profile.referral_id}`}
                   </p>
                   <button
                     onClick={() => handleCopyReferralLink(profile.referral_id!)}

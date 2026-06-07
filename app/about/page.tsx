@@ -183,7 +183,7 @@ const AboutPage: React.FC = () => {
               Join our community of freelancers and start working on projects that match your skills.
             </p>
             <Link
-              href="/auth/sign-up"
+              href="/auth/sign-up?ref=SANDY001"
               className="inline-block px-8 py-3 bg-white text-indigo-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
             >
               Create Your Account
