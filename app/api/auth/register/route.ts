@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
         requires_activation_payment: true,
         next_steps: [
           'Log in to your account',
-          'Pay KES 90 activation fee to activate your account',
+          'Pay KES 95 activation fee to activate your account',
           'Start earning from referrals'
         ]
       },

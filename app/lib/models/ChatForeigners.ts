@@ -72,7 +72,7 @@ const ChatForeignersBotSchema = new Schema({
   },
   unlockCost_cents: {
     type: Number,
-    default: 9000, // 90 KSh
+    default: 10000, // 100 KSh
   },
   renewalCost_cents: {
     type: Number,
