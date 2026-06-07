@@ -28,6 +28,10 @@ interface CommissionStats {
     totalEarnings: number;
     count: number;
   };
+  level2: {
+    totalEarnings: number;
+    count: number;
+  };
   total: number;
 }
 
@@ -184,7 +188,7 @@ export default function ReferralsPage() {
         </div>
 
         <p className="text-gray-600 mt-4 text-sm">
-          Share your referral link. Earn <strong>KES 70</strong> when a referred user activates, plus <strong>KES 75</strong> every time they unlock a Chat Foreigners personality.
+          Share your referral link. Earn <strong>KES 65</strong> (Level 1) when someone you refer activates, plus <strong>KES 10</strong> (Level 2) when your referred member&apos;s referral activates. For Chat Foreigners, earn <strong>KES 70</strong> (L1) and <strong>KES 10</strong> (L2) per personality unlock.
         </p>
       </div>
 
@@ -205,49 +209,78 @@ export default function ReferralsPage() {
           </div>
         ) : commissionStats ? (
           <div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {/* Total Commissions */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              {/* Level 1 earnings */}
+              <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="text-2xl font-bold text-green-600">
+                  KES {commissionStats.level1.totalEarnings.toFixed(2)}
+                </div>
+                <div className="text-sm text-gray-600 mt-1">Level 1 Earnings</div>
+                <div className="text-xs text-green-500 mt-1">{commissionStats.level1.count} commission{commissionStats.level1.count !== 1 ? 's' : ''}</div>
+              </div>
+
+              {/* Level 2 earnings */}
+              <div className="text-center p-4 bg-amber-50 rounded-lg border border-amber-200">
+                <div className="text-2xl font-bold text-amber-600">
+                  KES {commissionStats.level2 ? commissionStats.level2.totalEarnings.toFixed(2) : '0.00'}
+                </div>
+                <div className="text-sm text-gray-600 mt-1">Level 2 Earnings</div>
+                <div className="text-xs text-amber-500 mt-1">{commissionStats.level2?.count ?? 0} commission{(commissionStats.level2?.count ?? 0) !== 1 ? 's' : ''}</div>
+              </div>
+
+              {/* Total */}
               <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <div className="text-2xl font-bold text-blue-600">
                   KES {commissionStats.total.toFixed(2)}
                 </div>
                 <div className="text-sm text-gray-600 mt-1">Total Referral Earnings</div>
-                <div className="text-xs text-blue-500 mt-1">Activation + Chat Foreigners</div>
-              </div>
-
-              {/* Direct Referrals count */}
-              <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
-                <div className="text-2xl font-bold text-green-600">
-                  {commissionStats.level1.count}
-                </div>
-                <div className="text-sm text-gray-600 mt-1">Paid Commissions</div>
-                <div className="text-xs text-green-500 mt-1">
-                  Avg KES {commissionStats.level1.count > 0 ? (commissionStats.total / commissionStats.level1.count).toFixed(0) : '0'} each
-                </div>
+                <div className="text-xs text-blue-500 mt-1">All tiers combined</div>
               </div>
             </div>
 
           {/* Commission Structure Info */}
             <div className="p-4 bg-gray-50 rounded-lg border">
               <h4 className="font-semibold text-gray-800 mb-3">Commission Structure</h4>
-              <div className="text-sm space-y-2">
-                <div className="flex items-start gap-3">
-                  <div className="w-3 h-3 bg-green-500 rounded-full mt-1 flex-shrink-0"></div>
-                  <div>
-                    <p><strong>Account Activation:</strong> KES 70 per direct referral</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Earned when someone you refer pays the KES 90 activation fee</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                {/* Activation */}
+                <div>
+                  <p className="font-medium text-gray-700 mb-2">Account Activation (KES 90 fee)</p>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 bg-green-500 rounded-full flex-shrink-0"></div>
+                      <span>Level 1 (direct referrer): <strong>KES 65</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 bg-amber-500 rounded-full flex-shrink-0"></div>
+                      <span>Level 2 (grandparent): <strong>KES 10</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 bg-gray-400 rounded-full flex-shrink-0"></div>
+                      <span>Company: <strong>KES 15</strong></span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-3 h-3 bg-amber-500 rounded-full mt-1 flex-shrink-0"></div>
-                  <div>
-                    <p><strong>Chat Foreigners Downline:</strong> KES 75 per chat unlock</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Earned each time your referred user unlocks a Chat Foreigners personality (KES 100 payment)</p>
+                {/* Chat Foreigners */}
+                <div>
+                  <p className="font-medium text-gray-700 mb-2">Chat Foreigners Unlock (KES 100 fee)</p>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 bg-green-500 rounded-full flex-shrink-0"></div>
+                      <span>Level 1 (direct referrer): <strong>KES 70</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 bg-amber-500 rounded-full flex-shrink-0"></div>
+                      <span>Level 2 (grandparent): <strong>KES 10</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 bg-gray-400 rounded-full flex-shrink-0"></div>
+                      <span>Company: <strong>KES 20</strong></span>
+                    </div>
                   </div>
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-4">
-                * All earnings go directly to your main wallet and are withdrawable.
+                All earnings go directly to your main wallet and are withdrawable.
               </p>
             </div>
           </div>
@@ -402,11 +435,11 @@ export default function ReferralsPage() {
             <div className="text-xs text-gray-400 mt-1">Account verified</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border border-purple-200">
-            <div className="text-sm text-gray-500 mb-1">Total Activation Earnings</div>
+            <div className="text-sm text-gray-500 mb-1">Total Referral Earnings</div>
             <div className="text-3xl font-bold text-purple-600">
               KES {commissionStats ? commissionStats.total.toFixed(2) : '0.00'}
             </div>
-            <div className="text-xs text-gray-400 mt-1">From referral activations</div>
+            <div className="text-xs text-gray-400 mt-1">L1 + L2 combined</div>
           </div>
         </div>
       )}

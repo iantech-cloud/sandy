@@ -661,136 +661,152 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     await activationFeeTransaction.save();
 
     // =============================================================================
-    // STEP 2: Process Referral Bonus - KES 70 per Direct Referral
+    // STEP 2: Process Referral Bonuses — 2-tier structure
+    //   KES 90 activation split:
+    //     Level 1 (direct referrer):   KES 65 (6,500 cents)
+    //     Level 2 (grandparent):       KES 10 (1,000 cents)
+    //     Company:                     KES 15 (1,500 cents)  [or more if tiers absent]
     // =============================================================================
-    let referralBonus = null;
+    const L1_BONUS_CENTS = 6500; // KES 65
+    const L2_BONUS_CENTS = 1000; // KES 10
+    const COMPANY_FEE_CENTS = 1500; // KES 15 (when both L1 and L2 are paid)
+
+    let referralBonus: { referrer_id: any; referrer_username: string; amount_cents: number; transaction_id: any; level: number } | null = null;
+    let level2Bonus: { referrer_id: any; referrer_username: string; amount_cents: number; transaction_id: any; level: number } | null = null;
 
     if (userProfile.referred_by) {
-      console.log(`[v0] User has referrer:`, {
-        userId: userProfile._id,
-        username: userProfile.username,
-        referred_by: userProfile.referred_by,
-        type: typeof userProfile.referred_by
-      });
-
       try {
+        // ---- Level 1: direct referrer ----
         const referrer = await (Profile as any).findById(userProfile.referred_by);
-        
-        console.log(`[v0] Referrer lookup:`, {
-          referrer_id: userProfile.referred_by,
-          found: !!referrer,
-          referrer_username: referrer?.username
-        });
-        
+
         if (referrer) {
           const referralRecord = await (Referral as any).findOne({
             referrer_id: referrer._id,
             referred_id: userProfile._id
           });
 
-          console.log(`[v0] Referral record lookup:`, {
-            referrer_id: referrer._id,
-            referred_id: userProfile._id,
-            found: !!referralRecord,
-            already_paid: referralRecord?.referral_bonus_paid
-          });
-
           if (referralRecord && !referralRecord.referral_bonus_paid) {
-            // ✅ FIXED: Referral bonus is KES 70 = 7,000 cents (NOT 70,000)
-            const REFERRAL_BONUS_CENTS = 7000; // KES 70
-            const referralLevel = 1; // Direct referral (Level 1)
-
-            console.log(`[v0] Processing referral bonus:`, {
-              referrer: referrer.username,
-              newUser: userProfile.username,
-              bonusAmount: REFERRAL_BONUS_CENTS / 100,
-              bonusType: 'Direct Referral'
-            });
-
-            // Create transaction for direct referral bonus
-            const referralTransaction = new (Transaction as any)({
+            // Create L1 transaction
+            const l1Transaction = new (Transaction as any)({
               target_type: 'user',
               target_id: referrer._id.toString(),
               user_id: referrer._id,
-              amount_cents: REFERRAL_BONUS_CENTS,
+              amount_cents: L1_BONUS_CENTS,
               type: 'REFERRAL',
-              description: `Referral bonus for ${userProfile.username}'s activation (KES 70)`,
+              description: `Level 1 referral bonus for ${userProfile.username}'s activation (KES 65)`,
               status: 'completed',
               source: 'activation',
               balance_before_cents: referrer.balance_cents,
-              balance_after_cents: referrer.balance_cents + REFERRAL_BONUS_CENTS,
+              balance_after_cents: referrer.balance_cents + L1_BONUS_CENTS,
               metadata: {
                 referred_user_id: userProfile._id.toString(),
                 referred_username: userProfile.username,
+                referredUser: userProfile._id.toString(),
                 activation_payment_id: activationPayment._id.toString(),
                 referral_id: referralRecord._id.toString(),
-                level: referralLevel,
-                bonus_amount: REFERRAL_BONUS_CENTS
+                level: 1,
+                bonus_amount: L1_BONUS_CENTS
               }
             });
-            await referralTransaction.save();
+            await l1Transaction.save();
 
-            // Update referrer balance and earnings
-            referrer.balance_cents += REFERRAL_BONUS_CENTS;
-            referrer.total_earnings_cents += REFERRAL_BONUS_CENTS;
+            referrer.balance_cents += L1_BONUS_CENTS;
+            referrer.total_earnings_cents += L1_BONUS_CENTS;
             await referrer.save();
 
-            console.log(`[v0] Referrer balance updated:`, {
-              referrer: referrer.username,
-              newBalance: referrer.balance_cents / 100,
-              earned: REFERRAL_BONUS_CENTS / 100
-            });
-
-            // Update referral record
             referralRecord.referral_bonus_paid = true;
-            referralRecord.referral_bonus_amount_cents = REFERRAL_BONUS_CENTS;
+            referralRecord.referral_bonus_amount_cents = L1_BONUS_CENTS;
             referralRecord.bonus_paid_at = new Date();
             referralRecord.status = 'bonus_paid';
             referralRecord.referred_user_activated = true;
             referralRecord.referred_user_activated_at = new Date();
             referralRecord.metadata = {
-              level: referralLevel,
-              bonus_amount: REFERRAL_BONUS_CENTS,
+              level: 1,
+              bonus_amount: L1_BONUS_CENTS,
               activated_at: new Date().toISOString()
             };
             await referralRecord.save();
 
-            // Create earning record
-            const earning = new (Earning as any)({
+            const l1Earning = new (Earning as any)({
               user_id: referrer._id,
-              amount_cents: REFERRAL_BONUS_CENTS,
+              amount_cents: L1_BONUS_CENTS,
               type: 'REFERRAL',
-              description: `Referral bonus for ${userProfile.username}'s activation`,
+              description: `Level 1 referral bonus for ${userProfile.username}'s activation`,
               source_id: referralRecord._id,
               source_type: 'referral',
-              transaction_id: referralTransaction._id,
+              transaction_id: l1Transaction._id,
               processed: true,
               processed_at: new Date(),
-              metadata: {
-                level: referralLevel,
-                referred_user_id: userProfile._id.toString(),
-                bonus_amount: REFERRAL_BONUS_CENTS
-              }
+              metadata: { level: 1, referred_user_id: userProfile._id.toString(), bonus_amount: L1_BONUS_CENTS }
             });
-            await earning.save();
+            await l1Earning.save();
 
             referralBonus = {
               referrer_id: referrer._id,
               referrer_username: referrer.username,
-              amount_cents: REFERRAL_BONUS_CENTS,
-              transaction_id: referralTransaction._id,
-              level: referralLevel
+              amount_cents: L1_BONUS_CENTS,
+              transaction_id: l1Transaction._id,
+              level: 1
             };
 
-            console.log(`✅ BONUS PAID: ${referrer.username} earned KES 70`, {
-              referrer: referrer.username,
-              referrerId: referrer._id,
-              newUser: userProfile.username,
-              bonusAmount: REFERRAL_BONUS_CENTS / 100,
-              transactionId: referralTransaction._id,
-              newBalance: referrer.balance_cents / 100
-            });
+            console.log(`[Activation] L1 bonus paid: ${referrer.username} +KES 65`);
 
+            // ---- Level 2: grandparent (referrer's referrer) ----
+            if (referrer.referred_by) {
+              const grandparent = await (Profile as any).findById(referrer.referred_by);
+
+              if (grandparent) {
+                const l2Transaction = new (Transaction as any)({
+                  target_type: 'user',
+                  target_id: grandparent._id.toString(),
+                  user_id: grandparent._id,
+                  amount_cents: L2_BONUS_CENTS,
+                  type: 'REFERRAL',
+                  description: `Level 2 referral bonus for ${userProfile.username}'s activation (KES 10)`,
+                  status: 'completed',
+                  source: 'activation',
+                  balance_before_cents: grandparent.balance_cents,
+                  balance_after_cents: grandparent.balance_cents + L2_BONUS_CENTS,
+                  metadata: {
+                    referred_user_id: userProfile._id.toString(),
+                    referred_username: userProfile.username,
+                    referredUser: userProfile._id.toString(),
+                    activation_payment_id: activationPayment._id.toString(),
+                    level: 2,
+                    bonus_amount: L2_BONUS_CENTS,
+                    level1_referrer_id: referrer._id.toString()
+                  }
+                });
+                await l2Transaction.save();
+
+                grandparent.balance_cents += L2_BONUS_CENTS;
+                grandparent.total_earnings_cents += L2_BONUS_CENTS;
+                await grandparent.save();
+
+                const l2Earning = new (Earning as any)({
+                  user_id: grandparent._id,
+                  amount_cents: L2_BONUS_CENTS,
+                  type: 'REFERRAL',
+                  description: `Level 2 referral bonus for ${userProfile.username}'s activation`,
+                  source_type: 'referral',
+                  transaction_id: l2Transaction._id,
+                  processed: true,
+                  processed_at: new Date(),
+                  metadata: { level: 2, referred_user_id: userProfile._id.toString(), bonus_amount: L2_BONUS_CENTS }
+                });
+                await l2Earning.save();
+
+                level2Bonus = {
+                  referrer_id: grandparent._id,
+                  referrer_username: grandparent.username,
+                  amount_cents: L2_BONUS_CENTS,
+                  transaction_id: l2Transaction._id,
+                  level: 2
+                };
+
+                console.log(`[Activation] L2 bonus paid: ${grandparent.username} +KES 10`);
+              }
+            }
           } else if (referralRecord && referralRecord.referral_bonus_paid) {
             console.log(`[v0] Referral bonus already paid for ${userProfile.username}`);
           } else {
@@ -807,44 +823,48 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     }
 
     // =============================================================================
-    // STEP 3: Record Company Revenue - KES 20 (2,000 cents) per activation
+    // STEP 3: Record Company Revenue
+    //   KES 90 breakdown:
+    //     Both L1 + L2 paid  → company gets KES 15
+    //     Only L1 paid       → company gets KES 25 (L2 unclaimed = KES 10)
+    //     Neither paid       → company gets KES 90
     // =============================================================================
-    // Breakdown of KES 90 activation fee:
-    // - If has referrer: Referrer gets KES 70, Company gets KES 20
-    // - If no referrer: Company gets KES 90 (unclaimed referral bonus)
-    
-    let companyRevenueCents;
+    const paidOut = (referralBonus ? L1_BONUS_CENTS : 0) + (level2Bonus ? L2_BONUS_CENTS : 0);
+    let companyRevenueCents = COMPANY_FEE_CENTS; // KES 15 baseline
     let unclaimedReferralCents = 0;
 
-    if (userProfile.referred_by && referralBonus) {
-      // ✅ FIXED: With referrer, company gets KES 20 = 2,000 cents
-      companyRevenueCents = 2000; // KES 20
-      unclaimedReferralCents = 0;
+    if (!referralBonus && !level2Bonus) {
+      // No referrer at all
+      companyRevenueCents = COMPANY_FEE_CENTS;
+      unclaimedReferralCents = L1_BONUS_CENTS + L2_BONUS_CENTS; // KES 75
+    } else if (referralBonus && !level2Bonus) {
+      // L1 paid, no grandparent → L2 goes to company
+      companyRevenueCents = COMPANY_FEE_CENTS;
+      unclaimedReferralCents = L2_BONUS_CENTS; // KES 10
     } else {
-      // No referrer OR bonus wasn't paid - company gets full amount
-      // Split into actual company fee + unclaimed referral bonus
-      companyRevenueCents = 2000; // Company fee (KES 20)
-      unclaimedReferralCents = 7000; // Unclaimed referral bonus (KES 70)
+      // Both paid
+      companyRevenueCents = COMPANY_FEE_CENTS;
+      unclaimedReferralCents = 0;
     }
 
-    console.log(`[v0] Company revenue calculation:`, {
+    console.log(`[Activation] Revenue split:`, {
       totalFee: activationPayment.amount_cents / 100,
-      hasReferrer: !!userProfile.referred_by,
-      bonusWasPaid: !!referralBonus,
+      l1Paid: referralBonus ? L1_BONUS_CENTS / 100 : 0,
+      l2Paid: level2Bonus ? L2_BONUS_CENTS / 100 : 0,
       companyRevenue: companyRevenueCents / 100,
-      unclaimedReferral: unclaimedReferralCents / 100
+      unclaimed: unclaimedReferralCents / 100
     });
 
     const companyRevenueResult = await createCompanyRevenueTransaction(
       companyRevenueCents,
       'COMPANY_REVENUE',
-      `Company fee from ${userProfile.username}'s activation (KES 20)`,
+      `Company fee from ${userProfile.username}'s activation (KES ${companyRevenueCents / 100})`,
       {
         total_activation_fee: activationPayment.amount_cents,
-        referral_bonus_paid: referralBonus ? referralBonus.amount_cents : 0,
+        l1_bonus_paid: referralBonus ? referralBonus.amount_cents : 0,
+        l2_bonus_paid: level2Bonus ? level2Bonus.amount_cents : 0,
         company_revenue: companyRevenueCents,
         unclaimed_referral: unclaimedReferralCents,
-        net_company_revenue: companyRevenueCents,
         has_referrer: !!userProfile.referred_by,
         activation_payment_id: activationPayment._id.toString(),
         user_id: userProfile._id.toString()
@@ -863,13 +883,13 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     if (unclaimedReferralCents > 0) {
       // If no referrer or bonus wasn't paid, record unclaimed referral bonus
       const unclaimedResult = await createCompanyRevenueTransaction(
-        unclaimedReferralCents, // KES 70 unclaimed referral bonus
+        unclaimedReferralCents,
         'UNCLAIMED_REFERRAL',
-        `Unclaimed referral bonus from ${userProfile.username}'s activation (KES 70)`,
+        `Unclaimed referral bonus from ${userProfile.username}'s activation (KES ${unclaimedReferralCents / 100})`,
         {
           activation_payment_id: activationPayment._id.toString(),
           user_id: userProfile._id.toString(),
-          reason: userProfile.referred_by ? 'bonus_failed' : 'no_referrer'
+          reason: userProfile.referred_by ? 'bonus_failed_or_no_grandparent' : 'no_referrer'
         },
         userProfile._id.toString()
       );
@@ -924,7 +944,8 @@ export async function completeActivationAfterPayment(activationPaymentId: string
       ...activationPayment.metadata,
       activation_transaction_id: activationFeeTransaction._id,
       company_revenue_transaction_id: companyRevenueResult.data?.transaction_id,
-      referral_bonus_paid: !!referralBonus
+      l1_bonus_paid: !!referralBonus,
+      l2_bonus_paid: !!level2Bonus
     };
     await activationPayment.save();
 
@@ -975,6 +996,8 @@ export async function completeActivationAfterPayment(activationPaymentId: string
       metadata: {
         activation_payment_id: activationPayment._id,
         has_referrer: !!userProfile.referred_by,
+        l1_bonus_paid: !!referralBonus,
+        l2_bonus_paid: !!level2Bonus,
         confirmation_invoice_sent: true
       }
     });

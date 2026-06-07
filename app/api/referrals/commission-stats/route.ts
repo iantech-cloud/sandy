@@ -23,17 +23,25 @@ export async function GET(request: NextRequest) {
       user_id: currentUser._id,
       type: 'REFERRAL',
       status: 'completed',
-    }).lean();
+    }).select('amount_cents metadata').lean();
 
-    const totalEarnings = allReferralTransactions.reduce((sum, tx) => sum + tx.amount_cents, 0);
-    const count = allReferralTransactions.length;
+    // Level 1 = metadata.level === 1 OR absent (legacy before 2-tier)
+    const l1Txns = allReferralTransactions.filter((tx: any) => !tx.metadata?.level || tx.metadata.level === 1);
+    const l2Txns = allReferralTransactions.filter((tx: any) => tx.metadata?.level === 2);
+
+    const l1Earnings = l1Txns.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
+    const l2Earnings = l2Txns.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
 
     const stats = {
       level1: {
-        totalEarnings: totalEarnings / 100,
-        count,
+        totalEarnings: l1Earnings / 100,
+        count: l1Txns.length,
       },
-      total: totalEarnings / 100,
+      level2: {
+        totalEarnings: l2Earnings / 100,
+        count: l2Txns.length,
+      },
+      total: (l1Earnings + l2Earnings) / 100,
     };
 
     return NextResponse.json({

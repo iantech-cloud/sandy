@@ -47,21 +47,24 @@ export async function getReferralDashboardData() {
     }).populate('referred_id', 'username email status created_at activation_status firstName lastName').lean();
 
     // Get all completed REFERRAL transactions for this user (no metadata level filter)
-    const level1Transactions = await (Transaction as any).find({
+    const allReferralTxns = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
       status: 'completed'
-    }).lean();
+    }).select('amount_cents metadata').lean();
 
-    const level1Earnings = level1Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0) / 100;
+    // Level 1 = level absent (legacy) OR level === 1
+    const l1Transactions = allReferralTxns.filter((tx: any) => !tx.metadata?.level || tx.metadata.level === 1);
+    const l2Transactions = allReferralTxns.filter((tx: any) => tx.metadata?.level === 2);
 
-    // Level 2 no longer exists — kept for backward compat but will always be 0
-    const level2Earnings = 0;
-    
+    const level1Earnings = l1Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0) / 100;
+    const level2Earnings = l2Transactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0) / 100;
+
     console.log(`[v0] Referral earnings for ${currentUser.username}:`, {
-      totalTransactions: level1Transactions.length,
-      level1Count: level1Transactions.length,
-      level1Earnings: level1Earnings,
+      l1Count: l1Transactions.length,
+      l1Earnings: level1Earnings,
+      l2Count: l2Transactions.length,
+      l2Earnings: level2Earnings,
     });
 
     // Count active referrals (where referred user's status is 'active' or 'verified')
@@ -100,9 +103,16 @@ export async function getReferralDashboardData() {
         totalEarnings: level1Earnings + level2Earnings,
         referralItems,
         commissionStructure: {
-          level1: 70,  // KES 70 per direct referral activation
-          chatForeignersDownline: 75, // KES 75 per CF chat unlock by downline
-          company: 20  // KES 20 company fee per activation
+          activation: {
+            level1: 65, // KES 65 per direct referral activation
+            level2: 10, // KES 10 per grandparent referral activation
+            company: 15 // KES 15 company fee per activation
+          },
+          chatForeigners: {
+            level1: 70, // KES 70 per L1 CF chat unlock
+            level2: 10, // KES 10 per L2 CF chat unlock
+            company: 20 // KES 20 company fee per CF unlock
+          }
         }
       }
     };
