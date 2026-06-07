@@ -384,27 +384,26 @@ async function createReferralStructure(referrerId: string, referredId: string): 
       earning_cents: 0,
     });
 
-    // Build downline structure
-    // Level 1 - direct referral
+    // Build downline structure — strictly 2 levels only
+    // Level 1 = direct referral
     await (DownlineUser as any).create({
       main_user_id: referrerId,
       downline_user_id: referredId,
       level: 1,
     });
 
-    // Find upline for level 2+ referrals
-    const uplineReferrals = await (DownlineUser as any).find({ 
-      downline_user_id: referrerId 
-    }).sort({ level: 1 });
+    // Level 2 = grandparent (referrer's referrer), if it exists — no further levels
+    const referrerProfile = await (DownlineUser as any).findOne({
+      downline_user_id: referrerId,
+      level: 1,
+    });
 
-    for (const upline of uplineReferrals) {
-      if (upline.level < 10) { // Limit to 10 levels
-        await (DownlineUser as any).create({
-          main_user_id: upline.main_user_id,
-          downline_user_id: referredId,
-          level: upline.level + 1,
-        });
-      }
+    if (referrerProfile) {
+      await (DownlineUser as any).create({
+        main_user_id: referrerProfile.main_user_id,
+        downline_user_id: referredId,
+        level: 2,
+      });
     }
 
   } catch (error) {

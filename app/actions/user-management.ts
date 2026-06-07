@@ -553,65 +553,67 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
           'metadata.level': 0
         }).session(session);
 
-        // Single tier referral bonus: KES 70 (70,000 cents) for all direct referrals
-        const DIRECT_BONUS_CENTS = 70000;
+        // Activation fee split:
+        //   L1 (direct referrer)  = KES 65 (6,500 cents)
+        //   L2 (grandparent)      = KES 10 (1,000 cents)
+        //   Company minimum       = KES 20 (2,000 cents)
+        const L1_BONUS_CENTS = 6500; // KES 65
+        const L2_BONUS_CENTS_UM = 1000; // KES 10
 
-        // DEDUCT from company balance as expense
-        const balanceBeforeDirectBonus = company.wallet_balance_cents;
-        company.wallet_balance_cents -= DIRECT_BONUS_CENTS;
-        company.total_expenses_cents += DIRECT_BONUS_CENTS;
+        // DEDUCT L1 amount from company balance as expense
+        const balanceBeforeL1 = company.wallet_balance_cents;
+        company.wallet_balance_cents -= L1_BONUS_CENTS;
+        company.total_expenses_cents += L1_BONUS_CENTS;
         await company.save({ session });
 
-        // Create company expense transaction
+        // Company expense record for L1
         const companyExpenseTransaction = new Transaction({
           target_type: 'company',
           target_id: company._id.toString(),
           user_id: company._id.toString(),
-          amount_cents: -DIRECT_BONUS_CENTS,
+          amount_cents: -L1_BONUS_CENTS,
           type: 'REFERRAL',
-          description: `Direct referral bonus paid to ${referrer.username} for ${user.username}'s activation`,
+          description: `L1 referral bonus paid to ${referrer.username} for ${user.username}'s activation (KES 65)`,
           status: 'completed',
           source: 'activation',
-          balance_before_cents: balanceBeforeDirectBonus,
+          balance_before_cents: balanceBeforeL1,
           balance_after_cents: company.wallet_balance_cents,
           metadata: {
             beneficiary_user_id: referrer._id,
             beneficiary_username: referrer.username,
             referred_user_id: userId,
             referred_username: user.username,
-            level: 0,
+            level: 1,
             transaction_purpose: 'REFERRAL_BONUS_PAYMENT'
           },
         });
         await companyExpenseTransaction.save({ session });
 
-        // Update referrer's balance and earnings
+        // Credit L1 referrer
         const referrerBalanceBefore = referrer.balance_cents;
-        referrer.balance_cents += DIRECT_BONUS_CENTS;
-        referrer.total_earnings_cents += DIRECT_BONUS_CENTS;
+        referrer.balance_cents += L1_BONUS_CENTS;
+        referrer.total_earnings_cents += L1_BONUS_CENTS;
         await referrer.save({ session });
 
         // Update referral record
-        referral.earning_cents = DIRECT_BONUS_CENTS;
+        referral.earning_cents = L1_BONUS_CENTS;
         referral.referral_bonus_paid = true;
-        referral.referral_bonus_amount_cents = DIRECT_BONUS_CENTS;
+        referral.referral_bonus_amount_cents = L1_BONUS_CENTS;
         referral.bonus_paid_at = new Date();
         referral.status = 'bonus_paid';
         referral.referred_user_activated = true;
         referral.referred_user_activated_at = new Date();
-        referral.metadata = {
-          level: 0
-        };
+        referral.metadata = { level: 1 };
         await referral.save({ session });
 
-        // Create credit transaction for referrer
+        // Credit transaction for L1 referrer
         const referralTransaction = new Transaction({
           user_id: referrer._id,
           target_type: 'user',
           target_id: referrer._id,
-          amount_cents: DIRECT_BONUS_CENTS,
+          amount_cents: L1_BONUS_CENTS,
           type: 'REFERRAL',
-          description: `Direct referral bonus for ${user.username}'s activation`,
+          description: `Level 1 referral bonus for ${user.username}'s activation (KES 65)`,
           status: 'completed',
           source: 'activation',
           balance_before_cents: referrerBalanceBefore,
@@ -621,7 +623,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
             referred_username: user.username,
             activation_payment_id: activationTransaction._id,
             referral_id: referral._id,
-            level: 0
+            level: 1
           },
         });
         await referralTransaction.save({ session });
@@ -629,12 +631,83 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
         directReferralBonus = {
           referrer_id: referrer._id,
           referrer_username: referrer.username,
-          amount_cents: DIRECT_BONUS_CENTS,
+          amount_cents: L1_BONUS_CENTS,
           transaction_id: referralTransaction._id
         };
 
-        console.log(`✅ Direct referral bonus paid: ${referrer.username} earned KES ${DIRECT_BONUS_CENTS / 100}`);
-        console.log(`   Company balance after bonus: KES ${company.wallet_balance_cents / 100}`);
+        console.log(`✅ L1 referral bonus paid: ${referrer.username} earned KES ${L1_BONUS_CENTS / 100}`);
+
+        // ---- Level 2: grandparent (referrer's referrer) ----
+        if (referrer.referred_by) {
+          const grandparent = await Profile.findById(referrer.referred_by).session(session);
+
+          if (grandparent) {
+            const balanceBeforeL2 = company.wallet_balance_cents;
+            company.wallet_balance_cents -= L2_BONUS_CENTS_UM;
+            company.total_expenses_cents += L2_BONUS_CENTS_UM;
+            await company.save({ session });
+
+            const companyExpenseL2 = new Transaction({
+              target_type: 'company',
+              target_id: company._id.toString(),
+              user_id: company._id.toString(),
+              amount_cents: -L2_BONUS_CENTS_UM,
+              type: 'REFERRAL',
+              description: `L2 referral bonus paid to ${grandparent.username} for ${user.username}'s activation (KES 10)`,
+              status: 'completed',
+              source: 'activation',
+              balance_before_cents: balanceBeforeL2,
+              balance_after_cents: company.wallet_balance_cents,
+              metadata: {
+                beneficiary_user_id: grandparent._id,
+                beneficiary_username: grandparent.username,
+                referred_user_id: userId,
+                referred_username: user.username,
+                level: 2,
+                transaction_purpose: 'REFERRAL_BONUS_PAYMENT'
+              },
+            });
+            await companyExpenseL2.save({ session });
+
+            const grandparentBalanceBefore = grandparent.balance_cents;
+            grandparent.balance_cents += L2_BONUS_CENTS_UM;
+            grandparent.total_earnings_cents += L2_BONUS_CENTS_UM;
+            await grandparent.save({ session });
+
+            const l2Transaction = new Transaction({
+              user_id: grandparent._id,
+              target_type: 'user',
+              target_id: grandparent._id,
+              amount_cents: L2_BONUS_CENTS_UM,
+              type: 'REFERRAL',
+              description: `Level 2 referral bonus for ${user.username}'s activation (KES 10)`,
+              status: 'completed',
+              source: 'activation',
+              balance_before_cents: grandparentBalanceBefore,
+              balance_after_cents: grandparent.balance_cents,
+              metadata: {
+                referred_user_id: userId,
+                referred_username: user.username,
+                activation_payment_id: activationTransaction._id,
+                level1_referrer_id: referrer._id.toString(),
+                level: 2
+              },
+            });
+            await l2Transaction.save({ session });
+
+            level1ReferralBonus = {
+              referrer_id: grandparent._id,
+              referrer_username: grandparent.username,
+              amount_cents: L2_BONUS_CENTS_UM,
+              transaction_id: l2Transaction._id
+            };
+
+            console.log(`✅ L2 referral bonus paid: ${grandparent.username} earned KES ${L2_BONUS_CENTS_UM / 100}`);
+            console.log(`   Company balance after L2: KES ${company.wallet_balance_cents / 100}`);
+          }
+        }
+
+        console.log(`   Company balance after bonuses: KES ${company.wallet_balance_cents / 100}`);
 
 
       }
@@ -646,7 +719,7 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
     // ============================================================================
     // STEP 7: Calculate final balances for logging
     // ============================================================================
-    const totalBonusesPaid = directReferralBonus?.amount_cents || 0;
+    const totalBonusesPaid = (directReferralBonus?.amount_cents || 0) + (level1ReferralBonus?.amount_cents || 0);
     const finalCompanyBalance = company.wallet_balance_cents;
     const netCompanyRevenue = ACTIVATION_FEE_CENTS - totalBonusesPaid;
     
@@ -733,13 +806,13 @@ export async function activateUserAccount(userId: string, activationNotes?: stri
       message += `Activation fee of KSH ${ACTIVATION_FEE_CENTS / 100} deducted from user wallet. `;
     }
     if (directReferralBonus) {
-      message += `Direct referral bonus of KSH ${directReferralBonus.amount_cents / 100} (${directReferralBonus.bonus_tier}) awarded to ${directReferralBonus.referrer_username}. `;
+      message += `L1 bonus of KSH ${directReferralBonus.amount_cents / 100} awarded to ${directReferralBonus.referrer_username}. `;
     }
     if (level1ReferralBonus) {
-      message += `Level 1 bonus of KSH ${level1ReferralBonus.amount_cents / 100} awarded to ${level1ReferralBonus.referrer_username}. `;
+      message += `L2 bonus of KSH ${level1ReferralBonus.amount_cents / 100} awarded to ${level1ReferralBonus.referrer_username}. `;
     }
     if (!directReferralBonus && !level1ReferralBonus) {
-      message += `No referrer found - full KES 100 credited to company.`;
+      message += `No referrer found — full KES 95 retained by company.`;
     }
 
     return { success: true, message };
