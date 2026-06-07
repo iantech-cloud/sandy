@@ -457,8 +457,8 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       };
     }
 
-    // Standard activation fee: KES 90
-    const activationAmount = 9000; // cents
+    // Standard activation fee: KES 95
+    const activationAmount = 9500; // cents
 
     const activationPayment = new (ActivationPayment as any)({
       user_id: userProfile._id,
@@ -662,7 +662,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
 
     // =============================================================================
     // STEP 2: Process Referral Bonuses — 2-tier structure
-    //   KES 90 activation split:
+    //   KES 95 activation split:
     //     Level 1 (direct referrer):   KES 65 (6,500 cents)
     //     Level 2 (grandparent):       KES 10 (1,000 cents)
     //     Company:                     KES 15 (1,500 cents)  [or more if tiers absent]
@@ -824,10 +824,10 @@ export async function completeActivationAfterPayment(activationPaymentId: string
 
     // =============================================================================
     // STEP 3: Record Company Revenue
-    //   KES 90 breakdown:
+    //   KES 95 breakdown:
     //     Both L1 + L2 paid  → company gets KES 15
     //     Only L1 paid       → company gets KES 25 (L2 unclaimed = KES 10)
-    //     Neither paid       → company gets KES 90
+    //     Neither paid       → company gets KES 95
     // =============================================================================
     const paidOut = (referralBonus ? L1_BONUS_CENTS : 0) + (level2Bonus ? L2_BONUS_CENTS : 0);
     let companyRevenueCents = COMPANY_FEE_CENTS; // KES 15 baseline

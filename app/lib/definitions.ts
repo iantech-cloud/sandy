@@ -156,12 +156,12 @@ export interface CreateReferralRequest {
 
 export interface CommissionConfig {
   directReferral: number; // KSH 70 for direct referral
-  activationAmount: number; // KSH 90 activation fee
+  activationAmount: number; // KSH 95 activation fee
 }
 
 export const COMMISSION_CONFIG: CommissionConfig = {
   directReferral: 7000, // in cents (70 KSH)
-  activationAmount: 9000 // in cents (90 KSH)
+  activationAmount: 9500 // in cents (95 KSH)
 };
 
 // Updated Stats interface (includes referral stats and per-source wallet aggregations)

@@ -149,10 +149,18 @@ export default function ActivateComponent() {
         )}
 
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-          <p className="text-gray-700 font-medium mb-2">Registration Fee: KES 90</p>
-          <p className="text-gray-600 text-sm">
-            This one-time fee covers your account setup and provides access to all platform features including freelance opportunities, surveys, and content writing projects.
+          <p className="text-gray-700 font-semibold mb-3">Activation Fee: <span className="text-indigo-600">KES 95</span></p>
+          <p className="text-gray-600 text-sm mb-3">
+            This one-time fee activates your account and gives you full access to all earning features on the platform.
           </p>
+          <p className="text-gray-700 text-sm font-medium mb-2">Ways to earn after activation:</p>
+          <ul className="text-gray-600 text-sm space-y-1 list-none">
+            <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>Freelance tasks &amp; writing projects</li>
+            <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>Research surveys</li>
+            <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>Chat with foreigners</li>
+            <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>Referral commissions</li>
+            <li className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0"></span>Sales &amp; marketing</li>
+          </ul>
         </div>
 
         <form onSubmit={handlePayment}>
@@ -190,7 +198,7 @@ export default function ActivateComponent() {
                 Processing...
               </>
             ) : (
-              'Pay KES 90 via Co-op Bank'
+              'Pay KES 95 via Co-op Bank'
             )}
           </button>
         </form>
