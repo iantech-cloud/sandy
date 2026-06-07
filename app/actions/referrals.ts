@@ -37,9 +37,7 @@ interface TransactionDocument {
     referredUser?: string;
     level?: number;
   };
-}
-
-interface ReferralItem {
+}interface ReferralItem {
   id: string;
   name: string;
   email: string;
@@ -69,6 +67,10 @@ interface ReferralsResponse {
 interface CommissionStats {
   level1: { 
     totalEarnings: number; 
+    count: number;
+  };
+  level2: {
+    totalEarnings: number;
     count: number;
   };
   total: number;
@@ -232,22 +234,34 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
       return { success: false, message: 'User not found' };
     }
 
-    // Get all completed REFERRAL transactions earned by this user
-    const directReferralTransactions = await (Transaction as any).find({
+    // Get all completed REFERRAL transactions earned by this user, split by level
+    const allReferralTransactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
       status: 'completed'
-    }).lean();
+    }).select('amount_cents metadata').lean();
 
-    const level1Earnings = directReferralTransactions.reduce((sum: number, tx: any) => sum + tx.amount_cents, 0);
-    const level1Count = directReferralTransactions.length;
+    // Level 1 = metadata.level === 1 OR metadata.level is absent (legacy records before 2-tier)
+    const l1Txns = (allReferralTransactions as TransactionDocument[]).filter(
+      (tx) => !tx.metadata?.level || tx.metadata.level === 1
+    );
+    const l2Txns = (allReferralTransactions as TransactionDocument[]).filter(
+      (tx) => tx.metadata?.level === 2
+    );
+
+    const l1Earnings = l1Txns.reduce((sum, tx) => sum + tx.amount_cents, 0);
+    const l2Earnings = l2Txns.reduce((sum, tx) => sum + tx.amount_cents, 0);
 
     const stats: CommissionStats = {
       level1: {
-        totalEarnings: level1Earnings / 100,
-        count: level1Count
+        totalEarnings: l1Earnings / 100,
+        count: l1Txns.length
       },
-      total: level1Earnings / 100
+      level2: {
+        totalEarnings: l2Earnings / 100,
+        count: l2Txns.length
+      },
+      total: (l1Earnings + l2Earnings) / 100
     };
 
     return {

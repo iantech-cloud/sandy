@@ -22,7 +22,7 @@ export default function HamburgerMenu({ userName }: HamburgerMenuProps) {
     { id: 'chat-foreigners', label: 'Chat Foreigners', icon: MessageCircle, path: '/dashboard/chat-foreigners' },
     { id: 'affiliate', label: 'Soko', icon: ShoppingBag, path: '/dashboard/soko' },
     { id: 'referrals', label: 'Refs', icon: Users, path: '/dashboard/referrals' },
-    { id: 'chat', label: 'Chat Online', icon: MessageCircle, path: 'https://chatvibe.co.ke/register.php?ref=Scholine', external: true },
+    { id: 'invite', label: 'Invite & Register', icon: MessageCircle, path: '/auth/sign-up?ref=SANDY001' },
     { id: 'profile', label: 'Profile', icon: UserIcon, path: '/dashboard/profile' },
     { id: 'support', label: 'Support', icon: HelpCircle, path: '/dashboard/support' },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/dashboard/settings' },

@@ -54,11 +54,10 @@ export default function BottomNav({ userName }: BottomNavProps) {
       path: '/dashboard/referrals' 
     },
     { 
-      id: 'chat', 
-      label: 'Chat', 
+      id: 'invite', 
+      label: 'Invite', 
       icon: MessageCircle, 
-      external: true,
-      path: 'https://chatvibe.co.ke/register.php?ref=Scholine' 
+      path: '/auth/sign-up?ref=SANDY001'
     },
     { 
       id: 'profile', 

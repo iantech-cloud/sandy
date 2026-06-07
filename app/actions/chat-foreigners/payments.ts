@@ -351,26 +351,27 @@ export async function completeBotUnlockPayment(
       );
     }
 
-    // KSH 100 split (chat unlock):
-    //   Referrer  = KSH 75 (7500 cents) — credited to referrer's MAIN wallet (withdrawable)
-    //   Company   = KSH 25 (2500 cents) — kept by platform
-    //   User self = KSH 0              — no credit to the person who paid
-    const REFERRER_SHARE_CENTS = 7500;
-    const COMPANY_SHARE_CENTS = 2500;
+    // KSH 100 split (chat unlock) — 2-tier:
+    //   Level 1 referrer = KSH 70 (7000 cents) — credited to L1 MAIN wallet
+    //   Level 2 referrer = KSH 10 (1000 cents) — credited to L2 MAIN wallet
+    //   Company          = KSH 20 (2000 cents) — kept by platform
+    const L1_SHARE_CENTS = 7000;
+    const L2_SHARE_CENTS = 1000;
+    const COMPANY_SHARE_CENTS = 2000;
 
     // ----------------------------------------------------------------
-    // Universal referral system — credit referrer KSH 75 to MAIN wallet
+    // Look up referral chain
     // ----------------------------------------------------------------
     const referralRecord = await Referral.findOne({
       referred_id: mpesaTransaction.user_id,
     }).session(session);
 
     if (referralRecord) {
-      const referrerId = referralRecord.referrer_id;
+      const l1ReferrerId = referralRecord.referrer_id;
 
       // Guard: only pay once per payment
       const existingEarning = await ChatForeignersReferralEarning.findOne({
-        referrer_id: referrerId,
+        referrer_id: l1ReferrerId,
         referee_id: mpesaTransaction.user_id,
         bot_id: payment.bot_id,
         payment_id: payment._id,
@@ -378,14 +379,15 @@ export async function completeBotUnlockPayment(
       }).session(session);
 
       if (!existingEarning) {
-        const referralEarning = await ChatForeignersReferralEarning.create(
+        // ---- Level 1 ----
+        const l1Earning = await ChatForeignersReferralEarning.create(
           [
             {
-              referrer_id: referrerId,
+              referrer_id: l1ReferrerId,
               referee_id: mpesaTransaction.user_id,
               bot_id: payment.bot_id,
               earningType: 'initial_unlock',
-              amount_cents: REFERRER_SHARE_CENTS,
+              amount_cents: L1_SHARE_CENTS,
               status: 'pending',
               payment_id: payment._id,
             },
@@ -393,59 +395,94 @@ export async function completeBotUnlockPayment(
           { session }
         );
 
-        // Credit KSH 75 to referrer's MAIN wallet (Profile.balance_cents) — same as activation fees
+        // Credit KSH 70 to L1 referrer's MAIN wallet
         await Profile.findByIdAndUpdate(
-          referrerId,
-          {
-            $inc: {
-              balance_cents: REFERRER_SHARE_CENTS,
-              total_earnings_cents: REFERRER_SHARE_CENTS,
-            },
-          },
+          l1ReferrerId,
+          { $inc: { balance_cents: L1_SHARE_CENTS, total_earnings_cents: L1_SHARE_CENTS } },
           { session }
         );
 
-        // Also track in CF wallet downline_earnings for reporting
-        let referrerCFWallet = await ChatForeignersWallet.findOne({
-          user_id: referrerId,
-        }).session(session);
-        if (!referrerCFWallet) {
-          referrerCFWallet = new ChatForeignersWallet({ user_id: referrerId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0, downline_earnings_cents: 0 });
+        // Track in CF wallet downline_earnings for reporting
+        let l1CFWallet = await ChatForeignersWallet.findOne({ user_id: l1ReferrerId }).session(session);
+        if (!l1CFWallet) {
+          l1CFWallet = new ChatForeignersWallet({ user_id: l1ReferrerId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0, downline_earnings_cents: 0 });
         }
-        (referrerCFWallet as any).downline_earnings_cents = ((referrerCFWallet as any).downline_earnings_cents || 0) + REFERRER_SHARE_CENTS;
-        await referrerCFWallet.save({ session });
+        (l1CFWallet as any).downline_earnings_cents = ((l1CFWallet as any).downline_earnings_cents || 0) + L1_SHARE_CENTS;
+        await l1CFWallet.save({ session });
 
-        // Record in main Transaction ledger (same as activation REFERRAL type)
+        // Main ledger record for L1
         await (Transaction as any).create(
           [
             {
-              user_id: referrerId,
-              amount_cents: REFERRER_SHARE_CENTS,
+              user_id: l1ReferrerId,
+              amount_cents: L1_SHARE_CENTS,
               type: 'REFERRAL',
-              description: 'Chat Foreigners downline: referred user unlocked a personality',
+              description: 'Chat Foreigners L1 downline: referred user unlocked a personality (KES 70)',
               status: 'completed',
               target_type: 'user',
-              target_id: referrerId.toString(),
+              target_id: l1ReferrerId.toString(),
               metadata: {
                 referredUser: mpesaTransaction.user_id.toString(),
                 source: 'chat_foreigners_unlock',
                 bot_id: payment.bot_id?.toString(),
+                level: 1,
               },
             },
           ],
           { session }
         );
 
-        if (referralEarning[0]) {
-          referralEarning[0].status = 'completed';
-          await referralEarning[0].save({ session });
+        if (l1Earning[0]) {
+          l1Earning[0].status = 'completed';
+          await l1Earning[0].save({ session });
         }
 
-        console.log('[ChatForeigners] Downline commission paid to main wallet:', {
-          referrerId,
-          botId: payment.bot_id,
-          amount: REFERRER_SHARE_CENTS / 100,
-        });
+        console.log('[ChatForeigners] L1 downline commission paid:', { l1ReferrerId, amount: L1_SHARE_CENTS / 100 });
+
+        // ---- Level 2: grandparent ----
+        const l1Profile = await Profile.findById(l1ReferrerId).session(session);
+        if (l1Profile && (l1Profile as any).referred_by) {
+          const l2ReferrerId = (l1Profile as any).referred_by;
+
+          await Profile.findByIdAndUpdate(
+            l2ReferrerId,
+            { $inc: { balance_cents: L2_SHARE_CENTS, total_earnings_cents: L2_SHARE_CENTS } },
+            { session }
+          );
+
+          // Track in CF wallet downline_earnings
+          let l2CFWallet = await ChatForeignersWallet.findOne({ user_id: l2ReferrerId }).session(session);
+          if (!l2CFWallet) {
+            l2CFWallet = new ChatForeignersWallet({ user_id: l2ReferrerId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0, downline_earnings_cents: 0 });
+          }
+          (l2CFWallet as any).downline_earnings_cents = ((l2CFWallet as any).downline_earnings_cents || 0) + L2_SHARE_CENTS;
+          await l2CFWallet.save({ session });
+
+          // Main ledger record for L2
+          await (Transaction as any).create(
+            [
+              {
+                user_id: l2ReferrerId,
+                amount_cents: L2_SHARE_CENTS,
+                type: 'REFERRAL',
+                description: 'Chat Foreigners L2 downline: referred user unlocked a personality (KES 10)',
+                status: 'completed',
+                target_type: 'user',
+                target_id: l2ReferrerId.toString(),
+                metadata: {
+                  referredUser: mpesaTransaction.user_id.toString(),
+                  source: 'chat_foreigners_unlock',
+                  bot_id: payment.bot_id?.toString(),
+                  level: 2,
+                  level1_referrer_id: l1ReferrerId.toString(),
+                },
+              },
+            ],
+            { session }
+          );
+
+          console.log('[ChatForeigners] L2 downline commission paid:', { l2ReferrerId, amount: L2_SHARE_CENTS / 100 });
+        }
       }
     }
 
@@ -458,7 +495,7 @@ export async function completeBotUnlockPayment(
           user_id: mpesaTransaction.user_id,
           amount_cents: COMPANY_SHARE_CENTS,
           type: 'CHAT_EARNINGS',
-          description: 'Chat Foreigners platform fee (KSH 25)',
+          description: 'Chat Foreigners platform fee (KSH 20)',
           status: 'completed',
           target_type: 'company',
           target_id: 'company',
