@@ -248,7 +248,7 @@ export default function ReferralsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 {/* Activation */}
                 <div>
-                  <p className="font-medium text-gray-700 mb-2">Account Activation (KES 90 fee)</p>
+                  <p className="font-medium text-gray-700 mb-2">Account Activation (KES 95 fee)</p>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 bg-green-500 rounded-full flex-shrink-0"></div>

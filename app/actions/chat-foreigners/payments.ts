@@ -97,7 +97,7 @@ export async function initiateBotUnlockViaMpesa(
 
     console.log('[ChatForeigners] Initiating STK push:', {
       messageRef,
-      amount: bot.unlockCost_cents / 100,
+      amount: UNLOCK_COST_CENTS / 100,
       phone: phoneNumber,
       botId,
     });
@@ -107,7 +107,7 @@ export async function initiateBotUnlockViaMpesa(
     try {
       stkResponse = await coopBank.initiateSTKPush(
         phoneNumber,
-        Math.round(bot.unlockCost_cents / 100),
+        UNLOCK_COST_CENTS / 100, // Always KSH 100 — never read from bot record
         narration,
         callbackUrl,
         messageRef
