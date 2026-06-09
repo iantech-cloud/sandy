@@ -20,7 +20,7 @@ interface MpesaChangeRequest {
 }
 
 export default function SettingsPage() {
-  const { user, apiFetch } = useDashboard();
+  const { user, setUser, apiFetch } = useDashboard();
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phone);
   
@@ -66,6 +66,14 @@ export default function SettingsPage() {
     if (result.success) {
       setMessage('Profile updated successfully!');
       setMessageType('success');
+      // Update user state globally so username appears everywhere
+      if (result.data) {
+        setUser({
+          ...user,
+          name: result.data.name || name,
+          phone: result.data.phone || phone,
+        });
+      }
     } else {
       setMessage(result.message || 'Update failed.');
       setMessageType('error');
