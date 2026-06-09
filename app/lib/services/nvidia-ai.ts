@@ -1,103 +1,62 @@
 /**
  * NVIDIA AI Service
- * Handles communication with NVIDIA NIM APIs for LLM and embeddings
+ * Uses the NVIDIA NIM API via the OpenAI-compatible client,
+ * matching the pattern used in chat-foreigners/chat/route.ts.
  */
 
-const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
-const NVIDIA_LLM_ENDPOINT = process.env.NVIDIA_LLM_ENDPOINT || 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_EMBED_ENDPOINT = process.env.NVIDIA_EMBED_ENDPOINT || 'https://integrate.api.nvidia.com/v1';
+import OpenAI from 'openai';
 
-interface EmbeddingRequest {
-  input: string[];
-  model?: string;
-}
+const nvidiaClient = process.env.NVIDIA_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.NVIDIA_API_KEY,
+      baseURL: 'https://integrate.api.nvidia.com/v1',
+      timeout: 12000,
+    })
+  : null;
 
-interface LLMRequest {
-  model: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-  temperature?: number;
-  max_tokens?: number;
-  top_p?: number;
-}
-
-interface LLMResponse {
-  choices: Array<{
-    message: {
-      role: string;
-      content: string;
-    };
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-  };
-}
+const NVIDIA_MODEL = 'meta/llama-3.1-8b-instruct';
 
 /**
- * Get embeddings from NVIDIA Embedding API
- */
-export async function getEmbeddings(texts: string[]): Promise<number[][]> {
-  try {
-    const response = await fetch(`${NVIDIA_EMBED_ENDPOINT}/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'nvidia/nv-embed-v1',
-        input: texts,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[NVIDIA] Embedding error:', error);
-      throw new Error(`Embedding failed: ${response.statusText}`);
-    }
-
-    const data: any = await response.json();
-    return data.data.map((item: any) => item.embedding);
-  } catch (error) {
-    console.error('[NVIDIA] Embedding service error:', error);
-    throw error;
-  }
-}
-
-/**
- * Get LLM response from NVIDIA NIM
+ * Get LLM response from NVIDIA NIM API.
+ * Falls back to a descriptive error if the API key is not configured.
  */
 export async function getLLMResponse(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  model: string = 'meta/llama-2-70b-chat'
+  _model?: string
 ): Promise<string> {
+  if (!nvidiaClient) {
+    throw new Error('NVIDIA_API_KEY is not configured. Please set it in the environment variables.');
+  }
+
+  const completion = await nvidiaClient.chat.completions.create({
+    model: NVIDIA_MODEL,
+    messages,
+    temperature: 0.7,
+    top_p: 0.9,
+    max_tokens: 1024,
+    stream: false,
+  });
+
+  return completion.choices[0]?.message?.content ?? 'Unable to generate response';
+}
+
+/**
+ * Get embeddings from NVIDIA NIM API.
+ * Returns empty arrays as a safe fallback — keyword-based KB search is used by default.
+ */
+export async function getEmbeddings(texts: string[]): Promise<number[][]> {
+  if (!nvidiaClient) {
+    return texts.map(() => []);
+  }
+
   try {
-    const response = await fetch(`${NVIDIA_LLM_ENDPOINT}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.7,
-        max_tokens: 1024,
-        top_p: 0.9,
-      }),
+    const response = await (nvidiaClient.embeddings.create as any)({
+      model: 'nvidia/nv-embed-v1',
+      input: texts,
     });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[NVIDIA] LLM error:', error);
-      throw new Error(`LLM request failed: ${response.statusText}`);
-    }
-
-    const data: LLMResponse = (await response.json()) as LLMResponse;
-    return data.choices[0]?.message?.content || 'Unable to generate response';
-  } catch (error) {
-    console.error('[NVIDIA] LLM service error:', error);
-    throw error;
+    return (response.data as any[]).map((item: any) => item.embedding as number[]);
+  } catch {
+    return texts.map(() => []);
   }
 }
 
