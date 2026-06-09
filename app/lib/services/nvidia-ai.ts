@@ -1,47 +1,63 @@
 /**
- * AI Service
- * Handles LLM responses via the Vercel AI Gateway (zero-config, no API key required)
+ * NVIDIA AI Service
+ * Uses the NVIDIA NIM API via the OpenAI-compatible client,
+ * matching the pattern used in chat-foreigners/chat/route.ts.
  */
 
-import { generateText } from 'ai';
+import OpenAI from 'openai';
+
+const nvidiaClient = process.env.NVIDIA_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.NVIDIA_API_KEY,
+      baseURL: 'https://integrate.api.nvidia.com/v1',
+      timeout: 12000,
+    })
+  : null;
+
+const NVIDIA_MODEL = 'meta/llama-3.1-8b-instruct';
 
 /**
- * Get LLM response via Vercel AI Gateway
+ * Get LLM response from NVIDIA NIM API.
+ * Falls back to a descriptive error if the API key is not configured.
  */
 export async function getLLMResponse(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  _model: string = 'openai/gpt-4o-mini'
+  _model?: string
 ): Promise<string> {
-  try {
-    // Separate system messages from conversation messages
-    const systemMsg = messages.find((m) => m.role === 'system');
-    const conversationMessages = messages.filter((m) => m.role !== 'system') as Array<{
-      role: 'user' | 'assistant';
-      content: string;
-    }>;
-
-    const { text } = await generateText({
-      model: 'openai/gpt-4o-mini',
-      system: systemMsg?.content,
-      messages: conversationMessages,
-      temperature: 0.7,
-      maxOutputTokens: 1024,
-    });
-
-    return text || 'Unable to generate response';
-  } catch (error) {
-    console.error('[AI] LLM service error:', error);
-    throw error;
+  if (!nvidiaClient) {
+    throw new Error('NVIDIA_API_KEY is not configured. Please set it in the environment variables.');
   }
+
+  const completion = await nvidiaClient.chat.completions.create({
+    model: NVIDIA_MODEL,
+    messages,
+    temperature: 0.7,
+    top_p: 0.9,
+    max_tokens: 1024,
+    stream: false,
+  });
+
+  return completion.choices[0]?.message?.content ?? 'Unable to generate response';
 }
 
 /**
- * Get embeddings — falls back to empty arrays if not available.
- * Used only for optional vector search; keyword search is used by default.
+ * Get embeddings from NVIDIA NIM API.
+ * Returns empty arrays as a safe fallback — keyword-based KB search is used by default.
  */
 export async function getEmbeddings(texts: string[]): Promise<number[][]> {
-  // Return empty embeddings — keyword-based KB search is used instead
-  return texts.map(() => []);
+  if (!nvidiaClient) {
+    return texts.map(() => []);
+  }
+
+  try {
+    const response = await (nvidiaClient.embeddings.create as any)({
+      model: 'nvidia/nv-embed-v1',
+      input: texts,
+    });
+    return (response.data as any[]).map((item: any) => item.embedding as number[]);
+  } catch {
+    return texts.map(() => []);
+  }
 }
 
 /**
