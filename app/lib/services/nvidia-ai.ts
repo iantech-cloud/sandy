@@ -1,104 +1,47 @@
 /**
- * NVIDIA AI Service
- * Handles communication with NVIDIA NIM APIs for LLM and embeddings
+ * AI Service
+ * Handles LLM responses via the Vercel AI Gateway (zero-config, no API key required)
  */
 
-const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
-const NVIDIA_LLM_ENDPOINT = process.env.NVIDIA_LLM_ENDPOINT || 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_EMBED_ENDPOINT = process.env.NVIDIA_EMBED_ENDPOINT || 'https://integrate.api.nvidia.com/v1';
-
-interface EmbeddingRequest {
-  input: string[];
-  model?: string;
-}
-
-interface LLMRequest {
-  model: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-  temperature?: number;
-  max_tokens?: number;
-  top_p?: number;
-}
-
-interface LLMResponse {
-  choices: Array<{
-    message: {
-      role: string;
-      content: string;
-    };
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-  };
-}
+import { generateText } from 'ai';
 
 /**
- * Get embeddings from NVIDIA Embedding API
- */
-export async function getEmbeddings(texts: string[]): Promise<number[][]> {
-  try {
-    const response = await fetch(`${NVIDIA_EMBED_ENDPOINT}/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'nvidia/nv-embed-v1',
-        input: texts,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[NVIDIA] Embedding error:', error);
-      throw new Error(`Embedding failed: ${response.statusText}`);
-    }
-
-    const data: any = await response.json();
-    return data.data.map((item: any) => item.embedding);
-  } catch (error) {
-    console.error('[NVIDIA] Embedding service error:', error);
-    throw error;
-  }
-}
-
-/**
- * Get LLM response from NVIDIA NIM
+ * Get LLM response via Vercel AI Gateway
  */
 export async function getLLMResponse(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  model: string = 'meta/llama-2-70b-chat'
+  _model: string = 'openai/gpt-4o-mini'
 ): Promise<string> {
   try {
-    const response = await fetch(`${NVIDIA_LLM_ENDPOINT}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.7,
-        max_tokens: 1024,
-        top_p: 0.9,
-      }),
+    // Separate system messages from conversation messages
+    const systemMsg = messages.find((m) => m.role === 'system');
+    const conversationMessages = messages.filter((m) => m.role !== 'system') as Array<{
+      role: 'user' | 'assistant';
+      content: string;
+    }>;
+
+    const { text } = await generateText({
+      model: 'openai/gpt-4o-mini',
+      system: systemMsg?.content,
+      messages: conversationMessages,
+      temperature: 0.7,
+      maxOutputTokens: 1024,
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[NVIDIA] LLM error:', error);
-      throw new Error(`LLM request failed: ${response.statusText}`);
-    }
-
-    const data: LLMResponse = (await response.json()) as LLMResponse;
-    return data.choices[0]?.message?.content || 'Unable to generate response';
+    return text || 'Unable to generate response';
   } catch (error) {
-    console.error('[NVIDIA] LLM service error:', error);
+    console.error('[AI] LLM service error:', error);
     throw error;
   }
+}
+
+/**
+ * Get embeddings — falls back to empty arrays if not available.
+ * Used only for optional vector search; keyword search is used by default.
+ */
+export async function getEmbeddings(texts: string[]): Promise<number[][]> {
+  // Return empty embeddings — keyword-based KB search is used instead
+  return texts.map(() => []);
 }
 
 /**

@@ -166,7 +166,9 @@ export async function seedKnowledgeBase() {
 }
 
 /**
- * Get knowledge base by category or search
+ * Get knowledge base by category or search.
+ * Falls back to the in-memory DEFAULT_KNOWLEDGE_BASE when the DB is unavailable
+ * so the LLM always receives grounded context.
  */
 export async function searchKnowledgeBase(query: string, category?: string) {
   try {
@@ -185,11 +187,31 @@ export async function searchKnowledgeBase(query: string, category?: string) {
     }
 
     const results = await KnowledgeBase.find(filter).limit(5);
-    return results;
+
+    // If DB returned results use them, otherwise fall back to in-memory KB
+    if (results.length > 0) {
+      return results;
+    }
+
+    return searchDefaultKB(query, category);
   } catch (error) {
-    console.error('[KB] Search error:', error);
-    throw error;
+    console.error('[KB] Search error — using in-memory fallback:', error);
+    return searchDefaultKB(query, category);
   }
+}
+
+/**
+ * Keyword search over the in-memory DEFAULT_KNOWLEDGE_BASE
+ */
+function searchDefaultKB(query: string, category?: string) {
+  const lower = query.toLowerCase();
+  return DEFAULT_KNOWLEDGE_BASE.filter((doc) => {
+    const matchesCategory = category ? doc.category === category : true;
+    const matchesQuery =
+      doc.title.toLowerCase().includes(lower) ||
+      doc.content.toLowerCase().includes(lower);
+    return matchesCategory && matchesQuery;
+  }).slice(0, 5);
 }
 
 /**
