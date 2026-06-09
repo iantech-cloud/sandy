@@ -74,6 +74,13 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
     }
   }, [isVisible]);
 
+  // Ensure input re-enables after AI response
+  useEffect(() => {
+    if (!isLoading && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isLoading]);
+
   const handleSend = async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || isLoading) return;
@@ -93,16 +100,18 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
     ]);
 
     await sendMessage(content);
+    // Ensure input is re-enabled after sendMessage completes
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   if (!isVisible) return null;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full bg-white md:rounded-lg md:shadow-xl overflow-hidden">
       {/* AI Header bar */}
-      <div className="flex items-center justify-between px-4 py-3 bg-indigo-600 text-white shrink-0">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-3 sm:px-4 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
             <Bot className="w-4 h-4" />
           </div>
           <div>
@@ -110,34 +119,46 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
             <p className="text-xs text-indigo-200 mt-0.5">Powered by NVIDIA</p>
           </div>
         </div>
-        <button
-          onClick={onSwitchToHuman}
-          className="flex items-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 px-2.5 py-1.5 rounded-lg transition-colors"
-          title="Switch to human support agent"
-        >
-          <PhoneCall className="w-3 h-3" />
-          Human support
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={onSwitchToHuman}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-xs bg-white/20 hover:bg-white/30 px-2.5 py-1.5 rounded-lg transition-colors"
+            title="Switch to human support agent"
+          >
+            <PhoneCall className="w-3 h-3 flex-shrink-0" />
+            <span className="hidden sm:inline">Human support</span>
+            <span className="sm:hidden">Support</span>
+          </button>
+          <button
+            onClick={onClose}
+            className="sm:hidden p-1.5 text-white hover:bg-white/20 rounded-lg transition-colors"
+            title="Close chat"
+            aria-label="Close chat"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-gradient-to-b from-gray-50 to-white min-h-0">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-3 bg-gradient-to-b from-gray-50 to-white min-h-0">
         {chatHistory.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4 gap-3">
-            <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center">
-              <Bot className="w-8 h-8 text-indigo-500" />
+          <div className="flex flex-col items-center justify-center h-full text-center px-3 sm:px-4 gap-3">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+              <Bot className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-500" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-gray-700">Ask me anything about HustleHub</p>
+              <p className="text-xs sm:text-sm font-semibold text-gray-700">Ask me anything about HustleHub</p>
               <p className="text-xs text-gray-400 mt-1">Registration · Referrals · Withdrawals · Account help</p>
             </div>
             {/* Quick reply chips */}
-            <div className="flex flex-wrap gap-2 justify-center mt-2">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 justify-center mt-2 w-full">
               {QUICK_REPLIES.map(q => (
                 <button
                   key={q}
                   onClick={() => handleSend(q)}
-                  className="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-full transition-colors"
+                  disabled={isLoading}
+                  className="text-xs bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 text-indigo-700 border border-indigo-200 px-2.5 sm:px-3 py-1.5 rounded-full transition-colors"
                 >
                   {q}
                 </button>
@@ -146,18 +167,18 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
           </div>
         )}
 
-        {chatHistory.map(entry => (
+        {chatHistory.map((entry, idx) => (
           <div
             key={entry.id}
-            className={`flex items-end gap-2 animate-fadeIn ${entry.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex items-end gap-1.5 sm:gap-2 animate-fadeIn ${entry.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             {entry.role === 'assistant' && (
-              <div className="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center flex-shrink-0 mb-0.5">
-                <Bot className="w-3.5 h-3.5 text-white" />
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-indigo-500 flex items-center justify-center flex-shrink-0 mb-0.5">
+                <Bot className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" />
               </div>
             )}
             <div
-              className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+              className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-2.5 sm:px-3 py-2 text-xs sm:text-sm leading-relaxed transition-all ${
                 entry.role === 'user'
                   ? 'bg-blue-500 text-white rounded-br-sm'
                   : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
@@ -175,8 +196,8 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
               )}
             </div>
             {entry.role === 'user' && (
-              <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mb-0.5">
-                <User className="w-3.5 h-3.5 text-white" />
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mb-0.5">
+                <User className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" />
               </div>
             )}
           </div>
@@ -184,11 +205,11 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
 
         {/* Typing indicator while waiting for AI */}
         {isLoading && (
-          <div className="flex items-end gap-2">
-            <div className="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center flex-shrink-0">
-              <Bot className="w-3.5 h-3.5 text-white" />
+          <div className="flex items-end gap-1.5 sm:gap-2">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-indigo-500 flex items-center justify-center flex-shrink-0">
+              <Bot className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" />
             </div>
-            <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
+            <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-3 sm:px-4 py-3 shadow-sm">
               <div className="flex gap-1">
                 <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                 <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -199,14 +220,14 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-2.5 flex items-start gap-2">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-2.5 flex items-start gap-2 mx-1 sm:mx-0">
             <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-red-600">{error}</p>
           </div>
         )}
 
         {escalationTicket && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 flex items-start gap-2">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 flex items-start gap-2 mx-1 sm:mx-0">
             <CheckCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-amber-700">
               Your issue has been escalated. Ticket <strong>#{escalationTicket}</strong> — a support specialist will contact you shortly.
@@ -218,7 +239,7 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-gray-200 bg-white shrink-0">
+      <div className="p-2 sm:p-3 border-t border-gray-200 bg-white shrink-0">
         <div className="flex items-center gap-2">
           <input
             ref={inputRef}
@@ -227,13 +248,14 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
             placeholder="Ask me anything..."
             disabled={isLoading}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 disabled:bg-gray-50"
+            className="flex-1 px-2.5 sm:px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:opacity-50 disabled:bg-gray-50 transition-all"
           />
           <button
             onClick={() => handleSend()}
             disabled={!input.trim() || isLoading}
-            className="p-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-200 text-white rounded-xl transition-colors"
+            className="p-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-300 text-white rounded-lg sm:rounded-xl transition-colors flex-shrink-0"
             aria-label="Send message"
+            title="Send message"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
