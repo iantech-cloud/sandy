@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
       data: {
         email: user.email,
         username: user.username,
+        phone: user.phone_number,
         phone_number: user.phone_number,
         name: user.name,
         bio: user.bio,
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { username, bio, phone_number, name } = body;
+    const { username, bio, phone_number, phone, name } = body;
 
     await connectToDatabase();
 
@@ -98,12 +99,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Build update object
+    // Build update object - accept both phone and phone_number
     const updateData: any = {};
     if (name && name.trim()) updateData.name = name.trim();
     if (username && username.trim()) updateData.username = username.toLowerCase().trim();
     if (bio !== undefined && bio !== null) updateData.bio = bio.trim();
     if (phone_number && phone_number.trim()) updateData.phone_number = phone_number.trim();
+    if (phone && phone.trim() && !phone_number) updateData.phone_number = phone.trim();
 
     // Update user
     const updatedUser = await Profile.findOneAndUpdate(
@@ -125,6 +127,7 @@ export async function POST(req: NextRequest) {
       data: {
         email: updatedUser.email,
         username: updatedUser.username,
+        phone: updatedUser.phone_number,
         phone_number: updatedUser.phone_number,
         name: updatedUser.name,
         bio: updatedUser.bio,
