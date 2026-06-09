@@ -7,7 +7,7 @@ import SideNav from '@/app/ui/dashboard/sidenav';
 import BottomNav from '@/app/ui/dashboard/BottomNav';
 import HamburgerMenu from '@/app/ui/dashboard/HamburgerMenu';
 import Alert from '@/app/ui/Alert';
-import { Loader2, LogOut, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { DashboardProvider } from './DashboardContext';
 import { getUserProfile } from '../actions/user';
@@ -501,16 +501,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div className="flex items-center space-x-2 flex-shrink-0">
               <NotificationBell />
-              <button
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                className="flex items-center space-x-1 lg:space-x-2 text-red-500 hover:text-red-700 transition-all duration-250 p-2 rounded-xl bg-red-50 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md flex-shrink-0"
-              >
-                <LogOut size={18} className="lg:w-5 lg:h-5" />
-                <span className="hidden sm:inline font-semibold text-xs lg:text-sm whitespace-nowrap">
-                  {isLoggingOut ? 'Logging Out...' : 'Logout'}
-                </span>
-              </button>
             </div>
           </header>
 	
@@ -598,7 +588,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </main>
         
-        <HamburgerMenu userName={user.name} />
+        <HamburgerMenu userName={user.name} onLogout={handleLogout} />
       </div>
 
       <UserChatWidget />

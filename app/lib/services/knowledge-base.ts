@@ -142,6 +142,125 @@ export const DEFAULT_KNOWLEDGE_BASE = [
     content:
       'We protect your data: Your personal information is never sold to third parties. We use encryption for all transactions. You control what information you share. Read full policy on Privacy page.',
   },
+  {
+    id: 'site_nav_001',
+    category: 'site-navigation',
+    title: 'Dashboard navigation overview',
+    content:
+      'HustleHub dashboard navigation: Home (dashboard overview), Wallet (balance & withdrawals), Earn (surveys & tasks), Tasks (content writing), Chat Foreigners (chat & earn), Soko (affiliate products), Refs (referral program), Profile (user profile), Support (help), Settings (account settings).',
+  },
+  {
+    id: 'site_nav_002',
+    category: 'site-navigation',
+    title: 'Mobile menu/hamburger menu',
+    content:
+      'On mobile devices, use the hamburger menu (three lines icon) in the top right to access: Home, Wallet, Earn, Tasks, Chat Foreigners, Soko, Referrals, Profile, Support, Settings, and Logout. The menu is fully mobile-friendly for all screen sizes.',
+  },
+  {
+    id: 'home_001',
+    category: 'pages',
+    title: 'Dashboard home page',
+    content:
+      'The Dashboard home shows: user welcome message, balance overview, recent earnings, active tasks, quick access buttons to earn money, and shortcuts to popular features. This is your entry point to the platform.',
+  },
+  {
+    id: 'wallet_001',
+    category: 'pages',
+    title: 'Wallet page features',
+    content:
+      'Wallet page shows: current balance in KES, transaction history, pending withdrawals, withdrawal requests, M-Pesa payment info, minimum withdrawal amount (KES 500), processing time (24 hours), and option to request a withdrawal.',
+  },
+  {
+    id: 'earn_001',
+    category: 'pages',
+    title: 'Earn/Surveys page',
+    content:
+      'The Earn page displays available surveys and earning opportunities. Browse surveys, check earning amounts, view survey details, complete surveys to earn money. Earnings are credited instantly to your wallet after completion.',
+  },
+  {
+    id: 'tasks_001',
+    category: 'pages',
+    title: 'Tasks/Content writing page',
+    content:
+      'The Tasks section shows content writing opportunities, freelance projects, and other tasks. View task details, requirements, payment amounts, and submit completed work. Payouts processed within 24-48 hours after approval.',
+  },
+  {
+    id: 'chat_foreigners_001',
+    category: 'pages',
+    title: 'Chat Foreigners page',
+    content:
+      'Chat Foreigners page allows you to unlock chat (KES 100 one-time fee) and chat with verified international users. Each conversation earns money based on engagement and time. View available profiles, start conversations, track earnings per chat session.',
+  },
+  {
+    id: 'soko_001',
+    category: 'pages',
+    title: 'Soko affiliate program page',
+    content:
+      'Soko is HustleHub\'s affiliate marketing program. Sell products from our marketplace, earn commissions (rates vary by product category), access marketing materials, track sales and earnings, and withdraw commissions. No inventory needed - digital affiliate system.',
+  },
+  {
+    id: 'referrals_page_001',
+    category: 'pages',
+    title: 'Referrals page features',
+    content:
+      'The Referrals page shows: your unique referral code/link, number of successful referrals, total referral earnings, commission breakdown by level, and tools to share your referral link. Copy link to share via social media, email, or messaging apps.',
+  },
+  {
+    id: 'profile_page_001',
+    category: 'pages',
+    title: 'Profile page',
+    content:
+      'Your Profile page displays: profile picture, name, username, contact info, account status (verified/unverified), account level, rank, total earnings, tasks completed, referral code, and quick link to edit profile or update settings.',
+  },
+  {
+    id: 'support_page_001',
+    category: 'pages',
+    title: 'Support/Help page',
+    content:
+      'The Support page includes: live AI chat assistant for instant answers, FAQ section for common questions, contact form for complex issues, ticket tracking for submitted issues, link to email support. AI assistant available 24/7 for quick help.',
+  },
+  {
+    id: 'settings_page_001',
+    category: 'pages',
+    title: 'Settings page options',
+    content:
+      'Settings page includes: change password, update profile info (name, phone), enable two-factor authentication (2FA), anti-phishing code setup, M-Pesa change request form, security settings, and account preferences. All changes take effect immediately.',
+  },
+  {
+    id: 'profile_update_001',
+    category: 'account',
+    title: 'How to update profile information',
+    content:
+      'To update profile: 1) Go to Settings > Profile section 2) Edit name, phone number, or other details 3) Click "Save changes" 4) Changes appear immediately across dashboard, header, and navigation. Your updated name shows everywhere on the platform.',
+  },
+  {
+    id: 'ai_support_001',
+    category: 'support',
+    title: 'AI Support Assistant',
+    content:
+      'HustleHub has a 24/7 AI Support Assistant available on the Support page and in the dashboard. Ask questions about: account, registration, withdrawals, earnings, referrals, features, payments, or general help. The AI provides instant answers based on your account info.',
+  },
+  {
+    id: 'mobile_experience_001',
+    category: 'mobile',
+    title: 'Mobile app experience',
+    content:
+      'HustleHub is fully optimized for mobile. Use hamburger menu to navigate, tap buttons easily with large touch targets, responsive design adapts to any screen size. All features (earn, chat, referrals, wallet, settings) work perfectly on mobile devices.',
+  },
+  {
+    id: 'account_verification_001',
+    category: 'account',
+    title: 'Account verification status',
+    content:
+      'Account verification status appears in your Profile page and Settings. Verified accounts have full access to all features. If unverified, you can verify by: uploading ID, taking a selfie, and completing verification process. Verification usually takes 24-48 hours.',
+  },
+  {
+    id: 'logout_001',
+    category: 'account',
+    title: 'How to logout',
+    content:
+      'To logout: On desktop, click Logout button in the dashboard. On mobile, open the hamburger menu (three lines) and tap "Logout" button at the bottom. You will be logged out immediately and returned to the login page.',
+  },
 ];
 
 /**

@@ -1,16 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle, ClipboardList } from 'lucide-react';
+import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle, ClipboardList, LogOut } from 'lucide-react';
 // (UserIcon used for Profile entry; Settings icon used for Settings entry)
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 interface HamburgerMenuProps {
   userName?: string;
+  onLogout?: () => void;
 }
 
-export default function HamburgerMenu({ userName }: HamburgerMenuProps) {
+export default function HamburgerMenu({ userName, onLogout }: HamburgerMenuProps) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -129,6 +130,22 @@ export default function HamburgerMenu({ userName }: HamburgerMenuProps) {
               );
             })}
           </div>
+
+          {/* Logout Button */}
+          {onLogout && (
+            <div className="border-t border-gray-200 dark:border-slate-700 pt-4 mt-4">
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  onLogout();
+                }}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 transition-all duration-200 font-semibold text-sm"
+              >
+                <LogOut size={18} />
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
         </div>
       </nav>
     </div>
