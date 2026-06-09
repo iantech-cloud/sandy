@@ -143,14 +143,16 @@ export async function getUserBotAccess() {
 
     return {
       success: true,
-      data: accesses.map((access) => ({
-        botId: access.bot_id._id.toString(),
-        botName: access.bot_id.name,
-        botAvatar: access.bot_id.avatar_url,
-        messageCount: access.messageCount,
-        firstMilestoneComplete: access.firstMilestoneComplete,
-        unlockedAt: access.unlockedAt,
-      })),
+      data: accesses
+        .filter((access) => access.bot_id !== null) // Skip deleted bots
+        .map((access) => ({
+          botId: access.bot_id._id.toString(),
+          botName: access.bot_id.name,
+          botAvatar: access.bot_id.avatar_url,
+          messageCount: access.messageCount,
+          firstMilestoneComplete: access.firstMilestoneComplete,
+          unlockedAt: access.unlockedAt,
+        })),
     };
   } catch (error) {
     console.error('[ChatForeigners] Bot access error:', error);
