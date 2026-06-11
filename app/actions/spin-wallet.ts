@@ -464,11 +464,12 @@ export async function transferMainToSpinWallet(amountKes: number) {
     // Record the transfer for audit trail
     await (Transaction as any).create({
       user_id: session.user.id,
-      target_type: 'spin_wallet',
+      target_type: 'user',
+      target_id: session.user.id,
       type: 'TRANSFER',
       amount_cents: amountCents,
       status: 'completed',
-      source: 'main_wallet_transfer',
+      source: 'wallet',
       description: `Transferred KES ${amountKes.toFixed(2)} to spin wallet`,
       metadata: {
         transfer_type: 'main_to_spin',

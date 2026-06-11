@@ -25,8 +25,8 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
     try {
       const amountCents = Math.round(parseFloat(amount) * 100);
 
-      if (!phoneNumber || !amountCents || amountCents < 1000) {
-        setError('Please enter a valid phone number and amount (minimum KES 10)');
+      if (!phoneNumber || !amountCents || amountCents < 10000) {
+        setError('Please enter a valid phone number and amount (minimum KES 100)');
         setLoading(false);
         return;
       }
@@ -97,11 +97,11 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="Enter amount"
-                min="10"
+                min="100"
                 step="1"
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-xs text-slate-500 mt-1">Minimum: KES 10</p>
+              <p className="text-xs text-slate-500 mt-1">Minimum: KES 100</p>
             </div>
 
             <div>

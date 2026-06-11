@@ -53,15 +53,14 @@ export async function initiateBotUnlockViaMpesa(
       return { success: false, error: 'Bot not found' };
     }
 
-    // Check if user already has ACTIVE (non-closed) access to this bot
+    // LIFETIME UNLOCK: block payment if ANY access record exists for this bot (paid once = forever)
     const existingAccess = await ChatForeignersBotAccess.findOne({
       user_id: currentUser._id,
       bot_id: botId,
-      isClosed: { $ne: true }, // only block if not closed
     });
 
     if (existingAccess) {
-      return { success: false, error: 'You already have active access to this personality' };
+      return { success: false, error: 'You have already unlocked this personality. Access is lifetime — no re-subscription needed.' };
     }
 
     const UNLOCK_COST_CENTS = 10000; // KSH 100 fixed
@@ -322,18 +321,15 @@ export async function completeBotUnlockPayment(
     payment.completed_at = new Date();
     await payment.save({ session });
 
-    // Create or re-open bot access record (re-unlock after chat close)
+    // LIFETIME UNLOCK: create access record once; never reset or close it again
     const existingAccess = await ChatForeignersBotAccess.findOne({
       user_id: mpesaTransaction.user_id,
       bot_id: payment.bot_id,
     }).session(session);
 
     if (existingAccess) {
-      // Re-unlock: reset the access so chat can start fresh
-      existingAccess.unlockedAt = new Date();
-      existingAccess.messageCount = 0;
-      existingAccess.firstMilestoneComplete = false;
-      existingAccess.milestoneCompletedAt = undefined;
+      // Already unlocked (should not happen due to payment guard, but be safe)
+      // Just ensure it's not closed
       existingAccess.isClosed = false;
       existingAccess.closedAt = undefined;
       await existingAccess.save({ session });
