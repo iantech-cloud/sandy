@@ -134,9 +134,9 @@ export async function getUserBotAccess() {
       return { success: false, error: 'Not authenticated' };
     }
 
+    // LIFETIME UNLOCK: include all accesses regardless of isClosed
     const accesses = await ChatForeignersBotAccess.find({
       user_id: currentUser._id,
-      isClosed: { $ne: true }, // only active (non-closed) accesses
     })
       .populate('bot_id', 'name description avatar_url category')
       .sort({ unlockedAt: -1 });
@@ -180,8 +180,8 @@ export async function checkBotAccess(botId: string) {
       bot_id: botId,
     });
 
-    // Access is only valid if it's not closed
-    const hasActiveAccess = !!access && !access.isClosed;
+    // LIFETIME UNLOCK: any access record means permanent access regardless of isClosed
+    const hasActiveAccess = !!access;
 
     return {
       success: true,

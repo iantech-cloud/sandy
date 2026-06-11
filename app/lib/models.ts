@@ -42,7 +42,7 @@ const UserContentPaymentStatuses = ['pending', 'paid', 'rejected'];
 const MpesaTransactionStatuses = ['initiated', 'pending', 'completed', 'failed', 'cancelled', 'timeout'];
 const MpesaResultCodes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 20, 26, 1032, 1037, 2001];
 
-const SourceTypes = ['wallet', 'dashboard', 'api', 'activation'];
+const SourceTypes = ['wallet', 'dashboard', 'api', 'activation', 'spin_wallet'];
 
 const SurveyCategories = ['market_research', 'consumer_insights', 'product_feedback', 'academic', 'other'];
 

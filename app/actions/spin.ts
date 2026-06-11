@@ -1207,6 +1207,7 @@ export async function performSpin(spinAmountKes: number = 30): Promise<SpinRespo
     await (Transaction as any).create({
       user_id: userId,
       target_type: 'company',
+      target_id: userId,
       type: 'SPIN_COST',
       amount_cents: SPIN_COST_CENTS,
       status: 'completed',

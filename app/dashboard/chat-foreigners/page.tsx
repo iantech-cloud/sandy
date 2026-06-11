@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MessageSquare, Users, Wallet, Coins } from 'lucide-react';
+import { MessageSquare, Users, Wallet, Coins, ArrowLeft } from 'lucide-react';
 
 // Country flag emoji map — nationality to flag
 const NATIONALITY_FLAGS: Record<string, string> = {
@@ -136,9 +136,18 @@ export default function ChatForeignersPage() {
     <div className="flex flex-col min-h-screen bg-[#0d0d14] text-zinc-100 overflow-y-auto">
       {/* Header */}
       <header className="px-4 pt-5 pb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="w-6 h-6 text-[#00c97a]" />
-          <h1 className="text-xl font-bold tracking-tight">Chat Foreigners</h1>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800/80 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+            aria-label="Back to dashboard"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-6 h-6 text-[#00c97a]" />
+            <h1 className="text-xl font-bold tracking-tight">Chat Foreigners</h1>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Link
