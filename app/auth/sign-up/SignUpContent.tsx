@@ -21,42 +21,17 @@ export default function SignUpContent() {
   const [success, setSuccess] = useState('');
   const [emailSent, setEmailSent] = useState(false);
   const [registrationData, setRegistrationData] = useState<any>(null);
-  const [referrerUsername, setReferrerUsername] = useState<string | null>(null);
-  const [hasValidReferral, setHasValidReferral] = useState(false);
   const router = useRouter();
 
-  // Default referral code for users who join without their own referral link
-  const DEFAULT_REFERRAL_CODE = 'SANDY001';
-
-  // Check for referral code in URL and fetch referrer info
+  // Check for referral code in URL (silent — not displayed to user)
   useEffect(() => {
     const refParam = searchParams.get('ref');
-    // Use the referral code from the URL, or fall back to the default code
-    // so people without another referral code can still join.
+    const DEFAULT_REFERRAL_CODE = 'SANDY001';
     const formattedRef = refParam
       ? refParam.toUpperCase().replace(/[^A-Z0-9]/g, '')
       : DEFAULT_REFERRAL_CODE;
 
     setFormData(prev => ({ ...prev, referralId: formattedRef }));
-
-    // Fetch referrer info to display who referred the user
-    const fetchReferrer = async () => {
-      try {
-        const response = await fetch(`/api/referrer/${formattedRef}`);
-        if (response.ok) {
-          const data = await response.json();
-          setReferrerUsername(data.username);
-          setHasValidReferral(true);
-        } else {
-          setHasValidReferral(false);
-        }
-      } catch (err) {
-        console.error('Error fetching referrer:', err);
-        setHasValidReferral(false);
-      }
-    };
-
-    fetchReferrer();
   }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,11 +47,6 @@ export default function SignUpContent() {
     }
     if (!formData.username || !formData.email || !formData.phone || !formData.password) {
       setError('Please fill in all required fields.');
-      return false;
-    }
-    // Referral code is REQUIRED from URL parameter
-    if (!hasValidReferral || !formData.referralId) {
-      setError('Invalid or missing referral link. Please use a valid referral link to sign up.');
       return false;
     }
     if (formData.password.length < 6) {
@@ -235,10 +205,6 @@ export default function SignUpContent() {
                   <span>Email:</span>
                   <span className="font-medium">{formData.email}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Referral ID:</span>
-                  <span className="font-medium">{registrationData.referral_id}</span>
-                </div>
               </div>
             </div>
 
@@ -255,7 +221,7 @@ export default function SignUpContent() {
                 </li>
                 <li className="flex items-start">
                   <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">3</span>
-                  <span><strong>Start earning!</strong> - Access surveys, content creation, and referrals</span>
+                  <span><strong>Start earning!</strong> - Access surveys and content creation</span>
                 </li>
               </ol>
             </div>
@@ -297,13 +263,6 @@ export default function SignUpContent() {
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
               {error}
-            </div>
-          )}
-
-          {/* Referrer Info */}
-          {referrerUsername && (
-            <div className="mb-4 p-3 bg-indigo-100 border border-indigo-400 text-indigo-700 rounded-lg text-sm">
-              Referred by: <span className="font-semibold">{referrerUsername}</span>
             </div>
           )}
 

@@ -8,7 +8,7 @@ import type { Metadata } from 'next';
 // SEO Metadata for Login Page
 export const metadata: Metadata = {
   title: 'Login to Your Account',
-  description: 'Sign in to your Hustle Hub Africa account to access paid surveys, writing jobs, referral programs, and multiple ways to earn money online in Kenya.',
+  description: 'Sign in to your Hustle Hub Africa account to access paid surveys, writing jobs, and multiple ways to earn money online in Kenya.',
   keywords: [
     'login hustle hub africa',
     'sign in kenya online jobs',
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'Login | Hustle Hub Africa',
-    description: 'Sign in to your account and start earning money online in Kenya through surveys, writing jobs, and referrals.',
+    description: 'Sign in to your account and start earning money online in Kenya through surveys and writing jobs.',
     url: '/auth/login',
     type: 'website',
   },

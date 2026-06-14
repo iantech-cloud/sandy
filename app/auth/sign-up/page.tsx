@@ -6,7 +6,7 @@ import type { Metadata } from 'next';
 // SEO Metadata for Sign Up Page
 export const metadata: Metadata = {
   title: 'Create Your Account',
-  description: 'Join Hustle Hub Africa and start earning money online in Kenya. Sign up for paid surveys, academic writing jobs, referral programs, and multiple income streams with instant M-Pesa withdrawals.',
+  description: 'Join Hustle Hub Africa and start earning money online in Kenya. Sign up for paid surveys, academic writing jobs, and multiple income streams with instant M-Pesa withdrawals.',
   keywords: [
     'sign up hustle hub africa',
     'register online jobs kenya',
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     'kenya freelance platform signup',
     'join paid surveys kenya',
     'academic writing registration kenya',
-    'referral program sign up kenya',
+    'online jobs sign up kenya',
     'mpesa withdrawals registration'
   ],
   robots: {
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'Sign Up | Hustle Hub Africa',
-    description: 'Join thousands of Kenyans earning online. Create your free account and access multiple income streams including surveys, writing jobs, and referral programs.',
+    description: 'Join thousands of Kenyans earning online. Create your free account and access multiple income streams including surveys and writing jobs.',
     url: '/auth/sign-up',
     type: 'website',
   },

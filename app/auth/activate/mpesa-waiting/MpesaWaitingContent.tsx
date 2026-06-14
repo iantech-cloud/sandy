@@ -380,11 +380,10 @@ export default function MpesaWaitingContent() {
               <div className="text-sm text-indigo-800 text-left">
                 <div className="font-semibold mb-2">🎉 After Activation:</div>
                 <ul className="space-y-1 text-xs">
-                  <li>✅ Full access to all platform features</li>
-                  <li>✅ Ability to complete tasks and earn money</li>
-                  <li>✅ Withdrawal capabilities</li>
-                  <li>✅ Referral program access</li>
-                  <li>✅ Daily bonuses and rewards</li>
+                  <li>Full access to all platform features</li>
+                  <li>Ability to complete tasks and earn money</li>
+                  <li>Withdrawal capabilities</li>
+                  <li>Daily bonuses and rewards</li>
                 </ul>
               </div>
             </div>
