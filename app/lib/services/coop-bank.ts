@@ -288,29 +288,44 @@ export class CoopBankService {
 
       console.log('[v0] STK Push Response Status:', response.status);
 
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('[v0] STK Push Error Response:', error.substring(0, 200));
-        throw new Error(`Co-op Bank STK Push failed (${response.status})`);
+      // Co-op Bank quirk: they return HTTP 404 / 4xx for business-logic errors
+      // (e.g. MessageCode "-8" = DEBIT ACCOUNT AUTHORIZATION FAILURE) but the
+      // body is still valid JSON with MessageCode/MessageDescription.
+      // Always parse the body first, then decide based on MessageCode, not HTTP status.
+      let result: STKPushResponse;
+      const rawText = await response.text();
+      try {
+        result = JSON.parse(rawText) as STKPushResponse;
+      } catch {
+        // Body is not JSON at all — only then treat HTTP status as the error signal
+        console.error('[v0] STK Push non-JSON response:', rawText.substring(0, 200));
+        throw new Error(`Co-op Bank STK Push failed (HTTP ${response.status})`);
       }
 
-      // ✅ MOVED INSIDE try block — response is accessible here
-      const result = (await response.json()) as STKPushResponse;
-
-      console.log('[v0] STK Push Success Response:', JSON.stringify(result, null, 2));
-
-      // ⚠️  CRITICAL: Normalize response fields
-      // Co-op Bank STK Push API returns MessageCode/MessageDescription,
-      // but our code expects ResponseCode/ResponseDescription
-      // Map the fields for consistency across all endpoints
-      if (result.MessageCode && !result.ResponseCode) {
-        console.log('[v0] Normalizing STK Push response: MessageCode->ResponseCode');
+      // Normalise MessageCode -> ResponseCode immediately so all checks below
+      // work on a single field name.
+      if (result.MessageCode !== undefined && result.ResponseCode === undefined) {
         result.ResponseCode = result.MessageCode;
       }
-      if (result.MessageDescription && !result.ResponseDescription) {
-        console.log('[v0] Normalizing STK Push response: MessageDescription->ResponseDescription');
+      if (result.MessageDescription !== undefined && result.ResponseDescription === undefined) {
         result.ResponseDescription = result.MessageDescription;
       }
+
+      // A non-'0' ResponseCode always means failure, regardless of HTTP status.
+      // Throw with the bank's own description so the UI can show it to the user.
+      if (!response.ok && result.ResponseCode !== '0') {
+        console.error('[v0] STK Push bank error:', {
+          httpStatus: response.status,
+          MessageCode: result.ResponseCode,
+          MessageDescription: result.ResponseDescription,
+        });
+        throw new Error(
+          result.ResponseDescription ||
+          `Co-op Bank STK Push failed (HTTP ${response.status}, code ${result.ResponseCode})`
+        );
+      }
+
+      console.log('[v0] STK Push Success Response:', JSON.stringify(result, null, 2));
 
       // Attach the message reference we sent so callers can always access it
       result.MessageReference = msgRef;
