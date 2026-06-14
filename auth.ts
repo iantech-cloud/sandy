@@ -1,11 +1,9 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import bcrypt from 'bcryptjs';
 import speakeasy from 'speakeasy';
 import { Profile, connectToDatabase } from '@/app/lib/models';
-import { randomUUID } from 'crypto';
 import clientPromise from '@/app/lib/mongodb';
 
 // Environment validation
@@ -17,10 +15,6 @@ import clientPromise from '@/app/lib/mongodb';
 // the error at request time if the secret is genuinely missing in runtime.
 if (!process.env.NEXTAUTH_SECRET) {
   console.warn('Warning: NEXTAUTH_SECRET environment variable is not set. Auth will fail at runtime until it is configured.');
-}
-
-if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-  console.warn('Warning: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured. Google sign-in will fail.');
 }
 
 // For development, NEXTAUTH_URL can be inferred from NODE_ENV
@@ -185,60 +179,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           console.error('[v0] Authorize callback error:', error?.message || error);
           return null;
         }
-      },
-    }),
-
-    // ==================== GOOGLE OAUTH PROVIDER ====================
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          prompt: "consent",
-          access_type: "offline",
-          response_type: "code"
-        }
-      },
-      allowDangerousEmailAccountLinking: true, 
+        },
     }),
   ],
   
   callbacks: {
     // ==================== SIGN IN CALLBACK ====================
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account }) {
       try {
-        await connectToDatabase();
-
-        if (account?.provider === 'google' && profile) {
-          console.log('🔵 Google sign in attempt:', profile.email);
-
-          let existingUser = await Profile.findOne({ email: profile.email });
-
-          if (existingUser) {
-            console.log('✅ Existing user found/linked:', existingUser.email);
-            
-            if (!existingUser.oauth_id || existingUser.oauth_id !== account.providerAccountId) {
-              existingUser.oauth_id = account.providerAccountId;
-              existingUser.oauth_provider = 'google';
-              existingUser.oauth_verified = true;
-              existingUser.google_profile_picture = (profile as any).picture;
-            }
-
-            if (!existingUser.is_verified) {
-              existingUser.is_verified = true;
-            }
-
-            existingUser.last_login = new Date();
-            await existingUser.save();
-          }
-          
-          (user as any).authMethod = 'google';
-          return true;
+        // Only credentials provider is supported
+        if (account?.provider !== 'credentials') {
+          return false;
         }
-
         return true;
       } catch (error) {
-        console.error('❌ SignIn callback error:', error);
+        console.error('SignIn callback error:', error);
         return false;
       }
     },
@@ -258,31 +213,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const profile = await Profile.findOne(lookupQuery);
 
           if (profile) {
-            const userId = profile._id.toString();
+          const userId = profile._id.toString();
             const dashboardRoute = getDashboardRoute(profile.role);
-
-            // Determine auth method - check multiple sources
-            let authMethod = 'credentials'; // default
-            
-            if ((user as any).authMethod) {
-              authMethod = (user as any).authMethod;
-            } else if (account?.provider === 'google') {
-              authMethod = 'google';
-            } else if (profile.oauth_provider === 'google' && profile.oauth_verified) {
-              authMethod = 'google';
-            } else if (profile.oauth_id) {
-              authMethod = profile.oauth_provider || 'google';
-            }
-
-            console.log('JWT callback - Auth method determined:', {
-              email: profile.email,
-              authMethod,
-              hasOAuthId: !!profile.oauth_id,
-              oauthProvider: profile.oauth_provider,
-              accountProvider: account?.provider
-            });
-
-            const isActivationPaid = profile.approval_status !== 'pending' || profile.rank !== 'Unactivated';
 
             return {
               ...token,
@@ -304,7 +236,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               twoFAEnabled: profile.twoFAEnabled || false,
               profile_completed: profile.profile_completed || false,
               phone_number: profile.phone_number || null,
-              authMethod: authMethod,
+              authMethod: 'credentials',
             };
           }
         }
