@@ -62,47 +62,11 @@ export async function POST(request: NextRequest) {
     // Callback URL for payment confirmation
     const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
-    // Initiate STK push (PascalCase payload constructed inside the service)
-    console.log('[API] Calling coopBank.initiateSTKPush with:', {
-      phone: formattedPhone,
-      amount,
-      narration,
-      callbackUrl,
-      messageReference,
-    });
-
-    let stkResponse;
-    try {
-      stkResponse = await coopBank.initiateSTKPush(
-        formattedPhone,
-        amount,
-        narration,
-        callbackUrl,
-        messageReference
-      );
-      console.log('[API] STK Push response received:', stkResponse);
-    } catch (error) {
-      console.error('[API] STK Push initiation failed with exception:', error);
-      throw error;
-    }
-
-    // Non-'0' ResponseCode means the bank rejected the initiation
-    if (stkResponse.ResponseCode !== '0') {
-      console.warn('[API] STK Push rejected by bank:', {
-        responseCode: stkResponse.ResponseCode,
-        description: stkResponse.ResponseDescription,
-      });
-      return NextResponse.json(
-        {
-          success: false,
-          error: stkResponse.ResponseDescription || 'STK Push rejected by bank',
-          responseCode: stkResponse.ResponseCode,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Store transaction record (checkout_request_id == messageReference for callback lookup)
+    // ── CRITICAL: persist the transaction BEFORE calling the bank ────────────
+    // Under high traffic the bank's callback can arrive before our code finishes
+    // running. If the MpesaTransaction does not exist yet, the callback returns
+    // 404 "Transaction not found" and the payment/activation is silently lost.
+    // Creating the record first guarantees the callback always finds a match.
     const mpesaTransaction = await MpesaTransaction.create({
       user_id: userId,
       amount_cents: Math.round(amount * 100),
@@ -120,6 +84,61 @@ export async function POST(request: NextRequest) {
         initiated_at: new Date().toISOString(),
       },
     });
+
+    // Initiate STK push (PascalCase payload constructed inside the service)
+    console.log('[API] Calling coopBank.initiateSTKPush with:', {
+      phone: formattedPhone,
+      amount,
+      narration,
+      callbackUrl,
+      messageReference,
+      transactionId: mpesaTransaction._id.toString(),
+    });
+
+    let stkResponse;
+    try {
+      stkResponse = await coopBank.initiateSTKPush(
+        formattedPhone,
+        amount,
+        narration,
+        callbackUrl,
+        messageReference
+      );
+      console.log('[API] STK Push response received:', stkResponse);
+    } catch (error) {
+      // Bank call threw — mark the pre-created record as failed so it is not
+      // left dangling as "initiated" forever (the recovery job ignores failed).
+      console.error('[API] STK Push initiation failed with exception:', error);
+      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_desc: error instanceof Error ? error.message : 'STK Push request failed',
+        failed_at: new Date(),
+      });
+      throw error;
+    }
+
+    // Non-'0' ResponseCode means the bank rejected the initiation
+    if (stkResponse.ResponseCode !== '0') {
+      console.warn('[API] STK Push rejected by bank:', {
+        responseCode: stkResponse.ResponseCode,
+        description: stkResponse.ResponseDescription,
+      });
+      // Mark the pre-created record as failed
+      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_code: parseInt(stkResponse.ResponseCode || '1', 10) || 1,
+        result_desc: stkResponse.ResponseDescription || 'STK Push rejected by bank',
+        failed_at: new Date(),
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: stkResponse.ResponseDescription || 'STK Push rejected by bank',
+          responseCode: stkResponse.ResponseCode,
+        },
+        { status: 400 }
+      );
+    }
 
     console.log('[API] Co-op Bank STK Push initiated:', {
       userId,
