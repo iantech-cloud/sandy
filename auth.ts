@@ -231,7 +231,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               approval_status: profile.approval_status || 'pending',
               rank: profile.rank || 'Unactivated',
               activation_paid_at: profile.activation_paid_at || null,
-              isActivationPaid: isActivationPaid,
+              isActivationPaid: !!profile.activation_paid_at,
               status: profile.status || 'inactive',
               twoFAEnabled: profile.twoFAEnabled || false,
               profile_completed: profile.profile_completed || false,

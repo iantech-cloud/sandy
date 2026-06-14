@@ -384,7 +384,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    // Guard against empty or non-JSON bodies (e.g. browser preflight / empty POST)
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ success: false, error: 'Invalid or empty request body' }, { status: 400 });
+    }
     const { personId, message, history, freePreview } = body;
 
     if (!personId || !message) {
