@@ -32,7 +32,6 @@ interface AIAssistantPanelProps {
 
 const QUICK_REPLIES = [
   'How do I withdraw money?',
-  'How do referrals work?',
   'How do I verify my account?',
   'What is Chat Foreigners?',
 ];
@@ -149,7 +148,7 @@ export function AIAssistantPanel({ isVisible, onClose, onSwitchToHuman }: AIAssi
             </div>
             <div>
               <p className="text-xs sm:text-sm font-semibold text-gray-700">Ask me anything about HustleHub</p>
-              <p className="text-xs text-gray-400 mt-1">Registration · Referrals · Withdrawals · Account help</p>
+              <p className="text-xs text-gray-400 mt-1">Registration · Withdrawals · Account help</p>
             </div>
             {/* Quick reply chips */}
             <div className="flex flex-col sm:flex-row flex-wrap gap-2 justify-center mt-2 w-full">

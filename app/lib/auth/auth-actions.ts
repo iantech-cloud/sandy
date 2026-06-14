@@ -19,43 +19,19 @@ export async function requireAuth() {
 }
 
 /**
- * Check if user meets all status requirements
- * Redirects to appropriate pages if requirements not met
+ * Check if user meets all status requirements (credentials only).
+ * Redirects to the appropriate page if a requirement is not met.
  */
 export async function checkUserStatus() {
   const session = await requireAuth();
   const user = session.user;
-  
-  const isGoogle = user.authMethod === 'google';
-  const isCreds = user.authMethod === 'credentials' || user.authMethod === 'email';
 
-  // Google OAuth checks
-  if (isGoogle) {
-    if (!user.is_verified) {
-      redirect('/auth/verify-request');
-    }
-    if (!user.profile_completed) {
-      redirect('/auth/complete-profile');
-    }
-    if (!user.isActivationPaid) {
-      redirect('/auth/activate');
-    }
-    if (!user.is_approved || !user.is_active) {
-      redirect('/auth/pending-approval');
-    }
+  // Credentials users go straight to activation — no email-verification step.
+  if (!user.isActivationPaid) {
+    redirect('/auth/activate');
   }
-
-  // Email/Credentials checks
-  if (isCreds) {
-    if (!user.is_verified) {
-      redirect('/auth/verify-request');
-    }
-    if (!user.isActivationPaid) {
-      redirect('/auth/activate');
-    }
-    if (!user.is_approved || !user.is_active) {
-      redirect('/auth/pending-approval');
-    }
+  if (!user.is_approved || !user.is_active) {
+    redirect('/auth/pending-approval');
   }
 
   return session;
@@ -115,25 +91,11 @@ export async function getUserStatus() {
       };
     }
 
-    const isGoogle = user.authMethod === 'google';
-    const isCreds = user.authMethod === 'credentials' || user.authMethod === 'email';
-    
     const missingRequirements: string[] = [];
 
-    // Google OAuth checks
-    if (isGoogle) {
-      if (!user.is_verified) missingRequirements.push('verification');
-      if (!user.profile_completed) missingRequirements.push('profile_completion');
-      if (!user.isActivationPaid) missingRequirements.push('activation_payment');
-      if (!user.is_approved || !user.is_active) missingRequirements.push('approval');
-    }
-
-    // Email/Credentials checks
-    if (isCreds) {
-      if (!user.is_verified) missingRequirements.push('verification');
-      if (!user.isActivationPaid) missingRequirements.push('activation_payment');
-      if (!user.is_approved || !user.is_active) missingRequirements.push('approval');
-    }
+    // Credentials-only checks
+    if (!user.isActivationPaid) missingRequirements.push('activation_payment');
+    if (!user.is_approved || !user.is_active) missingRequirements.push('approval');
 
     return {
       authenticated: true,

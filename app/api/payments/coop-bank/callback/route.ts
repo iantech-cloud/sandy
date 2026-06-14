@@ -272,6 +272,7 @@ export async function POST(request: NextRequest) {
           // /api/payments/coop-bank/recover finds this paid-but-not-activated
           // record and completes it. The user NEVER loses access.
           await session.commitTransaction();
+          session.endSession();
           session = null;
 
           const activationPaymentId = activationPayment._id.toString();
@@ -307,28 +308,23 @@ export async function POST(request: NextRequest) {
     }).session(session);
 
     if (chatForeignersUnlock && paymentStatus === 'completed') {
-      try {
-        // Commit session before calling server action
-        await session.commitTransaction();
-        session = null;
+      // Commit the main transaction first, then process the unlock in the background
+      // so the callback response is never delayed by the unlock work.
+      await session.commitTransaction();
+      session.endSession();
+      session = null;
 
-        await completeBotUnlockPayment(chatForeignersUnlock._id.toString());
+      void completeBotUnlockPayment(chatForeignersUnlock._id.toString()).catch(
+        (chatError) => {
+          console.error('[CoopCallback] Background chat-foreigners unlock error (can retry manually):', chatError);
+        }
+      );
 
-        return NextResponse.json({
-          success: true,
-          data: { status: paymentStatus, messageReference },
-          message: 'Chat foreigners unlock payment processed',
-        });
-      } catch (chatError) {
-        console.error('[CoopCallback] Chat foreigners unlock error:', chatError);
-        return NextResponse.json(
-          {
-            success: false,
-            error: chatError instanceof Error ? chatError.message : 'Failed to process chat unlock',
-          },
-          { status: 500 }
-        );
-      }
+      return NextResponse.json({
+        success: true,
+        data: { status: paymentStatus, messageReference },
+        message: 'Chat foreigners unlock payment confirmed. Processing in background.',
+      });
     }
 
     // ========================================================================
@@ -340,11 +336,23 @@ export async function POST(request: NextRequest) {
     }).session(session);
 
     if (chatForeignersDeposit && paymentStatus === 'completed') {
-      try {
-        await completeWalletDeposit(chatForeignersDeposit._id.toString(), session);
-      } catch (chatDepositError) {
-        console.error('[CoopCallback] Chat foreigners deposit error:', chatDepositError);
-      }
+      // Commit the main transaction and run the wallet credit in the background
+      // to keep callback response times fast under high traffic.
+      await session.commitTransaction();
+      session.endSession();
+      session = null;
+
+      void completeWalletDeposit(chatForeignersDeposit._id.toString(), null).catch(
+        (chatDepositError) => {
+          console.error('[CoopCallback] Background chat-foreigners deposit error:', chatDepositError);
+        }
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: { status: paymentStatus, messageReference },
+        message: 'Chat foreigners deposit confirmed. Processing in background.',
+      });
     }
 
     await session.commitTransaction();
