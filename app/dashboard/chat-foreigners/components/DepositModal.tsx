@@ -113,7 +113,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                 placeholder="Enter amount"
                 min="100"
                 step="1"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
               />
               <p className="text-xs text-gray-600 mt-1.5">Minimum: KES 100</p>
             </div>
@@ -127,7 +127,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 placeholder="254712345678"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900 placeholder-gray-500 bg-white"
               />
               <p className="text-xs text-gray-600 mt-1.5">Format: 254712345678 (with country code)</p>
             </div>
