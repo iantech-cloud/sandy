@@ -261,7 +261,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     if (!userToCheck.isActive) {
       setTimeout(() => {
-        router.push('/activate');
+        router.push('/auth/activate');
       }, 0);
       return;
     }
