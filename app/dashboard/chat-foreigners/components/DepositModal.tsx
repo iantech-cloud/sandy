@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Loader } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { X, Loader, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 
 interface DepositModalProps {
@@ -11,6 +12,7 @@ interface DepositModalProps {
 
 export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
   const { data: session } = useSession();
+  const router = useRouter();
   const [amount, setAmount] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,13 +45,21 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
       const data = await res.json();
 
       if (data.success) {
+        // Store messageReference in sessionStorage for the waiting page to retrieve
+        if (data.messageReference) {
+          sessionStorage.setItem('chatWalletDepositRef', data.messageReference);
+        }
+        
         setSuccess(true);
+        // Redirect to M-Pesa waiting page to poll for payment completion
         setTimeout(() => {
-          onClose();
-          setAmount('');
-          setPhoneNumber('');
-          setSuccess(false);
-        }, 2000);
+          const params = new URLSearchParams({
+            amount: amount,
+            phone: phoneNumber,
+            type: 'chat_wallet_deposit',
+          });
+          router.push(`/dashboard/chat-foreigners/wallet/mpesa-waiting?${params.toString()}`);
+        }, 1500);
       } else {
         setError(data.error || 'Failed to initiate deposit');
       }
@@ -63,33 +73,37 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+      <div className="bg-gradient-to-br from-white to-gray-50 rounded-2xl max-w-md w-full p-7 shadow-2xl border border-gray-200">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-slate-900">Deposit to Wallet</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Deposit to Chat Wallet</h2>
           <button
             onClick={onClose}
-            className="text-slate-500 hover:text-slate-700 transition"
+            className="text-gray-400 hover:text-gray-600 transition p-1 rounded-lg hover:bg-gray-100"
           >
             <X size={24} />
           </button>
         </div>
 
         {success ? (
-          <div className="text-center py-8">
-            <p className="text-green-600 font-semibold text-lg">Deposit initiated!</p>
-            <p className="text-slate-600 mt-2">Check your phone for the M-Pesa prompt.</p>
+          <div className="text-center py-10">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-6 h-6 text-green-600" />
+            </div>
+            <p className="text-green-600 font-semibold text-lg mb-2">Deposit initiated!</p>
+            <p className="text-gray-600">Check your phone for the M-Pesa prompt.</p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">
                 Amount (KES)
               </label>
               <input
@@ -99,13 +113,13 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                 placeholder="Enter amount"
                 min="100"
                 step="1"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
               />
-              <p className="text-xs text-slate-500 mt-1">Minimum: KES 100</p>
+              <p className="text-xs text-gray-600 mt-1.5">Minimum: KES 100</p>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-800 mb-2">
                 M-Pesa Phone Number
               </label>
               <input
@@ -113,18 +127,18 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 placeholder="254712345678"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
               />
-              <p className="text-xs text-slate-500 mt-1">Format: 254712345678 (with country code)</p>
+              <p className="text-xs text-gray-600 mt-1.5">Format: 254712345678 (with country code)</p>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white py-2.5 rounded-lg hover:from-green-600 hover:to-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center gap-2 shadow-lg"
             >
               {loading && <Loader size={20} className="animate-spin" />}
-              {loading ? 'Processing...' : 'Deposit'}
+              {loading ? 'Processing...' : 'Deposit Now'}
             </button>
           </form>
         )}
