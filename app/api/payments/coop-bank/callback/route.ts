@@ -261,22 +261,38 @@ export async function POST(request: NextRequest) {
         await activationPayment.save({ session });
 
         if (paymentStatus === 'completed') {
-          // Commit before running server action (which opens its own DB session)
+          // ── DECOUPLE PAYMENT FROM ACTIVATION ─────────────────────────────
+          // Payment success != account activation. We commit the payment as
+          // SUCCESS immediately (ActivationPayment.status = 'completed',
+          // processed_by_system stays false) and return to the bank in well
+          // under a second. The heavy activation work (referral bonuses,
+          // company revenue, emails, audit logs) runs in the background.
+          // If the background run is interrupted (process restart, crash,
+          // traffic spike), the recovery job at
+          // /api/payments/coop-bank/recover finds this paid-but-not-activated
+          // record and completes it. The user NEVER loses access.
           await session.commitTransaction();
           session = null;
 
-          try {
-            await completeActivationAfterPayment(
-              activationPayment._id.toString()
-            );
-          } catch (activationError) {
-            console.error('[CoopCallback] Activation completion error:', activationError);
-          }
+          const activationPaymentId = activationPayment._id.toString();
+
+          // Fire-and-forget: do NOT block the callback response on activation.
+          // completeActivationAfterPayment is idempotent (it no-ops if the
+          // account is already active), so the recovery job is safe to re-run.
+          void completeActivationAfterPayment(activationPaymentId).catch(
+            (activationError) => {
+              console.error(
+                '[CoopCallback] Background activation error (recovery job will retry):',
+                activationPaymentId,
+                activationError
+              );
+            }
+          );
 
           return NextResponse.json({
             success: true,
-            data: { status: paymentStatus, messageReference },
-            message: 'Activation payment processed',
+            data: { status: paymentStatus, messageReference, activation: 'pending' },
+            message: 'Payment confirmed. Activation is being processed.',
           });
         }
       }
