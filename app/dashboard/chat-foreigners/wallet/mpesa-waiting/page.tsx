@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Loader2, CheckCircle, XCircle, Clock, Phone, ArrowLeft } from 'lucide-react';
-import { checkMpesaPaymentStatus } from '@/app/actions/deposit';
+import { checkWalletDepositPaymentStatus } from '@/app/actions/chat-foreigners/payments';
 
 interface PaymentStatus {
   status: 'processing' | 'success' | 'failed' | 'cancelled' | 'timeout';
@@ -43,11 +43,11 @@ export default function ChatWalletMpesaWaitingPage() {
     if (!messageReference || !isPolling) return;
 
     try {      
-      const result = await checkMpesaPaymentStatus(messageReference);
+      const result = await checkWalletDepositPaymentStatus(messageReference);
       setPollingCount(prev => prev + 1);
 
       if (result.success && result.data) {
-        const { status, resultCode, resultDesc, mpesaReceiptNumber } = result.data;
+        const { status, resultCode, resultDesc, mpesaReceiptNumber } = result.data as any;
 
         if (status === 'pending' || status === 'initiated') {
           return;
