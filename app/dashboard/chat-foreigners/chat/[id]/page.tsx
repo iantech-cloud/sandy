@@ -8,7 +8,6 @@ import {
   Lock, Sparkles, Zap, MessageCircle, Globe,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import DepositModal from '../../components/DepositModal';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -135,7 +134,6 @@ export default function ChatPage() {
   const [chatClosed, setChatClosed] = useState(false);
   const [closeError, setCloseError] = useState('');
   const [creditAmount, setCreditAmount] = useState(0);
-  const [showDepositModal, setShowDepositModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -513,7 +511,7 @@ export default function ChatPage() {
           <button
             onClick={() => {
               setShowUnlockGate(false);
-              setShowDepositModal(true);
+              router.push(`/dashboard/chat-foreigners/unlock/${personId}`);
             }}
             className="w-full bg-[#00c97a] hover:bg-[#00b06a] text-white font-bold h-12 rounded-full flex items-center justify-center gap-2 transition-colors"
           >
@@ -536,8 +534,6 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen bg-[#0d0d14] text-zinc-100">
       {/* Unlock gate overlay */}
       {showUnlockGate && <UnlockGate />}
-      {/* Deposit modal for direct payment */}
-      <DepositModal isOpen={showDepositModal} onClose={() => setShowDepositModal(false)} />
 
       {/* Header */}
       <header className="px-3 py-2.5 border-b border-zinc-800 bg-[#161622] flex items-center justify-between shrink-0">

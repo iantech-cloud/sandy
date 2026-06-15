@@ -45,9 +45,11 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
       const data = await res.json();
 
       if (data.success) {
-        // Store messageReference in sessionStorage for the waiting page to retrieve
-        if (data.messageReference) {
-          sessionStorage.setItem('chatWalletDepositRef', data.messageReference);
+        // Store the checkout reference in sessionStorage for the waiting page to
+        // poll. The deposit action returns it as data.data.checkoutRequestId.
+        const checkoutRef = data.data?.checkoutRequestId || data.messageReference;
+        if (checkoutRef) {
+          sessionStorage.setItem('chatWalletDepositRef', checkoutRef);
         }
         
         setSuccess(true);

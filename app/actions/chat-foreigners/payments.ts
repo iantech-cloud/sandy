@@ -616,6 +616,120 @@ export async function initiateWalletDepositViaMpesa(
 }
 
 // ========================================================================
+// Check Wallet Deposit Payment Status — mirrors checkBotUnlockPaymentStatus
+// The chat wallet deposit lives in ChatForeignersMpesaTransaction (NOT the
+// main MpesaTransaction collection), so the deposit waiting page MUST poll
+// through this action — querying the main deposit checker would always return
+// "Transaction not found" and leave the UI stuck on "processing" forever.
+// Queries the Co-op Bank Enquiry API (same as activation), persists the result,
+// and auto-completes the deposit via completeWalletDeposit when confirmed.
+// ========================================================================
+export async function checkWalletDepositPaymentStatus(messageReference: string) {
+  try {
+    await connectToDatabase();
+    const currentUser = await getCurrentUserFromSession();
+
+    if (!currentUser) {
+      return { success: false, message: 'User not authenticated' };
+    }
+
+    // Look up by checkout_request_id (= messageRef set at STK push time)
+    const mpesaTransaction = await ChatForeignersMpesaTransaction.findOne({
+      checkout_request_id: messageReference,
+      transaction_type: 'chat_foreigners_deposit',
+    });
+
+    if (!mpesaTransaction) {
+      return { success: false, message: 'Transaction not found' };
+    }
+
+    // Already in a terminal state — return cached result immediately
+    const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
+    if (terminalStatuses.includes(mpesaTransaction.status)) {
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultCode: mpesaTransaction.result_code?.toString(),
+          resultDesc: mpesaTransaction.result_desc,
+          mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+          amount: mpesaTransaction.amount_cents / 100,
+          source: mpesaTransaction.metadata?.callback_processed ? 'coop_callback' : 'database',
+        },
+      };
+    }
+
+    // Query Co-op Bank Enquiry API — same as activation/unlock flow
+    try {
+      const coopBank = createCoopBankService();
+      const statusResponse = await coopBank.getTransactionStatus(messageReference);
+      const { CoopBankService } = await import('@/app/lib/services/coop-bank');
+      const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+
+      console.log('[ChatForeigners] Deposit status poll:', {
+        messageReference,
+        responseCode: statusResponse.ResponseCode,
+        mappedStatus,
+        description: statusResponse.ResponseDescription,
+      });
+
+      // Persist the updated status
+      const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
+      const safeResultCode = isNaN(resultCode) ? 1 : resultCode;
+
+      await ChatForeignersMpesaTransaction.findByIdAndUpdate(mpesaTransaction._id, {
+        status: mappedStatus,
+        result_code: safeResultCode,
+        result_desc: statusResponse.ResponseDescription || '',
+        ...(mappedStatus === 'completed' ? { completed_at: new Date() } : {}),
+        ...(['failed', 'cancelled', 'timeout'].includes(mappedStatus) ? { failed_at: new Date() } : {}),
+      });
+
+      // If completed via poll (callback missed), credit the wallet — guard so we
+      // only credit once even if the callback also fires.
+      if (mappedStatus === 'completed') {
+        const depositTxn = await ChatForeignersTransaction.findOne({
+          mpesa_transaction_id: mpesaTransaction._id,
+          type: 'CHAT_DEPOSIT',
+        });
+        if (depositTxn && depositTxn.status !== 'completed') {
+          console.log('[ChatForeigners] Deposit confirmed via status poll, completing...');
+          await completeWalletDeposit(mpesaTransaction._id.toString());
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          status: mappedStatus,
+          resultCode: statusResponse.ResponseCode,
+          resultDesc: statusResponse.ResponseDescription || '',
+          amount: mpesaTransaction.amount_cents / 100,
+          source: 'coop_api',
+        },
+      };
+    } catch (apiError) {
+      console.error('[ChatForeigners] Deposit status API error, returning DB status:', apiError);
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultDesc: 'Checking payment status...',
+          source: 'database_fallback',
+        },
+      };
+    }
+  } catch (error) {
+    console.error('[ChatForeigners] checkWalletDepositPaymentStatus error:', error);
+    return {
+      success: false,
+      message: 'Failed to check payment status. Please try again.',
+      data: { status: 'error', resultDesc: 'Unable to verify payment status' },
+    };
+  }
+}
+
+// ========================================================================
 // Complete Wallet Deposit (Called by callback handler)
 // ========================================================================
 export async function completeWalletDeposit(
@@ -631,6 +745,18 @@ export async function completeWalletDeposit(
 
     if (!mpesaTransaction) {
       throw new Error('M-Pesa transaction not found');
+    }
+
+    // Idempotency guard: if the deposit transaction is already completed, do
+    // not credit the wallet again (callback + poll could both fire).
+    const existingTxn = await ChatForeignersTransaction.findOne({
+      mpesa_transaction_id: mpesaTransactionId,
+      type: 'CHAT_DEPOSIT',
+    }).session(session);
+
+    if (existingTxn && existingTxn.status === 'completed') {
+      console.log('[ChatForeigners] Deposit already completed — skipping duplicate credit');
+      return { success: true, alreadyCompleted: true };
     }
 
     // Update wallet balance
