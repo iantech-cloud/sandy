@@ -191,6 +191,8 @@ export async function checkBotAccess(botId: string) {
             messageCount: access.messageCount,
             firstMilestoneComplete: access.firstMilestoneComplete,
             isClosed: access.isClosed || false,
+            // Whether the one-time KSH 100 completion reward was already claimed
+            chatCreditPaid: access.chatCreditPaid || false,
           }
         : null,
     };
