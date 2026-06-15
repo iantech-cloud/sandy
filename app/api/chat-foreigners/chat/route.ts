@@ -361,10 +361,11 @@ export async function GET(request: NextRequest) {
     if (!currentUser && session.user.email) currentUser = await Profile.findOne({ email: session.user.email }).lean();
     if (!currentUser) return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
 
+    // LIFETIME UNLOCK: load history for any access record, even legacy ones that
+    // were previously marked isClosed. Access and history are permanent.
     const access = await ChatForeignersBotAccess.findOne({
       user_id: (currentUser as any)._id,
       bot_id: personId,
-      isClosed: { $ne: true },
     }).lean() as any;
 
     if (!access) {
