@@ -132,12 +132,15 @@ export default function ChatPage() {
   const [showEndChatConfirm, setShowEndChatConfirm] = useState(false);
   const [closingChat, setClosingChat] = useState(false);
   const [rewardClaimed, setRewardClaimed] = useState(false);
+  const [rewardAlreadyClaimed, setRewardAlreadyClaimed] = useState(false);
   const [closeError, setCloseError] = useState('');
   const [creditAmount, setCreditAmount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const canClose = messageCount >= MIN_MESSAGES_TO_CLOSE;
+  // Reward is one-time: only claimable once the milestone is reached AND it has
+  // not already been claimed for this unlock.
+  const canClose = messageCount >= MIN_MESSAGES_TO_CLOSE && !rewardAlreadyClaimed;
   // Can send if: has full access, or still has free preview messages left
   const canSend = hasFullAccess || freeMessagesUsed < FREE_PREVIEW_MESSAGES;
 
@@ -162,6 +165,7 @@ export default function ChatPage() {
         if (accessData.success && accessData.hasAccess) {
           setHasFullAccess(true);
           setMessageCount(accessData.data?.messageCount || 0);
+          setRewardAlreadyClaimed(accessData.data?.chatCreditPaid || false);
 
           // Restore persisted message history from the DB so the conversation
           // is intact after navigation away or a page refresh.
@@ -287,8 +291,13 @@ export default function ChatPage() {
       const data = await res.json();
 
       if (data.success) {
-        setRewardClaimed(true);
-        setCreditAmount(data.data?.creditAmount || 100);
+        // Only show the celebratory modal for a fresh claim; if the server
+        // reports it was already credited, just lock the button silently.
+        setRewardAlreadyClaimed(true);
+        if (!data.alreadyCredited) {
+          setRewardClaimed(true);
+          setCreditAmount(data.data?.creditAmount || 100);
+        }
         setShowEndChatConfirm(false);
       } else {
         setCloseError(data.error || 'Could not close chat. Try again.');

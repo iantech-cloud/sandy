@@ -839,9 +839,19 @@ export async function closeChat(botId: string) {
       };
     }
 
-    // Guard: the completion reward is one-time per unlock. If already paid,
-    // do NOT credit again — and crucially, do NOT re-lock. Access is lifetime.
-    if (access.chatCreditPaid) {
+    // Guard: the completion reward is ONE-TIME per unlock. Use an atomic
+    // conditional update to claim the reward — only the request that flips
+    // chatCreditPaid from false→true is allowed to credit the wallet. This
+    // prevents a double credit when two claim requests arrive concurrently.
+    const claim = await ChatForeignersBotAccess.findOneAndUpdate(
+      { _id: access._id, chatCreditPaid: { $ne: true } },
+      { $set: { chatCreditPaid: true } },
+      { new: true }
+    );
+
+    if (!claim) {
+      // Another request already claimed it (or it was claimed previously).
+      // Do NOT credit again and do NOT re-lock — access is lifetime.
       return { success: true, alreadyCredited: true };
     }
 
@@ -868,17 +878,14 @@ export async function closeChat(botId: string) {
       target_id: userId.toString(),
     });
 
-    // LIFETIME UNLOCK: mark the one-time completion reward as paid, but keep
-    // access OPEN and preserve the conversation history. The user keeps chatting
-    // forever after claiming — they are never re-locked or reset.
-    access.chatCreditPaid = true;
-    await access.save();
-
+    // chatCreditPaid was already set atomically above. Access stays OPEN and the
+    // conversation history is preserved — the user keeps chatting forever after
+    // claiming and is never re-locked or reset.
     console.log('[ChatForeigners] Chat completion reward credited (access stays open):', {
       userId,
       botId,
       credit: CHAT_CREDIT_CENTS / 100,
-      messageCount: access.messageCount,
+      messageCount: claim.messageCount,
     });
 
     return {
