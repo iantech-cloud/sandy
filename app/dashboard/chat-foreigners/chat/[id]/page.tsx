@@ -131,7 +131,7 @@ export default function ChatPage() {
   const [showIntro, setShowIntro] = useState(true); // onboarding screen
   const [showEndChatConfirm, setShowEndChatConfirm] = useState(false);
   const [closingChat, setClosingChat] = useState(false);
-  const [chatClosed, setChatClosed] = useState(false);
+  const [rewardClaimed, setRewardClaimed] = useState(false);
   const [closeError, setCloseError] = useState('');
   const [creditAmount, setCreditAmount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -209,7 +209,7 @@ export default function ChatPage() {
   };
 
   const sendMessage = async () => {
-    if (!input.trim() || sending || !person || chatClosed) return;
+    if (!input.trim() || sending || !person) return;
 
     // Check if free preview is exhausted and user hasn't paid
     if (!hasFullAccess && freeMessagesUsed >= FREE_PREVIEW_MESSAGES) {
@@ -287,7 +287,7 @@ export default function ChatPage() {
       const data = await res.json();
 
       if (data.success) {
-        setChatClosed(true);
+        setRewardClaimed(true);
         setCreditAmount(data.data?.creditAmount || 100);
         setShowEndChatConfirm(false);
       } else {
@@ -319,40 +319,6 @@ export default function ChatPage() {
   }
 
   if (!person) return null;
-
-  // ── Chat closed — success screen ─────────────────────────────────────────
-  if (chatClosed) {
-    return (
-      <div className="min-h-screen bg-[#0d0d14] flex items-center justify-center p-6">
-        <div className="bg-[#161622] border border-zinc-800 rounded-2xl shadow-xl p-8 max-w-sm w-full text-center text-zinc-100 space-y-4">
-          <div className="w-16 h-16 bg-[#00c97a]/20 rounded-full flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-8 h-8 text-[#00c97a]" />
-          </div>
-          <h2 className="text-2xl font-bold">Chat Completed!</h2>
-          <p className="text-zinc-400 text-sm">
-            KES {creditAmount} has been credited to your Chat Foreigners wallet.
-          </p>
-          <p className="text-xs text-zinc-500">
-            To chat with {person.name} again, unlock with a fresh KES 100 payment.
-          </p>
-          <div className="flex flex-col gap-2 pt-2">
-            <Link
-              href="/dashboard/chat-foreigners/wallet"
-              className="w-full bg-[#00c97a] hover:bg-[#00b06a] text-white font-semibold h-11 rounded-full flex items-center justify-center transition-colors"
-            >
-              View Wallet
-            </Link>
-            <Link
-              href="/dashboard/chat-foreigners"
-              className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold h-11 rounded-full flex items-center justify-center transition-colors"
-            >
-              Browse Personalities
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const quickPrompts =
     QUICK_PROMPTS[person.personalityType || ''] ?? QUICK_PROMPTS.default;
@@ -535,6 +501,38 @@ export default function ChatPage() {
       {/* Unlock gate overlay */}
       {showUnlockGate && <UnlockGate />}
 
+      {/* Reward claimed — lifetime access, keep chatting */}
+      {rewardClaimed && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#161622] border border-zinc-700 rounded-2xl p-6 max-w-sm w-full text-center text-zinc-100 space-y-4 shadow-2xl">
+            <div className="w-16 h-16 bg-[#00c97a]/20 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-8 h-8 text-[#00c97a]" />
+            </div>
+            <h2 className="text-2xl font-bold">Reward Claimed!</h2>
+            <p className="text-zinc-400 text-sm">
+              KES {creditAmount} has been credited to your Chat Foreigners wallet.
+            </p>
+            <p className="text-xs text-zinc-500">
+              Your access to {person.name} is lifetime — keep chatting as much as you like, no extra payment needed.
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={() => setRewardClaimed(false)}
+                className="w-full bg-[#00c97a] hover:bg-[#00b06a] text-white font-semibold h-11 rounded-full flex items-center justify-center transition-colors"
+              >
+                Keep Chatting
+              </button>
+              <Link
+                href="/dashboard/chat-foreigners/wallet"
+                className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold h-11 rounded-full flex items-center justify-center transition-colors"
+              >
+                View Wallet
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="px-3 py-2.5 border-b border-zinc-800 bg-[#161622] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
@@ -600,14 +598,14 @@ export default function ChatPage() {
       {showEndChatConfirm && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
           <div className="bg-[#161622] border border-zinc-800 rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-            <h3 className="font-bold text-lg text-zinc-100">End Chat Session?</h3>
+            <h3 className="font-bold text-lg text-zinc-100">Claim Your Reward?</h3>
             {canClose ? (
               <p className="text-zinc-400 text-sm">
-                You will receive <span className="text-[#00c97a] font-semibold">KES 100</span> in your Chat Foreigners wallet. To chat with {person.name} again you will need to pay KES 100 to re-unlock.
+                You will receive <span className="text-[#00c97a] font-semibold">KES 100</span> in your Chat Foreigners wallet. Your access to {person.name} is lifetime — you can keep chatting afterwards with no extra payment.
               </p>
             ) : (
               <p className="text-zinc-400 text-sm">
-                You need at least <span className="text-[#00c97a] font-semibold">{MIN_MESSAGES_TO_CLOSE} messages</span> to end the chat and claim your reward. You have <span className="font-semibold">{messageCount}</span> so far.
+                You need at least <span className="text-[#00c97a] font-semibold">{MIN_MESSAGES_TO_CLOSE} messages</span> to claim your reward. You have <span className="font-semibold">{messageCount}</span> so far.
               </p>
             )}
             <div className="flex gap-2">
@@ -750,13 +748,12 @@ export default function ChatPage() {
               onKeyDown={handleKeyDown}
               placeholder={`Message ${person.name}...`}
               rows={1}
-              disabled={chatClosed}
               className="flex-1 resize-none bg-zinc-800 border border-zinc-700 rounded-full px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-[#00c97a]/50 focus:ring-1 focus:ring-[#00c97a]/20 max-h-28 leading-relaxed disabled:opacity-50"
               style={{ scrollbarWidth: 'none' }}
             />
             <button
               onClick={sendMessage}
-              disabled={sending || !input.trim() || chatClosed}
+              disabled={sending || !input.trim()}
               className="p-2.5 bg-[#00c97a] hover:bg-[#00b06a] text-white rounded-full w-10 h-10 flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {sending ? <Loader size={17} className="animate-spin" /> : <Send size={17} />}

@@ -798,12 +798,13 @@ export async function completeWalletDeposit(
 }
 
 // ========================================================================
-// Close Chat & Credit User KSH 100 (non-withdrawable)
-// Called when user finishes a chat session.
+// Claim Chat Completion Reward — Credit User KSH 100 (non-withdrawable)
+// Called when a user reaches the 20-message milestone and claims their reward.
 // Requirements:
-//   - At least 20 messages must have been exchanged in the session
-//   - Credits KSH 100 (10000 cents) to the user's Chat Foreigners wallet
-//   - Marks the bot access as closed — requires fresh KSH 100 payment to re-unlock
+//   - At least 20 messages must have been exchanged
+//   - Credits KSH 100 (10000 cents) to the user's Chat Foreigners wallet (once)
+// LIFETIME UNLOCK: access is NEVER closed or reset. After claiming, the user
+//   keeps full access and message history forever — no re-payment required.
 // ========================================================================
 export async function closeChat(botId: string) {
   try {
@@ -816,11 +817,11 @@ export async function closeChat(botId: string) {
 
     const userId = (currentUser as any)._id;
 
-    // Find active (non-closed) access
+    // LIFETIME UNLOCK: find access regardless of isClosed. Claiming the
+    // completion reward must never depend on (or create) a "closed" state.
     const access = await ChatForeignersBotAccess.findOne({
       user_id: userId,
       bot_id: botId,
-      isClosed: { $ne: true },
     });
 
     if (!access) {
@@ -832,18 +833,15 @@ export async function closeChat(botId: string) {
     if ((access.messageCount || 0) < MIN_MESSAGES) {
       return {
         success: false,
-        error: `You need at least ${MIN_MESSAGES} messages to close this chat and receive your reward. You have sent ${access.messageCount || 0} so far.`,
+        error: `You need at least ${MIN_MESSAGES} messages to claim your reward. You have sent ${access.messageCount || 0} so far.`,
         messageCount: access.messageCount || 0,
         required: MIN_MESSAGES,
       };
     }
 
-    // Guard: only credit once per session
+    // Guard: the completion reward is one-time per unlock. If already paid,
+    // do NOT credit again — and crucially, do NOT re-lock. Access is lifetime.
     if (access.chatCreditPaid) {
-      // Still close the session even if credit was somehow already paid
-      access.isClosed = true;
-      access.closedAt = new Date();
-      await access.save();
       return { success: true, alreadyCredited: true };
     }
 
@@ -870,15 +868,13 @@ export async function closeChat(botId: string) {
       target_id: userId.toString(),
     });
 
-    // Mark access as closed, credit paid, and clear the persisted message
-    // history — this is the ONLY point where stored messages are deleted.
-    access.isClosed = true;
-    access.closedAt = new Date();
+    // LIFETIME UNLOCK: mark the one-time completion reward as paid, but keep
+    // access OPEN and preserve the conversation history. The user keeps chatting
+    // forever after claiming — they are never re-locked or reset.
     access.chatCreditPaid = true;
-    (access as any).messages = [];
     await access.save();
 
-    console.log('[ChatForeigners] Chat closed and credited:', {
+    console.log('[ChatForeigners] Chat completion reward credited (access stays open):', {
       userId,
       botId,
       credit: CHAT_CREDIT_CENTS / 100,
