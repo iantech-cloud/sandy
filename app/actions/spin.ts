@@ -857,25 +857,58 @@ export async function depositSpinWalletViaMpesa(depositData: {
 
     // Initiate Co-op Bank STK Push
     const coopBank = createCoopBankService();
-    const stkResponse = await coopBank.initiateSTKPush(
-      formattedPhone,
-      depositData.amount,
-      `Spin wallet deposit - ${currentUser.username}`,
-      callbackUrl,
-      messageReference
-    );
-
-    if (stkResponse.ResponseCode !== '0') {
+    let stkResponse;
+    try {
+      console.log('[Spin] Calling initiateSTKPush for spin deposit...');
+      stkResponse = await coopBank.initiateSTKPush(
+        formattedPhone,
+        depositData.amount,
+        `Spin wallet deposit - ${currentUser.username}`,
+        callbackUrl,
+        messageReference
+      );
+      console.log('[Spin] STK Push response received:', stkResponse);
+    } catch (stkError) {
+      console.error('[Spin] STK Push initiation failed:', stkError);
       // Mark records as failed
       await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: 'failed',
-        result_desc: stkResponse.ResponseDescription || 'STK Push rejected by bank',
+        result_desc: stkError instanceof Error ? stkError.message : 'STK Push request failed',
+        failed_at: new Date(),
       });
-      await (Transaction as any).findByIdAndUpdate(transaction._id, { status: 'failed' });
+      await (Transaction as any).findByIdAndUpdate(transaction._id, {
+        status: 'failed',
+        metadata: {
+          ...((transaction as any).metadata || {}),
+          error: stkError instanceof Error ? stkError.message : 'STK Push request failed',
+        },
+      });
 
       return {
         success: false,
-        message: stkResponse.ResponseDescription || 'Failed to initiate payment. Please try again.',
+        message: stkError instanceof Error ? stkError.message : 'Failed to initiate payment. Please check your connection and try again.',
+      };
+    }
+
+    if (!stkResponse || stkResponse.ResponseCode !== '0') {
+      console.error('[Spin] STK Push rejected:', stkResponse?.ResponseDescription);
+      // Mark records as failed
+      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_desc: stkResponse?.ResponseDescription || 'STK Push rejected by bank',
+        failed_at: new Date(),
+      });
+      await (Transaction as any).findByIdAndUpdate(transaction._id, {
+        status: 'failed',
+        metadata: {
+          ...((transaction as any).metadata || {}),
+          error: stkResponse?.ResponseDescription || 'STK Push rejected',
+        },
+      });
+
+      return {
+        success: false,
+        message: stkResponse?.ResponseDescription || 'Failed to initiate payment. Please try again.',
       };
     }
 
@@ -897,9 +930,10 @@ export async function depositSpinWalletViaMpesa(depositData: {
 
   } catch (error) {
     console.error('[Spin] depositSpinWalletViaMpesa error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An error occurred while processing your spin wallet deposit. Please try again.';
     return {
       success: false,
-      message: 'An error occurred while processing your spin wallet deposit. Please try again.',
+      message: errorMessage,
     };
   }
 }

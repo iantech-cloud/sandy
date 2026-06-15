@@ -286,7 +286,9 @@ export class CoopBankService {
 
       clearTimeout(timeout);
 
-      console.log('[v0] STK Push Response Status:', response.status);
+    console.log('[v0] initiateSTKPush: Response received');
+    console.log('[v0]   HTTP Status:', response.status);
+    console.log('[v0]   Content-Type:', response.headers.get('content-type'));
 
       // Co-op Bank quirk: they return HTTP 404 / 4xx for business-logic errors
       // (e.g. MessageCode "-8" = DEBIT ACCOUNT AUTHORIZATION FAILURE) but the
@@ -505,19 +507,27 @@ export function createCoopBankService(): CoopBankService {
   const stkPushUrl = process.env.COOP_BANK_STK_PUSH_ENDPOINT;
   const stkStatusUrl = process.env.COOP_BANK_STK_STATUS_ENDPOINT;
 
-    console.log('[v0] createCoopBankService - Environment vars:');
-    console.log('[v0]   COOP_BANK_BASIC_AUTH exists:', !!basicAuth);
-    console.log('[v0]   COOP_BANK_BASIC_AUTH format:', basicAuth ? `${basicAuth.substring(0, 20)}...${basicAuth.substring(basicAuth.length - 10)}` : 'MISSING');
-    console.log('[v0]   COOP_BANK_BASIC_AUTH starts with "Basic ":', basicAuth?.startsWith('Basic '));
-    console.log('[v0]   COOP_BANK_BASIC_AUTH length:', basicAuth?.length);
-    console.log('[v0]   COOP_BANK_OPERATOR_CODE:', operatorCode);
-    console.log('[v0]   Token URL:', tokenUrl);
-    console.log('[v0]   STK Push URL:', stkPushUrl);
-    console.log('[v0]   STK Status URL:', stkStatusUrl);
+  console.log('[v0] createCoopBankService - Environment vars check:');
+  console.log('[v0]   COOP_BANK_BASIC_AUTH exists:', !!basicAuth, '| length:', basicAuth?.length);
+  console.log('[v0]   COOP_BANK_BASIC_AUTH starts with "Basic ":', basicAuth?.startsWith('Basic '));
+  console.log('[v0]   COOP_BANK_OPERATOR_CODE exists:', !!operatorCode, '| value:', operatorCode);
+  console.log('[v0]   COOP_BANK_BASE_URL exists:', !!baseUrl);
+  console.log('[v0]   COOP_BANK_TOKEN_ENDPOINT exists:', !!tokenUrl);
+  console.log('[v0]   COOP_BANK_STK_PUSH_ENDPOINT exists:', !!stkPushUrl);
+  console.log('[v0]   COOP_BANK_STK_STATUS_ENDPOINT exists:', !!stkStatusUrl);
 
-  if (!basicAuth) throw new Error('Missing env var: COOP_BANK_BASIC_AUTH (must be "Basic <base64...>")');
-  if (!operatorCode) throw new Error('Missing env var: COOP_BANK_OPERATOR_CODE');
+  if (!basicAuth) {
+    const msg = 'Missing env var: COOP_BANK_BASIC_AUTH (must be "Basic <base64...>")';
+    console.error('[v0] FATAL:', msg);
+    throw new Error(msg);
+  }
+  if (!operatorCode) {
+    const msg = 'Missing env var: COOP_BANK_OPERATOR_CODE';
+    console.error('[v0] FATAL:', msg);
+    throw new Error(msg);
+  }
 
+  console.log('[v0] CoopBankService created successfully');
   return new CoopBankService({
     basicAuth,
     operatorCode,

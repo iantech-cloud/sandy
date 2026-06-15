@@ -534,30 +534,56 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
 
     // Initiate Co-op Bank STK Push
     const coopBank = createCoopBankService();
-    const stkResponse = await coopBank.initiateSTKPush(
-      mpesaPhone,
-      activationAmount / 100, // KES
-      `Activation fee - ${userProfile.username}`,
-      callbackUrl,
-      messageReference
-    );
-
-    if (stkResponse.ResponseCode !== '0') {
+    let stkResponse;
+    try {
+      console.log('[Activation] Calling initiateSTKPush...');
+      stkResponse = await coopBank.initiateSTKPush(
+        mpesaPhone,
+        activationAmount / 100, // KES
+        `Activation fee - ${userProfile.username}`,
+        callbackUrl,
+        messageReference
+      );
+      console.log('[Activation] STK Push response received:', stkResponse);
+    } catch (stkError) {
+      console.error('[Activation] STK Push initiation failed:', stkError);
       // Mark records as failed
       await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: 'failed',
-        result_desc: stkResponse.ResponseDescription || 'STK Push rejected by bank',
+        result_desc: stkError instanceof Error ? stkError.message : 'STK Push request failed',
+        failed_at: new Date(),
       });
       activationPayment.status = 'failed';
-      activationPayment.error_message = stkResponse.ResponseDescription || 'STK Push rejected';
+      activationPayment.error_message = stkError instanceof Error ? stkError.message : 'STK Push request failed';
       await activationPayment.save();
       activationLog.status = 'failed';
-      activationLog.error_message = stkResponse.ResponseDescription;
+      activationLog.error_message = stkError instanceof Error ? stkError.message : 'STK Push request failed';
       await activationLog.save();
 
       return {
         success: false,
-        message: stkResponse.ResponseDescription || 'Failed to initiate payment. Please try again.',
+        message: stkError instanceof Error ? stkError.message : 'Failed to initiate payment. Please check your connection and try again.',
+      };
+    }
+
+    if (!stkResponse || stkResponse.ResponseCode !== '0') {
+      console.error('[Activation] STK Push rejected:', stkResponse?.ResponseDescription);
+      // Mark records as failed
+      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_desc: stkResponse?.ResponseDescription || 'STK Push rejected by bank',
+        failed_at: new Date(),
+      });
+      activationPayment.status = 'failed';
+      activationPayment.error_message = stkResponse?.ResponseDescription || 'STK Push rejected';
+      await activationPayment.save();
+      activationLog.status = 'failed';
+      activationLog.error_message = stkResponse?.ResponseDescription;
+      await activationLog.save();
+
+      return {
+        success: false,
+        message: stkResponse?.ResponseDescription || 'Failed to initiate payment. Please try again.',
       };
     }
 
@@ -580,7 +606,8 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
     };
   } catch (error) {
     console.error('[Activation] initiateActivationPayment error:', error);
-    return { success: false, message: 'An error occurred during payment processing' };
+    const errorMessage = error instanceof Error ? error.message : 'An error occurred during payment processing';
+    return { success: false, message: errorMessage };
   }
 }
 
