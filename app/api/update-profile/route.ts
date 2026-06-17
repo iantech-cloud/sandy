@@ -58,7 +58,11 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/update-profile
- * Update user profile (username, bio, phone, name, etc.)
+ * Update user profile (bio, phone, name, etc.)
+ * 
+ * IMPORTANT: Username is auto-generated during registration and is immutable.
+ * Users cannot change their username via this endpoint or the UI.
+ * Only administrators can modify usernames via admin tools if absolutely necessary.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -72,37 +76,14 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { username, bio, phone_number, phone, name } = body;
+    // REMOVED: username parameter - usernames are now immutable and auto-generated
+    const { bio, phone_number, phone, name } = body;
 
     await connectToDatabase();
 
-    // Validate input
-    if (username && username.trim().length < 3) {
-      return NextResponse.json(
-        { success: false, message: 'Username must be at least 3 characters' },
-        { status: 400 }
-      );
-    }
-
-    // Check if username is already taken (if updating)
-    if (username) {
-      const existingUser = await Profile.findOne({ 
-        username: username.toLowerCase().trim(),
-        email: { $ne: session.user.email }
-      });
-
-      if (existingUser) {
-        return NextResponse.json(
-          { success: false, message: 'Username already taken' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Build update object - accept both phone and phone_number
+    // Build update object - accept both phone and phone_number, but NOT username
     const updateData: any = {};
     if (name && name.trim()) updateData.name = name.trim();
-    if (username && username.trim()) updateData.username = username.toLowerCase().trim();
     if (bio !== undefined && bio !== null) updateData.bio = bio.trim();
     if (phone_number && phone_number.trim()) updateData.phone_number = phone_number.trim();
     if (phone && phone.trim() && !phone_number) updateData.phone_number = phone.trim();
