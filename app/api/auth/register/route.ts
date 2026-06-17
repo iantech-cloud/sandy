@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 // Import Mongoose models and the connection utility
 import { Profile, Referral, DownlineUser, connectToDatabase } from '@/app/lib/models'; 
 import { CommissionService } from '@/app/lib/services/commissionService';
+import { UsernameGenerationService } from '@/app/lib/services/usernameGenerationService';
 import { formatPhoneNumber, isValidPhoneNumber } from '@/app/lib/utils/phoneFormatter';
 import { rateLimit, API_RATE_LIMITS } from '@/app/lib/rate-limit';
 
@@ -48,15 +49,15 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
 
     const body = await request.json();
-    const { username, email: rawEmail, phone, password, referralId: rawReferralId } = body;
+    const { fullName, email: rawEmail, phone, password, referralId: rawReferralId } = body;
 
     // Normalize email to lowercase and trim whitespace for case-insensitive matching
     const email = rawEmail ? rawEmail.trim().toLowerCase() : '';
 
-    console.log('Registration attempt for:', { username, email, phone });
+    console.log('Registration attempt for:', { fullName, email, phone });
 
     // Basic Input Validation
-    if (!username || !email || !phone || !password) {
+    if (!fullName || !email || !phone || !password) {
       return NextResponse.json({ message: 'Missing required fields.' }, { status: 400 });
     }
 
@@ -86,13 +87,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate a unique username from the full name
+    let generatedUsername: string;
+    try {
+      console.log('Generating username from name:', fullName);
+      generatedUsername = await UsernameGenerationService.generateUniqueUsername(fullName);
+      console.log('Generated username:', generatedUsername);
+    } catch (usernameError) {
+      console.error('Username generation failed:', usernameError);
+      return NextResponse.json(
+        { message: 'Failed to generate username. Please try again.' },
+        { status: 500 }
+      );
+    }
+
     // 2. Check for existing users (Uniqueness check)
-    const existingUser = await Profile.findOne({ $or: [{ username }, { email }, { phone_number: formattedPhone }] });
+    // Note: We've already checked username uniqueness in the generation service,
+    // but we still need to check email and phone
+    const existingUser = await Profile.findOne({ $or: [{ email }, { phone_number: formattedPhone }] });
 
     if (existingUser) {
-      if (existingUser.username === username) {
-        return NextResponse.json({ message: 'Username already taken.' }, { status: 409 });
-      }
       if (existingUser.email === email) {
         return NextResponse.json({ message: 'Email already registered.' }, { status: 409 });
       }
@@ -129,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     const newProfileData = {
       _id: newUserId,
-      username,
+      username: generatedUsername,
       email,
       phone_number: formattedPhone,
       password: hashedPassword, 
@@ -201,6 +215,7 @@ export async function POST(request: NextRequest) {
       {
         message: 'Registration successful! You can now log in and proceed to activation.', 
         user_id: newUser._id,
+        username: generatedUsername,
         referral_id: newUserReferralId,
         requires_approval: false,
         requires_activation_payment: true,
