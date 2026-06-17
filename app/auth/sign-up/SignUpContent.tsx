@@ -8,7 +8,7 @@ import { formatPhoneNumber } from '@/app/lib/utils/phoneFormatter';
 export default function SignUpContent() {
   const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
-    username: '',
+    fullName: '',
     email: '',
     phone: '',
     password: '',
@@ -45,7 +45,7 @@ export default function SignUpContent() {
       setError('Passwords do not match.');
       return false;
     }
-    if (!formData.username || !formData.email || !formData.phone || !formData.password) {
+    if (!formData.fullName || !formData.email || !formData.phone || !formData.password) {
       setError('Please fill in all required fields.');
       return false;
     }
@@ -53,10 +53,14 @@ export default function SignUpContent() {
       setError('Password must be at least 6 characters long.');
       return false;
     }
-    // Username validation (alphanumeric, underscores, hyphens)
-    const usernameRegex = /^[a-zA-Z0-9_-]+$/;
-    if (!usernameRegex.test(formData.username)) {
-      setError('Username can only contain letters, numbers, underscores, and hyphens.');
+    // Full name validation (letters, spaces, hyphens, apostrophes)
+    const nameRegex = /^[a-zA-Z\s\-']+$/;
+    if (!nameRegex.test(formData.fullName)) {
+      setError('Name can only contain letters, spaces, hyphens, and apostrophes.');
+      return false;
+    }
+    if (formData.fullName.trim().length < 2) {
+      setError('Please enter a valid full name with at least 2 characters.');
       return false;
     }
     // Basic email validation
@@ -66,10 +70,7 @@ export default function SignUpContent() {
       return false;
     }
     // Phone validation (Kenyan format - accepts multiple formats)
-    // Accepts: 0712345678 (10 digits with 0), 712345678 (9 digits), 254712345678 (12 digits), or +254712345678
     const cleanPhone = formData.phone.replace(/[\s\-\+]/g, '');
-    
-    // Check if it matches any valid Kenyan phone format
     const isValidFormat = 
       /^0[0-9]{9}$/.test(cleanPhone) ||  // 0712345678 (10 digits starting with 0)
       /^[0-9]{9}$/.test(cleanPhone) ||   // 712345678 (9 digits)
@@ -102,7 +103,7 @@ export default function SignUpContent() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: formData.username,
+          fullName: formData.fullName,
           email: formData.email,
           phone: formattedPhone,
           password: formData.password,
@@ -130,13 +131,9 @@ export default function SignUpContent() {
       setRegistrationData(data);
       setEmailSent(data.email_sent);
       
-      if (data.email_sent) {
-        setSuccess('Registration successful! You can now log in and proceed to activation.');
-      } else {
-        setSuccess('Registration successful! You can now log in and proceed to activation.');
-      }
+      setSuccess('Registration successful! You can now log in and proceed to activation.');
 
-      console.log('Sign up successful! User ID:', data.user_id);
+      console.log('Sign up successful! User ID:', data.user_id, 'Generated username:', data.username);
 
     } catch (err: any) {
       console.error('Registration error:', err);
@@ -162,7 +159,7 @@ export default function SignUpContent() {
     setEmailSent(false);
     setRegistrationData(null);
     setFormData({
-      username: '',
+      fullName: '',
       email: '',
       phone: '',
       password: '',
@@ -199,7 +196,7 @@ export default function SignUpContent() {
               <div className="space-y-2 text-sm text-blue-700">
                 <div className="flex justify-between">
                   <span>Username:</span>
-                  <span className="font-medium">{formData.username}</span>
+                  <span className="font-medium">{registrationData.username || formData.fullName}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Email:</span>
@@ -270,17 +267,20 @@ export default function SignUpContent() {
           <form className="space-y-4" onSubmit={handleSignUp}>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Username
+                Full Name
               </label>
               <input
                 type="text"
-                name="username"
-                value={formData.username}
+                name="fullName"
+                value={formData.fullName}
                 onChange={handleChange}
-                placeholder="Choose your username"
+                placeholder="Enter your full name"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
               />
+              <p className="text-xs text-gray-500 mt-1">
+                We&apos;ll automatically create a unique username for you
+              </p>
             </div>
 
             <div>
