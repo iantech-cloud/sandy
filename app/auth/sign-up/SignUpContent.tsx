@@ -42,6 +42,19 @@ export default function SignUpContent() {
     setSuccess('');
   };
 
+  // Check if form is completely filled and all checkboxes are checked
+  const isFormComplete = () => {
+    const hasAllFields = formData.fullName.trim() && 
+                         formData.email.trim() && 
+                         formData.phone.trim() && 
+                         formData.password && 
+                         formData.confirmPassword;
+    const hasAllCheckboxes = agreeToTerms && confirmNameAccuracy;
+    const passwordsMatch = formData.password === formData.confirmPassword;
+    
+    return hasAllFields && hasAllCheckboxes && passwordsMatch && !isLoading;
+  };
+
   const validateForm = () => {
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.');
@@ -372,7 +385,7 @@ export default function SignUpContent() {
                 className="w-4 h-4 mt-1 text-indigo-600 rounded focus:ring-2 focus:ring-indigo-500 cursor-pointer"
               />
               <label htmlFor="agreeToTerms" className="text-sm text-gray-700 cursor-pointer leading-relaxed">
-                I certify that I am <span className="font-bold">18 years of age or older</span>, agree to the <span className="font-bold">User Agreement</span>, acknowledge the <span className="font-bold"><Link href="/privacy-policy" target="_blank" className="text-indigo-600 hover:text-indigo-700 underline">Privacy Policy</Link></span> and <span className="font-bold">no refund policy</span>.
+                I certify that I am <span className="font-bold">18 years of age or older</span>, agree to the <span className="font-bold">User Agreement</span>, acknowledge the <span className="font-bold"><Link href="/terms" target="_blank" className="text-indigo-600 hover:text-indigo-700 underline">Terms &amp; Conditions and Refund Policy</Link></span>.
               </label>
             </div>
 
@@ -393,13 +406,20 @@ export default function SignUpContent() {
               </label>
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Creating Account...' : 'Create Account'}
-            </button>
+            {/* Create Account Button - Only visible when form is complete */}
+            {isFormComplete() ? (
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Creating Account...' : 'Create Account'}
+              </button>
+            ) : (
+              <div className="w-full bg-gray-300 text-gray-500 py-3 rounded-lg font-semibold text-center cursor-not-allowed">
+                Please fill all fields and accept the terms
+              </div>
+            )}
           </form>
 
           <p className="mt-4 text-center text-sm text-gray-600">
