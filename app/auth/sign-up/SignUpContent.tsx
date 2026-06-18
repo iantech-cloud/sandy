@@ -35,8 +35,7 @@ export default function SignUpContent() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-    setError(''); 
-    setSuccess('');
+    setError('');
   };
 
   // Check if form is completely filled and all checkboxes are checked
