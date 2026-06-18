@@ -152,8 +152,10 @@ export default function SignUpContent() {
 
       console.log('Sign up successful! User ID:', data.user_id, 'Generated username:', data.username);
       
-      // Redirect to activate with phone pre-filled
-      router.push(`/auth/activate?phone=${encodeURIComponent(phoneForActivation)}`);
+      // Redirect to activate with phone pre-filled (without + prefix)
+      // Format: 254791406285 instead of +254791406285
+      const phoneForUrl = phoneForActivation.substring(1); // Remove the + prefix
+      router.push(`/auth/activate?phone=${encodeURIComponent(phoneForUrl)}`);
 
     } catch (err: any) {
       console.error('Registration error:', err);
