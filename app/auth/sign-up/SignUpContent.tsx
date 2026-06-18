@@ -21,6 +21,8 @@ export default function SignUpContent() {
   const [success, setSuccess] = useState('');
   const [emailSent, setEmailSent] = useState(false);
   const [registrationData, setRegistrationData] = useState<any>(null);
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [confirmNameAccuracy, setConfirmNameAccuracy] = useState(false);
   const router = useRouter();
 
   // Check for referral code in URL (silent — not displayed to user)
@@ -38,6 +40,19 @@ export default function SignUpContent() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError(''); 
     setSuccess('');
+  };
+
+  // Check if form is completely filled and all checkboxes are checked
+  const isFormComplete = () => {
+    const hasAllFields = formData.fullName.trim() && 
+                         formData.email.trim() && 
+                         formData.phone.trim() && 
+                         formData.password && 
+                         formData.confirmPassword;
+    const hasAllCheckboxes = agreeToTerms && confirmNameAccuracy;
+    const passwordsMatch = formData.password === formData.confirmPassword;
+    
+    return hasAllFields && hasAllCheckboxes && passwordsMatch && !isLoading;
   };
 
   const validateForm = () => {
@@ -78,6 +93,15 @@ export default function SignUpContent() {
     
     if (!isValidFormat) {
       setError('Please enter a valid Kenyan phone number (e.g., 0712345678, 712345678, or 254712345678).');
+      return false;
+    }
+    // Checkbox validations
+    if (!agreeToTerms) {
+      setError('You must agree to the terms and policies to create an account.');
+      return false;
+    }
+    if (!confirmNameAccuracy) {
+      setError('You must confirm that your name matches your government-issued identification.');
       return false;
     }
     return true;
@@ -158,6 +182,8 @@ export default function SignUpContent() {
     setSuccess('');
     setEmailSent(false);
     setRegistrationData(null);
+    setAgreeToTerms(false);
+    setConfirmNameAccuracy(false);
     setFormData({
       fullName: '',
       email: '',
@@ -346,13 +372,54 @@ export default function SignUpContent() {
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Creating Account...' : 'Create Account'}
-            </button>
+            {/* Terms and Conditions Checkbox */}
+            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <input
+                type="checkbox"
+                id="agreeToTerms"
+                checked={agreeToTerms}
+                onChange={(e) => {
+                  setAgreeToTerms(e.target.checked);
+                  setError('');
+                }}
+                className="w-4 h-4 mt-1 text-indigo-600 rounded focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              />
+              <label htmlFor="agreeToTerms" className="text-sm text-gray-700 cursor-pointer leading-relaxed">
+                I certify that I am <span className="font-bold">18 years of age or older</span>, agree to the <span className="font-bold">User Agreement</span>, acknowledge the <span className="font-bold"><Link href="/terms" target="_blank" className="text-indigo-600 hover:text-indigo-700 underline">Terms &amp; Conditions and Refund Policy</Link></span>.
+              </label>
+            </div>
+
+            {/* Name Accuracy Checkbox */}
+            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <input
+                type="checkbox"
+                id="confirmNameAccuracy"
+                checked={confirmNameAccuracy}
+                onChange={(e) => {
+                  setConfirmNameAccuracy(e.target.checked);
+                  setError('');
+                }}
+                className="w-4 h-4 mt-1 text-indigo-600 rounded focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              />
+              <label htmlFor="confirmNameAccuracy" className="text-sm text-gray-700 cursor-pointer leading-relaxed">
+                I acknowledge my name is correct and corresponds to the <span className="font-bold">government-issued identification</span>.
+              </label>
+            </div>
+
+            {/* Create Account Button - Only visible when form is complete */}
+            {isFormComplete() ? (
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Creating Account...' : 'Create Account'}
+              </button>
+            ) : (
+              <div className="w-full bg-gray-300 text-gray-500 py-3 rounded-lg font-semibold text-center cursor-not-allowed">
+                Please fill all fields and accept the terms
+              </div>
+            )}
           </form>
 
           <p className="mt-4 text-center text-sm text-gray-600">
