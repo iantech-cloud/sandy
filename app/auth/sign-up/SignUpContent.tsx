@@ -18,9 +18,6 @@ export default function SignUpContent() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [emailSent, setEmailSent] = useState(false);
-  const [registrationData, setRegistrationData] = useState<any>(null);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [confirmNameAccuracy, setConfirmNameAccuracy] = useState(false);
   const router = useRouter();
@@ -121,6 +118,9 @@ export default function SignUpContent() {
       // This handles: 0712345678, 712345678, 254712345678, +254712345678
       const formattedPhone = formatPhoneNumber(formData.phone);
 
+      // Store for later redirect
+      const phoneForActivation = formattedPhone;
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
@@ -151,13 +151,10 @@ export default function SignUpContent() {
         throw new Error(data.message || 'Registration failed');
       }
 
-      // Store registration data and show success message
-      setRegistrationData(data);
-      setEmailSent(data.email_sent);
-      
-      setSuccess('Registration successful! You can now log in and proceed to activation.');
-
       console.log('Sign up successful! User ID:', data.user_id, 'Generated username:', data.username);
+      
+      // Redirect to activate with phone pre-filled
+      router.push(`/auth/activate?phone=${encodeURIComponent(phoneForActivation)}`);
 
     } catch (err: any) {
       console.error('Registration error:', err);
@@ -174,100 +171,11 @@ export default function SignUpContent() {
     // The phone formatter utility will normalize it during validation
     setFormData({ ...formData, phone: value });
     setError('');
-    setSuccess('');
   };
 
-  // Reset form and show registration form again
-  const handleBackToSignUp = () => {
-    setSuccess('');
-    setEmailSent(false);
-    setRegistrationData(null);
-    setAgreeToTerms(false);
-    setConfirmNameAccuracy(false);
-    setFormData({
-      fullName: '',
-      email: '',
-      phone: '',
-      password: '',
-      confirmPassword: '',
-      referralId: '',
-    });
-  };
 
-  // Success Screen - Show after successful registration
-  if (success && registrationData) {
-    return (
-      <div className="min-h-screen bg-indigo-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 border border-indigo-100">
-          <div className="text-center mb-8">
-            <div className="text-2xl font-extrabold text-indigo-600 mb-4">
-              HH HustleHub Africa
-            </div>
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 mb-4">
-              <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-              </svg>
-            </div>
-            <h2 className="text-3xl font-extrabold text-gray-900">
-              Registration Successful!
-            </h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Welcome to HustleHub Africa
-            </p>
-          </div>
 
-          <div className="space-y-4">
-            <div className="rounded-xl bg-blue-50 border border-blue-200 p-4">
-              <h3 className="font-semibold text-blue-800 mb-2">Your Account Details:</h3>
-              <div className="space-y-2 text-sm text-blue-700">
-                <div className="flex justify-between">
-                  <span>Username:</span>
-                  <span className="font-medium">{registrationData.username || formData.fullName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Email:</span>
-                  <span className="font-medium">{formData.email}</span>
-                </div>
-              </div>
-            </div>
 
-            <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-4">
-              <h3 className="font-semibold text-indigo-800 mb-3">Next Steps:</h3>
-              <ol className="space-y-2 text-sm text-indigo-700">
-                <li className="flex items-start">
-                  <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">1</span>
-                  <span><strong>Log in</strong> - Use your credentials to access your account</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">2</span>
-                  <span><strong>Pay activation fee</strong> - KES 95 to activate your account</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="bg-indigo-100 text-indigo-800 rounded-full w-5 h-5 flex items-center justify-center text-xs mr-3 mt-0.5 flex-shrink-0">3</span>
-                  <span><strong>Start earning!</strong> - Access surveys and content creation</span>
-                </li>
-              </ol>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-3">
-            <button
-              onClick={() => router.push('/auth/login')}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-            >
-              Go to Login
-            </button>
-            <button
-              onClick={handleBackToSignUp}
-              className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
-            >
-              Back to Sign Up
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // Default sign up form
   return (

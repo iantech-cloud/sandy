@@ -17,6 +17,12 @@ export default function ActivateComponent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    // Pre-fill phone from URL if provided (coming from signup)
+    const phoneParam = searchParams.get('phone');
+    if (phoneParam) {
+      setPhoneNumber(phoneParam);
+    }
+
     const paymentStatus = searchParams.get('paymentStatus');
     const error = searchParams.get('error');
     
