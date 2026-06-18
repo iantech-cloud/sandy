@@ -287,7 +287,10 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
 
       // Activation check
       if (!user.isActivationPaid && !user.activation_paid_at) {
-        router.push('/auth/activate');
+        // Include phone number in URL (remove + prefix if present)
+        const phone = user.phone?.replace(/^\+/, '') || '';
+        const activateUrl = phone ? `/auth/activate?phone=${encodeURIComponent(phone)}` : '/auth/activate';
+        router.push(activateUrl);
         return;
       }
       // Approval / active check
