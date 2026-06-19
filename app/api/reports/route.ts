@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // --- NextAuth v5/Auth.js change: Import the 'auth' utility directly ---
 import { auth } from '@/auth'; // Assuming '@/auth' exports the Auth.js instance
 // --- Removed: import { getServerSession } from 'next-auth';
-// --- Removed: import { authOptions } from '@/auth';
+// --- Removed: 
 import { connectToDatabase, Profile, Transaction, Withdrawal } from '@/app/lib/models';
 
 export async function GET(request: NextRequest) {
