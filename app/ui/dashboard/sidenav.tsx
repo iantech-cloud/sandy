@@ -1,7 +1,7 @@
 // app/ui/dashboard/sidenav.tsx
 'use client';
 
-import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle, ClipboardList } from 'lucide-react';
+import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle, ClipboardList, BookOpen, Briefcase, MapPin, Zap, FileText, Gift, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -42,12 +42,24 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
 
   const links = [
     { path: '/dashboard', label: 'Dashboard', icon: BarChart },
-    { path: '/dashboard/wallet', label: 'Wallet & Pay', icon: Wallet },
-    { path: '/dashboard/surveys', label: 'Earn Surveys', icon: Award },
-    { path: '/dashboard/content', label: 'Tasks', icon: ClipboardList },
+    { path: '/dashboard/wallet', label: 'Wallet & Escrow', icon: Wallet },
+    
+    // Earning Opportunities
+    { path: '/dashboard/earnings-overview', label: '💰 All Earning Ways', icon: TrendingUp },
+    { path: '/dashboard/freelance', label: 'Freelance Jobs', icon: Briefcase },
+    { path: '/dashboard/tutoring', label: 'Online Tutoring', icon: BookOpen },
+    { path: '/dashboard/digital-products', label: 'Digital Products', icon: FileText },
+    { path: '/dashboard/ai-tasks', label: 'AI Tasks', icon: Zap },
+    { path: '/dashboard/local-gigs', label: 'Local Gigs', icon: MapPin },
+    { path: '/dashboard/surveys', label: 'Surveys', icon: Award },
+    { path: '/dashboard/content', label: 'Content Tasks', icon: ClipboardList },
     { path: '/dashboard/chat-foreigners', label: 'Chat Foreigners', icon: MessageCircle },
-    { path: '/dashboard/referrals', label: 'Referrals', icon: Users },
+    
+    // Monetization
     { path: '/dashboard/soko', label: 'Affiliate Marketing', icon: ShoppingBag },
+    { path: '/dashboard/referrals', label: 'Referral Program', icon: Gift },
+    
+    // Account
     { path: '/dashboard/profile', label: 'Profile', icon: UserIcon },
     { path: '/dashboard/support', label: 'Help & Support', icon: HelpCircle },
     { path: '/dashboard/settings', label: 'Settings', icon: Settings },

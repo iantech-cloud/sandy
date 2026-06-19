@@ -5,6 +5,57 @@ const getModel = (name: string, schema: Schema) => {
 };
 
 // ============================================================================
+// USER WALLET & ESCROW MODEL
+// ============================================================================
+
+const UserWalletSchema = new Schema({
+  user_id: { type: String, ref: 'Profile', required: true, unique: true, index: true },
+  
+  // Available balance (can withdraw anytime)
+  available_balance_cents: { type: Number, default: 0, index: true },
+  
+  // Locked in escrow (for job/service disputes)
+  escrow_balance_cents: { type: Number, default: 0 },
+  
+  // Pending earnings (from uncompleted tasks)
+  pending_balance_cents: { type: Number, default: 0 },
+  
+  // Lifetime statistics
+  total_earned_cents: { type: Number, default: 0 },
+  total_withdrawn_cents: { type: Number, default: 0 },
+  total_refunded_cents: { type: Number, default: 0 },
+  
+  // Breakdown by earning type
+  freelance_earnings_cents: { type: Number, default: 0 },
+  tutoring_earnings_cents: { type: Number, default: 0 },
+  digital_products_earnings_cents: { type: Number, default: 0 },
+  ai_tasks_earnings_cents: { type: Number, default: 0 },
+  local_gigs_earnings_cents: { type: Number, default: 0 },
+  affiliate_earnings_cents: { type: Number, default: 0 },
+  referral_bonus_cents: { type: Number, default: 0 },
+  
+  // Withdrawal tracking
+  last_withdrawal_at: { type: Date },
+  last_withdrawal_amount_cents: { type: Number },
+  pending_withdrawal_cents: { type: Number, default: 0 },
+  
+  // Coop Bank account (for payouts)
+  coop_bank_phone: { type: String },
+  coop_bank_account_verified: { type: Boolean, default: false },
+  
+  // Account status
+  wallet_frozen: { type: Boolean, default: false },
+  freeze_reason: { type: String },
+  
+  created_at: { type: Date, default: Date.now, index: true },
+  updated_at: { type: Date, default: Date.now },
+}, {
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
+});
+
+export const UserWallet = getModel('UserWallet', UserWalletSchema);
+
+// ============================================================================
 // 1. FREELANCE MARKETPLACE MODELS
 // ============================================================================
 
@@ -27,6 +78,14 @@ const FreelanceJobSchema = new Schema({
   
   commission_cents: { type: Number, default: 0 }, // HustleHub commission (15% of budget)
   freelancer_earnings_cents: { type: Number, default: 0 },
+  
+  // Escrow Management
+  escrow_amount_cents: { type: Number, default: 0 }, // Amount held during job
+  escrow_status: { type: String, enum: ['none', 'held', 'released', 'refunded'], default: 'none' },
+  escrow_release_date: { type: Date }, // When escrow is released
+  escrow_dispute: { type: Boolean, default: false },
+  dispute_reason: { type: String },
+  dispute_resolved_at: { type: Date },
   
   rating: { type: Number, min: 1, max: 5 },
   review: { type: String },
