@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { formatPhoneNumber } from '@/app/lib/utils/phoneFormatter';
 
 export default function SignUpContent() {
@@ -151,6 +152,23 @@ export default function SignUpContent() {
       }
 
       console.log('Sign up successful! User ID:', data.user_id, 'Generated username:', data.username);
+      
+      // Auto sign-in the user after successful registration
+      console.log('Attempting auto sign-in...');
+      const signInResult = await signIn('credentials', {
+        email: formData.email,
+        password: formData.password,
+        redirect: false, // Don't redirect yet, we'll do it manually
+      });
+      
+      if (!signInResult?.ok) {
+        console.error('Auto sign-in failed:', signInResult?.error);
+        // If auto sign-in fails, still redirect to login
+        router.push('/auth/login');
+        return;
+      }
+      
+      console.log('Auto sign-in successful!');
       
       // Redirect to activate with phone pre-filled (without + prefix)
       // Format: 254791406285 instead of +254791406285
