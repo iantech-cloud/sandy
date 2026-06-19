@@ -4,7 +4,7 @@ import { Profile, MpesaChangeRequest, AdminAuditLog, VerificationToken } from '@
 // --- NextAuth v5/Auth.js change: Import the 'auth' utility directly ---
 import { auth } from '@/auth'; // Assuming '@/auth' exports the Auth.js instance
 // --- Removed: import { getServerSession } from 'next-auth';
-// --- Removed: import { authOptions } from '@/auth';
+// --- Removed: 
 import { sendVerificationCodeEmail } from '@/app/actions/email';
 import speakeasy from 'speakeasy';
 import { randomInt } from 'crypto';

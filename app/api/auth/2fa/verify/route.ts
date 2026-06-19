@@ -5,7 +5,7 @@ import { Profile } from '@/app/lib/models/Profile';
 // --- NextAuth v5/Auth.js change: Import the 'auth' utility directly ---
 import { auth } from '@/auth'; // Assuming '@/auth' exports the Auth.js instance
 // --- Removed: import { getServerSession } from 'next-auth';
-// --- Removed: import { authOptions } from '@/auth';
+// --- Removed: 
 
 /**
  * POST - Verify 2FA token during initial setup (when enabling 2FA)

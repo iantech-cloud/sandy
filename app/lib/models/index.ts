@@ -48,5 +48,30 @@ export async function connectToDatabase() {
 // Import and export models
 import { Profile } from './Profile';
 import { MpesaChangeRequest } from './MpesaChangeRequest';
+import { 
+  FreelanceJob,
+  PremiumSubscription,
+  DigitalProduct,
+  TutoringSession,
+  AITask,
+  AITaskSubmission,
+  LocalGig,
+  EmployerAccount,
+  CoopBankPayment,
+  TransactionLedger
+} from './RevenueStreams';
 
-export { Profile, MpesaChangeRequest };
+export { 
+  Profile, 
+  MpesaChangeRequest,
+  FreelanceJob,
+  PremiumSubscription,
+  DigitalProduct,
+  TutoringSession,
+  AITask,
+  AITaskSubmission,
+  LocalGig,
+  EmployerAccount,
+  CoopBankPayment,
+  TransactionLedger
+};
