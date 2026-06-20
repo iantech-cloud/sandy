@@ -14,10 +14,9 @@ async function findProfileByEmail(email: string) {
 
 interface SurveyWalletData {
   totalEarnings: number;
-  availableBalance: number;
   surveysCompleted: number;
   lastSurveyDate: Date | null;
-  canWithdraw: boolean;
+  nextAvailableDate?: string;
 }
 
 interface SurveyTransaction {
@@ -74,14 +73,25 @@ export async function getSurveyWallet(): Promise<{
       ? surveyTransactions[0].created_at 
       : null;
 
+    // Calculate next Tuesday
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const daysUntilTuesday = dayOfWeek === 2 ? 0 : (9 - dayOfWeek) % 7;
+    const nextTuesday = new Date(today);
+    nextTuesday.setDate(nextTuesday.getDate() + daysUntilTuesday);
+    const nextAvailableDate = nextTuesday.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+
     return {
       success: true,
       data: {
         totalEarnings: totalEarnings / 100, // Convert cents to KES
-        availableBalance: (user.balance_cents || 0) / 100,
         surveysCompleted,
         lastSurveyDate,
-        canWithdraw: (user.balance_cents || 0) >= 20000, // Min KES 200
+        nextAvailableDate,
       },
     };
   } catch (error: any) {
