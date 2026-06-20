@@ -898,8 +898,7 @@ export async function generateAISurvey(
       return { success: false, message: "Admin access required" }
     }
 
-    const prompt = `
-You are a professional market research survey creator. Create a survey in valid JSON format with the following specifications:
+    const prompt = `You are a professional market research survey creator. Create a survey in valid JSON format with the following specifications:
 - Topics: ${topics.join(", ")}
 - Category: ${category}
 - Number of questions: ${questionCount}
@@ -923,7 +922,12 @@ Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
 Ensure correct_answer_index is 0, 1, 2, or 3 for each question.`
 
     try {
-      const response = await getLLMResponse(prompt)
+      const response = await getLLMResponse([
+        {
+          role: "user",
+          content: prompt
+        }
+      ])
       
       if (!response) {
         return { success: false, message: "Failed to generate survey content from AI." }
