@@ -1,12 +1,43 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { FileText, Plus, ShoppingCart, TrendingUp } from 'lucide-react';
 
+interface DigitalProductsStats {
+  productsUploaded: number;
+  totalSales: number;
+  earnings: number;
+}
+
 export default function DigitalProductsPage() {
-  const stats = [
-    { label: 'Products Uploaded', value: '5', icon: ShoppingCart },
-    { label: 'Total Sales', value: '127', icon: TrendingUp },
-    { label: 'Earnings', value: 'KES 18,500', icon: FileText },
+  const [stats, setStats] = useState<DigitalProductsStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const response = await fetch('/api/marketplace/digital-products');
+        if (!response.ok) throw new Error('Failed to load stats');
+        const data = await response.json();
+        setStats({
+          productsUploaded: data.data?.productsUploaded || 0,
+          totalSales: data.data?.totalSales || 0,
+          earnings: data.data?.earnings || 0,
+        });
+      } catch (error) {
+        console.error('[v0] Failed to load digital products stats:', error);
+        setStats({ productsUploaded: 0, totalSales: 0, earnings: 0 });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStats();
+  }, []);
+
+  const displayStats = [
+    { label: 'Products Uploaded', value: loading ? '...' : stats?.productsUploaded.toString() || '0', icon: ShoppingCart },
+    { label: 'Total Sales', value: loading ? '...' : stats?.totalSales.toString() || '0', icon: TrendingUp },
+    { label: 'Earnings', value: loading ? '...' : `KES ${(stats?.earnings || 0).toLocaleString()}`, icon: FileText },
   ];
 
   return (
@@ -24,7 +55,7 @@ export default function DigitalProductsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {stats.map((stat, idx) => {
+        {displayStats.map((stat, idx) => {
           const Icon = stat.icon as any;
           return (
             <div key={idx} className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">

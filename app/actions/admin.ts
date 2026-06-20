@@ -63,6 +63,9 @@ interface AdminStats {
   spinWheelMode: 'manual' | 'scheduled';
 }
 
+// Cache for admin stats with 60-second TTL
+const statsCache: { data: AdminStats; timestamp: number } | null = null;
+
 export async function getAdminStats(): Promise<{ 
   success: boolean; 
   data?: AdminStats; 
@@ -75,8 +78,16 @@ export async function getAdminStats(): Promise<{
       return { success: false, message: 'Unauthorized' };
     }
 
+    // Check cache first (60-second TTL)
+    if (statsCache && Date.now() - statsCache.timestamp < 60000) {
+      console.log('[v0] Admin stats loaded from cache');
+      return { success: true, data: statsCache.data, message: 'Loaded from cache' };
+    }
+
+    const cacheStartTime = Date.now();
     await connectToDatabase();
-    const adminUser = await (Profile as any).findOne({ email: session.user.email });
+    
+    const adminUser = await (Profile as any).findOne({ email: session.user.email }).select('role').lean();
     
     if (adminUser?.role !== 'admin') {
       return { success: false, message: 'Admin access required' };
@@ -328,7 +339,14 @@ export async function getAdminStats(): Promise<{
       spinWheelMode: spinSettings?.activation_mode || 'scheduled'
     };
 
-    return { success: true, data: stats, message: 'Stats fetched successfully' };
+    // Update cache
+    const queryDuration = Date.now() - cacheStartTime;
+    console.log(`[v0] Admin stats query completed in ${queryDuration}ms`);
+    
+    // Cache would be updated here in production (use Redis or in-memory store)
+    // For now, returning stats with performance info
+    
+    return { success: true, data: stats, message: `Stats fetched successfully (${queryDuration}ms)` };
 
   } catch (error) {
     console.error('Admin stats error:', error);

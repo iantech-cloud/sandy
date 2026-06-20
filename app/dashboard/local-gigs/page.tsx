@@ -1,12 +1,43 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { MapPin, Plus, MapIcon, DollarSign } from 'lucide-react';
 
+interface LocalGigsStats {
+  gigsCompleted: number;
+  activeListings: number;
+  totalEarnings: number;
+}
+
 export default function LocalGigsPage() {
-  const stats = [
-    { label: 'Gigs Completed', value: '48', icon: MapIcon },
-    { label: 'Active Listings', value: '7', icon: MapPin },
-    { label: 'Total Earnings', value: 'KES 52,300', icon: DollarSign },
+  const [stats, setStats] = useState<LocalGigsStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const response = await fetch('/api/marketplace/local-gigs');
+        if (!response.ok) throw new Error('Failed to load stats');
+        const data = await response.json();
+        setStats({
+          gigsCompleted: data.data?.gigsCompleted || 0,
+          activeListings: data.data?.activeListings || 0,
+          totalEarnings: data.data?.totalEarnings || 0,
+        });
+      } catch (error) {
+        console.error('[v0] Failed to load local gigs stats:', error);
+        setStats({ gigsCompleted: 0, activeListings: 0, totalEarnings: 0 });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStats();
+  }, []);
+
+  const displayStats = [
+    { label: 'Gigs Completed', value: loading ? '...' : stats?.gigsCompleted.toString() || '0', icon: MapIcon },
+    { label: 'Active Listings', value: loading ? '...' : stats?.activeListings.toString() || '0', icon: MapPin },
+    { label: 'Total Earnings', value: loading ? '...' : `KES ${(stats?.totalEarnings || 0).toLocaleString()}`, icon: DollarSign },
   ];
 
   return (
@@ -24,7 +55,7 @@ export default function LocalGigsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {stats.map((stat, idx) => {
+        {displayStats.map((stat, idx) => {
           const Icon = stat.icon as any;
           return (
             <div key={idx} className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">

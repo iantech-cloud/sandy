@@ -1,13 +1,44 @@
 'use client';
 
-import { Briefcase, Plus, TrendingUp, Users } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Briefcase, Plus, TrendingUp, Users, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
+interface FreelanceStats {
+  activeJobs: number;
+  totalEarned: number;
+  completionRate: number;
+}
+
 export default function FreelancePage() {
-  const stats = [
-    { label: 'Active Jobs', value: '12', icon: Briefcase },
-    { label: 'Total Earned', value: 'KES 45,000', icon: TrendingUp },
-    { label: 'Completion Rate', value: '94%', icon: Users },
+  const [stats, setStats] = useState<FreelanceStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const response = await fetch('/api/marketplace/freelance');
+        if (!response.ok) throw new Error('Failed to load stats');
+        const data = await response.json();
+        setStats({
+          activeJobs: data.data?.activeJobs || 0,
+          totalEarned: data.data?.totalEarned || 0,
+          completionRate: data.data?.completionRate || 0,
+        });
+      } catch (error) {
+        console.error('[v0] Failed to load freelance stats:', error);
+        setStats({ activeJobs: 0, totalEarned: 0, completionRate: 0 });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStats();
+  }, []);
+
+  const displayStats = [
+    { label: 'Active Jobs', value: loading ? '...' : stats?.activeJobs.toString() || '0', icon: Briefcase },
+    { label: 'Total Earned', value: loading ? '...' : `KES ${(stats?.totalEarned || 0).toLocaleString()}`, icon: TrendingUp },
+    { label: 'Completion Rate', value: loading ? '...' : `${stats?.completionRate || 0}%`, icon: Users },
   ];
 
   return (
@@ -25,7 +56,7 @@ export default function FreelancePage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {stats.map((stat, idx) => {
+        {displayStats.map((stat, idx) => {
           const Icon = stat.icon as any;
           return (
             <div key={idx} className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
