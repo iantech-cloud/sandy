@@ -17,6 +17,21 @@ import { Types, Query } from "mongoose"
 // Import NVIDIA AI service
 import { getLLMResponse } from "@/app/lib/services/nvidia-ai"
 
+// --- Helper Functions ---
+function isTuesday(): boolean {
+  const today = new Date()
+  return today.getDay() === 2 // 2 = Tuesday
+}
+
+function getNextTuesdayDate(): Date {
+  const today = new Date()
+  const dayOfWeek = today.getDay()
+  const daysUntilTuesday = dayOfWeek === 2 ? 0 : (9 - dayOfWeek) % 7
+  const nextTuesday = new Date(today)
+  nextTuesday.setDate(nextTuesday.getDate() + daysUntilTuesday)
+  return nextTuesday
+}
+
 // --- Core Data Interfaces (Lean results) ---
 export interface SurveyQuestion {
   question_text: string
@@ -1486,6 +1501,15 @@ export async function startSurvey(surveyId: string): Promise<{
 
     if (!survey || survey.status !== "active" || new Date(survey.expires_at) <= new Date()) {
       return { success: false, message: "Survey not available or expired." }
+    }
+
+    // Check if today is Tuesday (surveys only accessible on Tuesdays)
+    if (!isTuesday()) {
+      const nextTuesday = getNextTuesdayDate()
+      return { 
+        success: false, 
+        message: `Surveys are only available on Tuesdays. Next available: ${nextTuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}` 
+      }
     }
 
     // FIXED: All users can access active surveys without assignment restriction
