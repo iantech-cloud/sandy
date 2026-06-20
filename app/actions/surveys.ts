@@ -1426,6 +1426,15 @@ export async function getAvailableSurveys(): Promise<{
     const userId = user._id
     const now = new Date()
 
+    // Check if today is Tuesday (surveys only available on Tuesdays)
+    if (!isTuesday()) {
+      const nextTuesday = getNextTuesdayDate()
+      return {
+        success: false,
+        message: `Surveys are only available on Tuesdays. Next available: ${nextTuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`
+      }
+    }
+
     // FIXED: Surveys are accessible to ALL users by default (no activation restriction)
 
     // Get ALL active surveys that haven't expired
