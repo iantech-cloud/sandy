@@ -63,8 +63,9 @@ interface AdminStats {
   spinWheelMode: 'manual' | 'scheduled';
 }
 
-// Cache for admin stats with 60-second TTL
-const statsCache: { data: AdminStats; timestamp: number } | null = null;
+// Simple in-memory cache
+const statsCache: Map<string, { data: any; timestamp: number }> = new Map();
+const CACHE_TTL = 60000; // 60 seconds
 
 export async function getAdminStats(): Promise<{ 
   success: boolean; 
@@ -78,13 +79,15 @@ export async function getAdminStats(): Promise<{
       return { success: false, message: 'Unauthorized' };
     }
 
-    // Check cache first (60-second TTL)
-    if (statsCache && Date.now() - statsCache.timestamp < 60000) {
+    // Check cache first
+    const cacheKey = `admin-stats-${session.user.email}`;
+    const cached = statsCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       console.log('[v0] Admin stats loaded from cache');
-      return { success: true, data: statsCache.data, message: 'Loaded from cache' };
+      return { success: true, data: cached.data, message: 'Loaded from cache' };
     }
 
-    const cacheStartTime = Date.now();
+    const startTime = Date.now();
     await connectToDatabase();
     
     const adminUser = await (Profile as any).findOne({ email: session.user.email }).select('role').lean();
@@ -108,7 +111,7 @@ export async function getAdminStats(): Promise<{
       });
     }
 
-    // Execute all queries in parallel
+    // FAST QUERIES ONLY - Load core metrics for quick initial render
     const [
       totalUsers,
       pendingApprovals,
@@ -119,21 +122,10 @@ export async function getAdminStats(): Promise<{
       spinSettings,
       userTransactionCount,
       companyTransactionCount,
-      
-      // Company Revenue Queries (completed transactions with target_type: 'company')
-      companyRevenueTransactions,
-      
-      // Company Expense Queries (completed transactions from company to users)
-      companyExpenseTransactions,
-      
-      // User Balance Aggregation (total liability)
       userBalancesAgg,
-      
-      // Pending Withdrawals Amount
       pendingWithdrawalsAgg
-      
     ] = await Promise.all([
-      // User counts
+      // Fast: simple counts
       (Profile as any).countDocuments(),
       (Profile as any).countDocuments({ approval_status: 'pending' }),
       (Profile as any).countDocuments({ 
@@ -148,38 +140,16 @@ export async function getAdminStats(): Promise<{
       (Referral as any).countDocuments(),
       (SpinSettings as any).findOne({}),
       
-      // Transaction counts by target type
+      // Fast: transaction counts with limits
       (Transaction as any).countDocuments({ 
         $or: [
           { target_type: 'user' },
-          { target_type: { $exists: false } } // Old transactions without target_type
+          { target_type: { $exists: false } }
         ]
       }),
       (Transaction as any).countDocuments({ target_type: 'company' }),
       
-      // Company Revenue: All completed transactions TO company
-      (Transaction as any).find({
-        target_type: 'company',
-        status: 'completed'
-      }).lean(),
-      
-      // Company Expenses: All completed payout transactions FROM company TO users
-      (Transaction as any).find({
-        target_type: 'user',
-        status: 'completed',
-        type: { 
-          $in: [
-            'BONUS', 
-            'TASK_PAYMENT', 
-            'SPIN_WIN', 
-            'REFERRAL', 
-            'SURVEY',
-            'WITHDRAWAL'
-          ] 
-        }
-      }).lean(),
-      
-      // Total user balances (company liability)
+      // Fast: aggregate balances
       (Profile as any).aggregate([
         { 
           $group: { 
@@ -189,7 +159,7 @@ export async function getAdminStats(): Promise<{
         }
       ]),
       
-      // Pending withdrawals amount
+      // Fast: pending withdrawals aggregate
       (Withdrawal as any).aggregate([
         { 
           $match: { status: 'pending' } 
@@ -203,94 +173,7 @@ export async function getAdminStats(): Promise<{
       ])
     ]);
 
-    // Calculate Revenue Breakdown
-    let activationFees = 0;
-    let unclaimedReferrals = 0;
-    let spinCosts = 0;
-    let contentPayments = 0;
-    let otherRevenue = 0;
-
-    for (const txn of companyRevenueTransactions) {
-      const amount = txn.amount_cents;
-      
-      switch (txn.type) {
-        case 'ACTIVATION_FEE':
-        case 'ACCOUNT_ACTIVATION':
-        case 'COMPANY_REVENUE':
-          // Check metadata to determine subcategory
-          if (txn.metadata?.source === 'unclaimed_referral') {
-            unclaimedReferrals += amount;
-          } else if (txn.metadata?.source === 'activation') {
-            activationFees += amount;
-          } else {
-            activationFees += amount; // Default to activation fees
-          }
-          break;
-        
-        case 'SPIN_COST':
-          spinCosts += amount;
-          break;
-        
-        default:
-          // Check description for content-related revenue
-          if (txn.description?.toLowerCase().includes('content')) {
-            contentPayments += amount;
-          } else {
-            otherRevenue += amount;
-          }
-      }
-    }
-
-    const totalCompanyRevenue = activationFees + unclaimedReferrals + spinCosts + contentPayments + otherRevenue;
-
-    // Calculate Expense Breakdown
-    let userPayouts = 0;
-    let bonuses = 0;
-    let referralCommissions = 0;
-    let spinPrizes = 0;
-    let taskPayments = 0;
-    let surveyPayments = 0;
-    let otherExpenses = 0;
-
-    for (const txn of companyExpenseTransactions) {
-      const amount = txn.amount_cents;
-      
-      switch (txn.type) {
-        case 'WITHDRAWAL':
-          userPayouts += amount;
-          break;
-        case 'BONUS':
-          bonuses += amount;
-          break;
-        case 'REFERRAL':
-          referralCommissions += amount;
-          break;
-        case 'SPIN_WIN':
-        case 'SPIN_PRIZE':
-          spinPrizes += amount;
-          break;
-        case 'TASK_PAYMENT':
-          taskPayments += amount;
-          break;
-        case 'SURVEY':
-          surveyPayments += amount;
-          break;
-        default:
-          otherExpenses += amount;
-      }
-    }
-
-    const totalCompanyExpenses = userPayouts + bonuses + referralCommissions + 
-                                  spinPrizes + taskPayments + surveyPayments + otherExpenses;
-
-    // Calculate net profit
-    const netProfit = totalCompanyRevenue - totalCompanyExpenses;
-
-    // Get total user balances and pending withdrawals
-    const totalUserBalances = userBalancesAgg[0]?.total || 0;
-    const pendingWithdrawalsAmount = pendingWithdrawalsAgg[0]?.total || 0;
-
-    // Construct comprehensive stats
+    // Default revenue/expense breakdown (will be fetched separately)
     const stats: AdminStats = {
       // User Metrics
       totalUsers,
@@ -304,33 +187,33 @@ export async function getAdminStats(): Promise<{
       
       // Financial Metrics - COMPANY
       companyWalletBalance: company.wallet_balance_cents,
-      totalCompanyRevenue: totalCompanyRevenue,
-      totalCompanyExpenses: totalCompanyExpenses,
-      netProfit: netProfit,
+      totalCompanyRevenue: 0, // Will be fetched separately
+      totalCompanyExpenses: 0, // Will be fetched separately
+      netProfit: 0, // Will be fetched separately
       
       // Financial Metrics - LIABILITIES
-      totalUserBalances: totalUserBalances,
-      pendingWithdrawalsAmount: pendingWithdrawalsAmount,
+      totalUserBalances: userBalancesAgg[0]?.total || 0,
+      pendingWithdrawalsAmount: pendingWithdrawalsAgg[0]?.total || 0,
       pendingWithdrawalsCount: pendingWithdrawals,
       
       // Revenue Breakdown
       revenueBreakdown: {
-        activationFees,
-        unclaimedReferrals,
-        spinCosts,
-        contentPayments,
-        otherRevenue
+        activationFees: 0,
+        unclaimedReferrals: 0,
+        spinCosts: 0,
+        contentPayments: 0,
+        otherRevenue: 0
       },
       
       // Expense Breakdown
       expenseBreakdown: {
-        userPayouts,
-        bonuses,
-        referralCommissions,
-        spinPrizes,
-        taskPayments,
-        surveyPayments,
-        otherExpenses
+        userPayouts: 0,
+        bonuses: 0,
+        referralCommissions: 0,
+        spinPrizes: 0,
+        taskPayments: 0,
+        surveyPayments: 0,
+        otherExpenses: 0
       },
       
       // Other Metrics
@@ -339,14 +222,13 @@ export async function getAdminStats(): Promise<{
       spinWheelMode: spinSettings?.activation_mode || 'scheduled'
     };
 
-    // Update cache
-    const queryDuration = Date.now() - cacheStartTime;
-    console.log(`[v0] Admin stats query completed in ${queryDuration}ms`);
+    const queryDuration = Date.now() - startTime;
+    console.log(`[v0] Admin quick stats loaded in ${queryDuration}ms`);
     
-    // Cache would be updated here in production (use Redis or in-memory store)
-    // For now, returning stats with performance info
+    // Cache the stats
+    statsCache.set(cacheKey, { data: stats, timestamp: Date.now() });
     
-    return { success: true, data: stats, message: `Stats fetched successfully (${queryDuration}ms)` };
+    return { success: true, data: stats, message: `Stats fetched in ${queryDuration}ms` };
 
   } catch (error) {
     console.error('Admin stats error:', error);

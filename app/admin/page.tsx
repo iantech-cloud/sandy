@@ -68,11 +68,9 @@ interface AdminStats {
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null);
-  const [userStats, setUserStats] = useState<any>(null);
-  const [financialStats, setFinancialStats] = useState<any>(null);
+  const [breakdownStats, setBreakdownStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [userLoading, setUserLoading] = useState(true);
-  const [financialLoading, setFinancialLoading] = useState(true);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [spinWheelLoading, setSpinWheelLoading] = useState(false);
   const [spinStatus, setSpinStatus] = useState<{ active: boolean; mode: string }>({ 
@@ -87,6 +85,7 @@ export default function AdminDashboard() {
   const loadDashboardProgressively = async () => {
     try {
       setLoading(true);
+      // Load quick stats first
       const statsResult = await getAdminStats();
       
       if (!statsResult.success) {
@@ -111,41 +110,32 @@ export default function AdminDashboard() {
       setLoading(false);
     }
 
-    // Load user stats separately
-    loadUserStats();
-    // Load financial stats separately  
-    loadFinancialStats();
+    // Load breakdown stats separately in background
+    loadBreakdownStats();
   };
 
-  const loadUserStats = async () => {
+  const loadBreakdownStats = async () => {
     try {
-      setUserLoading(true);
-      const response = await fetch('/api/admin/stats/users');
-      if (!response.ok) throw new Error('Failed to load user stats');
+      setBreakdownLoading(true);
+      const response = await fetch('/api/admin/stats/breakdown');
+      if (!response.ok) throw new Error('Failed to load breakdown stats');
       const data = await response.json();
       if (data.success) {
-        setUserStats(data.data);
+        setBreakdownStats(data.data);
+        // Update stats with breakdown data
+        setStats(prev => prev ? {
+          ...prev,
+          totalCompanyRevenue: data.data.totalCompanyRevenue,
+          totalCompanyExpenses: data.data.totalCompanyExpenses,
+          netProfit: data.data.netProfit,
+          revenueBreakdown: data.data.revenueBreakdown,
+          expenseBreakdown: data.data.expenseBreakdown
+        } : null);
       }
     } catch (err) {
-      console.error('[v0] Error loading user stats:', err);
+      console.error('[v0] Error loading breakdown stats:', err);
     } finally {
-      setUserLoading(false);
-    }
-  };
-
-  const loadFinancialStats = async () => {
-    try {
-      setFinancialLoading(true);
-      const response = await fetch('/api/admin/stats/financial');
-      if (!response.ok) throw new Error('Failed to load financial stats');
-      const data = await response.json();
-      if (data.success) {
-        setFinancialStats(data.data);
-      }
-    } catch (err) {
-      console.error('[v0] Error loading financial stats:', err);
-    } finally {
-      setFinancialLoading(false);
+      setBreakdownLoading(false);
     }
   };
 
@@ -159,7 +149,7 @@ export default function AdminDashboard() {
           active: activate,
           mode: activate ? 'manual' : 'scheduled'
         });
-        await loadStats();
+        await loadDashboardProgressively();
       } else {
         setError(result.message);
       }
@@ -195,7 +185,7 @@ export default function AdminDashboard() {
           <p className="text-red-700">{error}</p>
         </div>
         <button 
-          onClick={loadStats}
+          onClick={loadDashboardProgressively}
           className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
         >
           Retry
@@ -221,7 +211,7 @@ export default function AdminDashboard() {
           <p className="text-gray-600 mt-1">Overview of platform operations and finances</p>
         </div>
         <button
-          onClick={loadStats}
+          onClick={loadDashboardProgressively}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
         >
           Refresh Data
@@ -230,68 +220,75 @@ export default function AdminDashboard() {
 
       {/* Financial Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {financialLoading ? (
-          <>
-            <CardSkeleton />
-            <CardSkeleton />
-            <CardSkeleton />
-            <CardSkeleton />
-          </>
-        ) : (
-          <>
-            {/* Company Wallet Balance */}
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                <Wallet size={32} />
-                <span className="text-blue-100 text-sm font-medium">BALANCE</span>
-              </div>
-              <div>
-                <p className="text-3xl font-bold">{formatCurrency(financialStats?.companyWalletBalance || stats.companyWalletBalance)}</p>
-                <p className="text-blue-100 text-sm mt-1">Company Wallet</p>
-              </div>
-            </div>
+        {/* Company Wallet Balance */}
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <Wallet size={32} />
+            <span className="text-blue-100 text-sm font-medium">BALANCE</span>
+          </div>
+          <div>
+            <p className="text-3xl font-bold">{formatCurrency(stats?.companyWalletBalance || 0)}</p>
+            <p className="text-blue-100 text-sm mt-1">Company Wallet</p>
+          </div>
+        </div>
 
-            {/* Total Revenue */}
-            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                <TrendingUp size={32} />
-                <span className="text-green-100 text-sm font-medium">REVENUE</span>
-              </div>
-              <div>
-                <p className="text-3xl font-bold">{formatCurrency(financialStats?.totalCompanyRevenue || stats.totalCompanyRevenue)}</p>
-                <p className="text-green-100 text-sm mt-1">Total Income</p>
-              </div>
-            </div>
+        {/* Total Revenue */}
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <TrendingUp size={32} />
+            <span className="text-green-100 text-sm font-medium">REVENUE</span>
+          </div>
+          <div>
+            <p className="text-3xl font-bold">
+              {breakdownLoading ? (
+                <span className="text-lg">Loading...</span>
+              ) : (
+                formatCurrency(stats?.totalCompanyRevenue || 0)
+              )}
+            </p>
+            <p className="text-green-100 text-sm mt-1">Total Income</p>
+          </div>
+        </div>
 
-            {/* Total Expenses */}
-            <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-6 text-white shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                <TrendingDown size={32} />
-                <span className="text-orange-100 text-sm font-medium">EXPENSES</span>
-              </div>
-              <div>
-                <p className="text-3xl font-bold">{formatCurrency(financialStats?.totalCompanyExpenses || stats.totalCompanyExpenses)}</p>
-                <p className="text-orange-100 text-sm mt-1">Total Payouts</p>
-              </div>
-            </div>
+        {/* Total Expenses */}
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <TrendingDown size={32} />
+            <span className="text-orange-100 text-sm font-medium">EXPENSES</span>
+          </div>
+          <div>
+            <p className="text-3xl font-bold">
+              {breakdownLoading ? (
+                <span className="text-lg">Loading...</span>
+              ) : (
+                formatCurrency(stats?.totalCompanyExpenses || 0)
+              )}
+            </p>
+            <p className="text-orange-100 text-sm mt-1">Total Payouts</p>
+          </div>
+        </div>
 
-            {/* Net Profit */}
-            <div className={`bg-gradient-to-br ${isProfitable ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'} rounded-lg p-6 text-white shadow-lg`}>
-              <div className="flex items-center justify-between mb-4">
-                <DollarSign size={32} />
-                <span className={`${isProfitable ? 'text-emerald-100' : 'text-red-100'} text-sm font-medium`}>
-                  {isProfitable ? 'PROFIT' : 'LOSS'}
-                </span>
-              </div>
-              <div>
-                <p className="text-3xl font-bold">{formatCurrency(financialStats?.netProfit || stats.netProfit)}</p>
-                <p className={`${isProfitable ? 'text-emerald-100' : 'text-red-100'} text-sm mt-1`}>
-                  Margin: {profitMargin}%
-                </p>
-              </div>
-            </div>
-          </>
-        )}
+        {/* Net Profit */}
+        <div className={`bg-gradient-to-br ${isProfitable ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'} rounded-lg p-6 text-white shadow-lg`}>
+          <div className="flex items-center justify-between mb-4">
+            <DollarSign size={32} />
+            <span className={`${isProfitable ? 'text-emerald-100' : 'text-red-100'} text-sm font-medium`}>
+              {isProfitable ? 'PROFIT' : 'LOSS'}
+            </span>
+          </div>
+          <div>
+            <p className="text-3xl font-bold">
+              {breakdownLoading ? (
+                <span className="text-lg">Loading...</span>
+              ) : (
+                formatCurrency(stats?.netProfit || 0)
+              )}
+            </p>
+            <p className={`${isProfitable ? 'text-emerald-100' : 'text-red-100'} text-sm mt-1`}>
+              Margin: {profitMargin}%
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Liabilities & Obligations */}
@@ -301,29 +298,25 @@ export default function AdminDashboard() {
             <h3 className="text-lg font-semibold text-gray-900">Company Liabilities</h3>
             <AlertCircle className="text-yellow-500" size={24} />
           </div>
-          {financialLoading ? (
-            <TableRowSkeleton />
-          ) : (
-            <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-gray-600">Total User Balances</span>
-                <span className="font-semibold text-gray-900">{formatCurrency(financialStats?.totalUserBalances || stats.totalUserBalances)}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-gray-600">Pending Withdrawals</span>
-                <span className="font-semibold text-orange-600">
-                  {formatCurrency(financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount)}
-                  <span className="text-sm text-gray-500 ml-2">({financialStats?.pendingWithdrawalsCount || stats.pendingWithdrawalsCount})</span>
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2 pt-3 border-t-2">
-                <span className="font-semibold text-gray-700">Total Liabilities</span>
-                <span className="font-bold text-red-600 text-lg">
-                  {formatCurrency((financialStats?.totalUserBalances || stats.totalUserBalances) + (financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount))}
-                </span>
-              </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center py-2 border-b">
+              <span className="text-gray-600">Total User Balances</span>
+              <span className="font-semibold text-gray-900">{formatCurrency(stats?.totalUserBalances || 0)}</span>
             </div>
-          )}
+            <div className="flex justify-between items-center py-2 border-b">
+              <span className="text-gray-600">Pending Withdrawals</span>
+              <span className="font-semibold text-orange-600">
+                {formatCurrency(stats?.pendingWithdrawalsAmount || 0)}
+                <span className="text-sm text-gray-500 ml-2">({stats?.pendingWithdrawalsCount || 0})</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2 pt-3 border-t-2">
+              <span className="font-semibold text-gray-700">Total Liabilities</span>
+              <span className="font-bold text-red-600 text-lg">
+                {formatCurrency((stats?.totalUserBalances || 0) + (stats?.pendingWithdrawalsAmount || 0))}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
@@ -331,28 +324,24 @@ export default function AdminDashboard() {
             <h3 className="text-lg font-semibold text-gray-900">Financial Health</h3>
             <PieChart className="text-blue-500" size={24} />
           </div>
-          {financialLoading ? (
-            <TableRowSkeleton />
-          ) : (
-            <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-gray-600">Wallet Balance</span>
-                <span className="font-semibold text-blue-600">{formatCurrency(financialStats?.companyWalletBalance || stats.companyWalletBalance)}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-gray-600">Total Obligations</span>
-                <span className="font-semibold text-red-600">
-                  {formatCurrency((financialStats?.totalUserBalances || stats.totalUserBalances) + (financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount))}
-                </span>
-              </div>
-              <div className="flex justify-between items-center py-2 pt-3 border-t-2">
-                <span className="font-semibold text-gray-700">Net Position</span>
-                <span className={`font-bold text-lg ${(financialStats?.companyWalletBalance || stats.companyWalletBalance) - (financialStats?.totalUserBalances || stats.totalUserBalances) - (financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {formatCurrency((financialStats?.companyWalletBalance || stats.companyWalletBalance) - (financialStats?.totalUserBalances || stats.totalUserBalances) - (financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount))}
-                </span>
-              </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center py-2 border-b">
+              <span className="text-gray-600">Wallet Balance</span>
+              <span className="font-semibold text-blue-600">{formatCurrency(stats?.companyWalletBalance || 0)}</span>
             </div>
-          )}
+            <div className="flex justify-between items-center py-2 border-b">
+              <span className="text-gray-600">Total Obligations</span>
+              <span className="font-semibold text-red-600">
+                {formatCurrency((stats?.totalUserBalances || 0) + (stats?.pendingWithdrawalsAmount || 0))}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-2 pt-3 border-t-2">
+              <span className="font-semibold text-gray-700">Net Position</span>
+              <span className={`font-bold text-lg ${(stats?.companyWalletBalance || 0) - (stats?.totalUserBalances || 0) - (stats?.pendingWithdrawalsAmount || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {formatCurrency((stats?.companyWalletBalance || 0) - (stats?.totalUserBalances || 0) - (stats?.pendingWithdrawalsAmount || 0))}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -363,33 +352,38 @@ export default function AdminDashboard() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <TrendingUp className="mr-2 text-green-500" size={20} />
             Revenue Breakdown
+            {breakdownLoading && <span className="ml-2 text-xs text-gray-500">Loading...</span>}
           </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Activation Fees</span>
-              <span className="font-semibold">{formatCurrency(stats.revenueBreakdown.activationFees)}</span>
+          {breakdownLoading ? (
+            <TableRowSkeleton />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Activation Fees</span>
+                <span className="font-semibold">{formatCurrency(stats?.revenueBreakdown.activationFees || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Unclaimed Referrals</span>
+                <span className="font-semibold">{formatCurrency(stats?.revenueBreakdown.unclaimedReferrals || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Spin Costs</span>
+                <span className="font-semibold">{formatCurrency(stats?.revenueBreakdown.spinCosts || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Content Payments</span>
+                <span className="font-semibold">{formatCurrency(stats?.revenueBreakdown.contentPayments || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Other Revenue</span>
+                <span className="font-semibold">{formatCurrency(stats?.revenueBreakdown.otherRevenue || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 pt-3 border-t-2">
+                <span className="font-bold text-gray-800">Total Revenue</span>
+                <span className="font-bold text-green-600 text-lg">{formatCurrency(stats?.totalCompanyRevenue || 0)}</span>
+              </div>
             </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Unclaimed Referrals</span>
-              <span className="font-semibold">{formatCurrency(stats.revenueBreakdown.unclaimedReferrals)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Spin Costs</span>
-              <span className="font-semibold">{formatCurrency(stats.revenueBreakdown.spinCosts)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Content Payments</span>
-              <span className="font-semibold">{formatCurrency(stats.revenueBreakdown.contentPayments)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Other Revenue</span>
-              <span className="font-semibold">{formatCurrency(stats.revenueBreakdown.otherRevenue)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 pt-3 border-t-2">
-              <span className="font-bold text-gray-800">Total Revenue</span>
-              <span className="font-bold text-green-600 text-lg">{formatCurrency(stats.totalCompanyRevenue)}</span>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Expense Breakdown */}
@@ -397,41 +391,46 @@ export default function AdminDashboard() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <TrendingDown className="mr-2 text-orange-500" size={20} />
             Expense Breakdown
+            {breakdownLoading && <span className="ml-2 text-xs text-gray-500">Loading...</span>}
           </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">User Withdrawals</span>
-              <span className="font-semibold">{formatCurrency(stats.expenseBreakdown.userPayouts)}</span>
+          {breakdownLoading ? (
+            <TableRowSkeleton />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">User Withdrawals</span>
+                <span className="font-semibold">{formatCurrency(stats?.expenseBreakdown.userPayouts || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Bonuses</span>
+                <span className="font-semibold">{formatCurrency(stats?.expenseBreakdown.bonuses || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Referral Commissions</span>
+                <span className="font-semibold">{formatCurrency(stats?.expenseBreakdown.referralCommissions || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Spin Prizes</span>
+                <span className="font-semibold">{formatCurrency(stats?.expenseBreakdown.spinPrizes || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Task Payments</span>
+                <span className="font-semibold">{formatCurrency(stats?.expenseBreakdown.taskPayments || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Survey Payments</span>
+                <span className="font-semibold">{formatCurrency(stats?.expenseBreakdown.surveyPayments || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Other Expenses</span>
+                <span className="font-semibold">{formatCurrency(stats?.expenseBreakdown.otherExpenses || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 pt-3 border-t-2">
+                <span className="font-bold text-gray-800">Total Expenses</span>
+                <span className="font-bold text-orange-600 text-lg">{formatCurrency(stats?.totalCompanyExpenses || 0)}</span>
+              </div>
             </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Bonuses</span>
-              <span className="font-semibold">{formatCurrency(stats.expenseBreakdown.bonuses)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Referral Commissions</span>
-              <span className="font-semibold">{formatCurrency(stats.expenseBreakdown.referralCommissions)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Spin Prizes</span>
-              <span className="font-semibold">{formatCurrency(stats.expenseBreakdown.spinPrizes)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Task Payments</span>
-              <span className="font-semibold">{formatCurrency(stats.expenseBreakdown.taskPayments)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Survey Payments</span>
-              <span className="font-semibold">{formatCurrency(stats.expenseBreakdown.surveyPayments)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Other Expenses</span>
-              <span className="font-semibold">{formatCurrency(stats.expenseBreakdown.otherExpenses)}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 pt-3 border-t-2">
-              <span className="font-bold text-gray-800">Total Expenses</span>
-              <span className="font-bold text-orange-600 text-lg">{formatCurrency(stats.totalCompanyExpenses)}</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
