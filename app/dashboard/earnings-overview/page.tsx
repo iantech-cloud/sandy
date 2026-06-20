@@ -70,9 +70,9 @@ const earningStreams: EarningStream[] = [
   },
   {
     title: 'Surveys',
-    description: 'Complete paid surveys',
-    commission: 'Keep 90-100%',
-    potential: 'KES 50-500/survey',
+    description: 'Complete surveys every Tuesday',
+    commission: 'Keep 100%',
+    potential: 'KES 10/survey',
     path: '/dashboard/surveys',
     color: 'from-emerald-600 to-green-600',
     icon: '📋',
