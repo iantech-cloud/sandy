@@ -183,6 +183,12 @@ const ProfileSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  // Survey Wallet - for paying to take surveys and earning from completions
+  survey_wallet_cents: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   activation_paid_at: {
     type: Date,
     default: null,

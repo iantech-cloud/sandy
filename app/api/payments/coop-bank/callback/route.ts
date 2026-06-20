@@ -300,6 +300,19 @@ export async function POST(request: NextRequest) {
     }
 
     // ========================================================================
+    // SURVEY PAYMENT (Access payment - KSH 30)
+    // ========================================================================
+    const surveyPayment = mpesaTransaction.metadata?.survey_id;
+    if (surveyPayment && paymentStatus === 'completed') {
+      // For survey payments, we mark the transaction as completed
+      // The user can now access the survey
+      console.log(
+        `[CoopCallback] Survey payment completed: User ${mpesaTransaction.user_id} paid for survey ${surveyPayment}`
+      );
+      // Transaction is already marked as completed above
+    }
+
+    // ========================================================================
     // CHAT FOREIGNERS BOT UNLOCK
     // ========================================================================
     const chatForeignersUnlock = await ChatForeignersMpesaTransaction.findOne({
