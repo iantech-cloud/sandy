@@ -8,6 +8,10 @@ import {
   submitSurveyAnswers, 
   getSurveyHistory
 } from '@/app/actions/surveys';
+import {
+  initiateSurveyPayment,
+  getSurveyPaymentStatus
+} from '@/app/actions/survey-payments';
 import type { Survey, SurveyAnswer } from '@/types/survey';
 
 export default function SurveysPage() {
@@ -142,23 +146,48 @@ export default function SurveysPage() {
     setMessage(null);
     
     try {
-      const result = await startSurvey(surveyId);
+      // First check if user already paid for this survey
+      const paymentStatus = await getSurveyPaymentStatus(surveyId);
       
-      if (result && result.success && result.survey && result.responseId) {
-        setActiveSurvey(result.survey);
-        setCurrentResponseId(result.responseId);
-        setTimeLeft(result.survey.duration_minutes * 60); // Convert to seconds
-        setShowSurveyForm(true);
-        setAnswers([]); // Reset answers
-        setCurrentQuestionIndex(0); // Start with first question
-        setMessage(result.message);
-        setMessageType('info');
+      if (paymentStatus.success && paymentStatus.data?.paid) {
+        // User already paid, proceed to start survey
+        const result = await startSurvey(surveyId);
+        
+        if (result && result.success && result.survey && result.responseId) {
+          setActiveSurvey(result.survey);
+          setCurrentResponseId(result.responseId);
+          setTimeLeft(result.survey.duration_minutes * 60);
+          setShowSurveyForm(true);
+          setAnswers([]);
+          setCurrentQuestionIndex(0);
+          setMessage(result.message);
+          setMessageType('info');
+        } else {
+          setMessage(result?.message || 'Failed to start survey.');
+          setMessageType('error');
+        }
       } else {
-        setMessage(result?.message || 'Failed to start survey.');
-        setMessageType('error');
+        // User hasn't paid yet, initiate payment
+        setMessage('Initiating payment for survey access...');
+        setMessageType('info');
+        
+        const paymentResult = await initiateSurveyPayment(surveyId);
+        
+        if (paymentResult.success) {
+          setMessage(paymentResult.message || 'Payment prompt sent to your phone. Complete the M-Pesa transaction to access the survey.');
+          setMessageType('success');
+          // Reload surveys after a delay to allow payment processing
+          setTimeout(() => {
+            loadSurveys();
+          }, 5000);
+        } else {
+          setMessage(paymentResult.message || 'Failed to initiate payment.');
+          setMessageType('error');
+        }
       }
     } catch (error) {
-      setMessage('Failed to start survey.');
+      console.error('Error starting survey:', error);
+      setMessage('Failed to process survey. Please try again.');
       setMessageType('error');
     } finally {
       setLoading(false);
@@ -555,7 +584,7 @@ export default function SurveysPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {surveys.map((survey) => (
-              <div key={survey.id} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+              <div key={`${survey.id}-${survey.title}`} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow duration-300">
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-3">
                     <h3 className="font-bold text-lg text-gray-800 flex-1 mr-2">{survey.title}</h3>
@@ -566,7 +595,7 @@ export default function SurveysPage() {
                   
                   <p className="text-gray-600 text-sm mb-4 line-clamp-2">{survey.description}</p>
                   
-                  <div className="space-y-2 mb-4">
+                  <div className="space-y-2 mb-6">
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-500">Duration:</span>
                       <span className="font-medium">{survey.duration_minutes} minutes</span>
@@ -574,6 +603,10 @@ export default function SurveysPage() {
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-500">Questions:</span>
                       <span className="font-medium">{survey.questions.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Payout:</span>
+                      <span className="font-bold text-green-600">KES {(survey.payout_cents / 100).toFixed(2)}</span>
                     </div>
                     {survey.expires_at && (
                       <div className="flex justify-between items-center text-sm">
@@ -588,9 +621,9 @@ export default function SurveysPage() {
                   <button
                     onClick={() => handleStartSurvey(survey.id)}
                     disabled={loading}
-                    className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition duration-150 font-medium shadow-md hover:shadow-lg"
+                    className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition duration-150 font-medium shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Start Survey
+                    {loading ? 'Processing...' : 'Start Survey (KES 30)'}
                   </button>
                 </div>
                 
@@ -600,7 +633,7 @@ export default function SurveysPage() {
                     <div className="flex flex-wrap gap-1">
                       {survey.topics.slice(0, 3).map((topic, index) => (
                         <span 
-                          key={index}
+                          key={`${survey.id}-topic-${index}`}
                           className="bg-white border border-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full"
                         >
                           {topic}
