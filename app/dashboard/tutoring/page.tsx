@@ -1,12 +1,43 @@
 'use client';
 
-import { BookOpen, Plus, Clock, Users as UsersIcon } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { BookOpen, Plus, Clock, Users as UsersIcon, AlertCircle } from 'lucide-react';
+
+interface TutoringStats {
+  scheduledSessions: number;
+  totalStudents: number;
+  earnings: number;
+}
 
 export default function TutoringPage() {
-  const stats = [
-    { label: 'Scheduled Sessions', value: '8', icon: Clock },
-    { label: 'Total Students', value: '15', icon: UsersIcon },
-    { label: 'Earnings', value: 'KES 32,000', icon: BookOpen },
+  const [stats, setStats] = useState<TutoringStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const response = await fetch('/api/marketplace/tutoring');
+        if (!response.ok) throw new Error('Failed to load stats');
+        const data = await response.json();
+        setStats({
+          scheduledSessions: data.data?.scheduledSessions || 0,
+          totalStudents: data.data?.totalStudents || 0,
+          earnings: data.data?.earnings || 0,
+        });
+      } catch (error) {
+        console.error('[v0] Failed to load tutoring stats:', error);
+        setStats({ scheduledSessions: 0, totalStudents: 0, earnings: 0 });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStats();
+  }, []);
+
+  const displayStats = [
+    { label: 'Scheduled Sessions', value: loading ? '...' : stats?.scheduledSessions.toString() || '0', icon: Clock },
+    { label: 'Total Students', value: loading ? '...' : stats?.totalStudents.toString() || '0', icon: UsersIcon },
+    { label: 'Earnings', value: loading ? '...' : `KES ${(stats?.earnings || 0).toLocaleString()}`, icon: BookOpen },
   ];
 
   return (
@@ -24,7 +55,7 @@ export default function TutoringPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {stats.map((stat, idx) => {
+        {displayStats.map((stat, idx) => {
           const Icon = stat.icon as any;
           return (
             <div key={idx} className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">

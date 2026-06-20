@@ -1,12 +1,43 @@
 'use client';
 
-import { Zap, Plus, CheckCircle, BarChart3 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Zap, Plus, CheckCircle, BarChart3, AlertCircle } from 'lucide-react';
+
+interface AITasksStats {
+  completedTasks: number;
+  accuracyRate: number;
+  earnings: number;
+}
 
 export default function AITasksPage() {
-  const stats = [
-    { label: 'Completed Tasks', value: '342', icon: CheckCircle },
-    { label: 'Accuracy Rate', value: '98%', icon: BarChart3 },
-    { label: 'Earnings', value: 'KES 28,400', icon: Zap },
+  const [stats, setStats] = useState<AITasksStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const response = await fetch('/api/marketplace/ai-tasks');
+        if (!response.ok) throw new Error('Failed to load stats');
+        const data = await response.json();
+        setStats({
+          completedTasks: data.data?.completedTasks || 0,
+          accuracyRate: data.data?.accuracyRate || 0,
+          earnings: data.data?.earnings || 0,
+        });
+      } catch (error) {
+        console.error('[v0] Failed to load AI tasks stats:', error);
+        setStats({ completedTasks: 0, accuracyRate: 0, earnings: 0 });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStats();
+  }, []);
+
+  const displayStats = [
+    { label: 'Completed Tasks', value: loading ? '...' : stats?.completedTasks.toString() || '0', icon: CheckCircle },
+    { label: 'Accuracy Rate', value: loading ? '...' : `${stats?.accuracyRate || 0}%`, icon: BarChart3 },
+    { label: 'Earnings', value: loading ? '...' : `KES ${(stats?.earnings || 0).toLocaleString()}`, icon: Zap },
   ];
 
   return (
@@ -24,7 +55,7 @@ export default function AITasksPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {stats.map((stat, idx) => {
+        {displayStats.map((stat, idx) => {
           const Icon = stat.icon as any;
           return (
             <div key={idx} className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
