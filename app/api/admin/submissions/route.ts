@@ -17,9 +17,9 @@ export async function GET(request: Request) {
     
     // Get admin submissions - populate user info
     const submissions = await UserContent.find({})
-      .populate('user_id', 'username email name')
+      .populate('user', 'username email name')
       .populate('approved_by', 'username email name')
-      .sort({ created_at: -1 })
+      .sort({ submission_date: -1 })
       .lean()
       .exec();
 
@@ -31,14 +31,14 @@ export async function GET(request: Request) {
       status: sub.status || 'pending',
       payment_status: sub.payment_status || 'pending',
       payment_amount: sub.payment_amount || 0,
-      submission_date: sub.created_at ? new Date(sub.created_at).toISOString() : new Date().toISOString(),
+      submission_date: sub.submission_date ? new Date(sub.submission_date).toISOString() : new Date().toISOString(),
       task_category: sub.task_category || '',
-      word_count: sub.word_count || 0,
+      content: sub.content || '',
       user: {
-        _id: sub.user_id?._id?.toString() || '',
-        username: sub.user_id?.username || '',
-        name: sub.user_id?.name || '',
-        email: sub.user_id?.email || '',
+        _id: sub.user?._id?.toString() || '',
+        username: sub.user?.username || '',
+        name: sub.user?.name || '',
+        email: sub.user?.email || '',
       },
     }));
 
