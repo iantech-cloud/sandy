@@ -1410,74 +1410,66 @@ export async function getAvailableSurveys(): Promise<{
     const userId = user._id
     const now = new Date()
 
-    // Simplified query: Get ALL active surveys that haven't expired
-    // No restrictions on user level, referrals, account age, or subscription status
+    // Check if user has paid activation fee
+    if (!user.activation_paid_at) {
+      return {
+        success: true,
+        data: [],
+        message: "Please complete account activation to access surveys.",
+      }
+    }
+
+    // Get ALL active surveys that haven't expired
+    // Accessible to all users who have paid activation fees
     // Only condition: survey must be active AND not already completed by this user
-    const activeSurveys = await SurveyAssignment.aggregate([
+    const activeSurveys = await Survey.aggregate([
       {
-        $match: { user_id: userId },
-      },
-      {
-        $lookup: {
-          from: "surveys",
-          let: { surveyId: "$survey_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ["$_id", "$$surveyId"] },
-                status: "active",
-                expires_at: { $gt: now },
-              },
-            },
-          ],
-          as: "survey",
+        $match: {
+          status: "active",
+          expires_at: { $gt: now },
         },
-      },
-      {
-        $unwind: "$survey",
       },
       {
         $lookup: {
           from: "surveyresponses",
-          let: { surveyId: "$survey_id", userId: "$user_id" },
+          let: { surveyId: "$_id" },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ["$survey_id", "$$surveyId"] }, 
-                    { $eq: ["$user_id", "$$userId"] },
+                    { $eq: ["$survey_id", "$$surveyId"] },
+                    { $eq: ["$user_id", userId] },
                     { $eq: ["$status", "completed"] }
                   ],
                 },
               },
             },
           ],
-          as: "completed_responses",
+          as: "user_response",
         },
       },
       {
         $match: {
-          "completed_responses.0": { $exists: false }, // User hasn't completed this survey
+          "user_response.0": { $exists: false }, // User hasn't completed this survey
         },
       },
       {
         $project: {
-          _id: 0,
-          id: "$survey._id",
-          title: "$survey.title",
-          description: "$survey.description",
-          category: "$survey.category",
-          topics: "$survey.topics",
-          payout_cents: "$survey.payout_cents",
-          duration_minutes: "$survey.duration_minutes",
-          questions: "$survey.questions",
-          status: "$survey.status",
-          expires_at: "$survey.expires_at",
-          current_responses: "$survey.current_responses",
-          max_responses: "$survey.max_responses",
-          is_manually_enabled: "$survey.is_manually_enabled",
-          scheduled_for: "$survey.scheduled_for",
+          _id: 1,
+          title: 1,
+          description: 1,
+          category: 1,
+          topics: 1,
+          payout_cents: 1,
+          duration_minutes: 1,
+          questions: 1,
+          status: 1,
+          expires_at: 1,
+          current_responses: 1,
+          max_responses: 1,
+          is_manually_enabled: 1,
+          scheduled_for: 1,
         },
       },
       {
