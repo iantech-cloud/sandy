@@ -245,7 +245,7 @@ async function assignUsersToSurvey(surveyId: Types.ObjectId, targetPercentage: n
       survey_id: surveyId,
       user_id: user._id,
       assigned_at: new Date(),
-      assigned_reason: "admin" // Assigned to all eligible users
+      assigned_reason: "random" // Valid enum value for auto-assignment
     }));
     
     const result = await SurveyAssignment.insertMany(assignments);

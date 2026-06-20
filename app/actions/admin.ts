@@ -129,9 +129,7 @@ export async function getAdminStats(): Promise<{
       (Profile as any).countDocuments(),
       (Profile as any).countDocuments({ approval_status: 'pending' }),
       (Profile as any).countDocuments({ 
-        approval_status: 'approved', 
-        status: 'active',
-        is_active: true 
+        activation_paid_at: { $exists: true, $ne: null }
       }),
       (Profile as any).countDocuments({
         created_at: { $gte: startOfToday }
