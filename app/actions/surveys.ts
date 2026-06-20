@@ -958,8 +958,15 @@ Ensure correct_answer_index is 0, 1, 2, or 3 for each question.`
         topics: topics,
       },
     }
+    } catch (error: any) {
+      console.error("Error generating AI survey:", error)
+      return {
+        success: false,
+        message: error.message || "Failed to generate survey using AI.",
+      }
+    }
   } catch (error: any) {
-    console.error("Error generating AI survey:", error)
+    console.error("Error in generateAISurvey:", error)
     return {
       success: false,
       message: error.message || "Failed to generate survey using AI.",
