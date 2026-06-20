@@ -30,132 +30,33 @@ export async function assignSurveys() {
     }
 
     for (const survey of surveys) {
-      // Get total active users
-      const totalActiveUsers = await Profile.countDocuments({
-        is_active: true,
-        is_approved: true,
-        approval_status: 'approved',
-        status: 'active'
-      });
-
-      const targetPercentage = survey.target_percentage || 15; // Default to 15%
-      const targetUserCount = Math.ceil(totalActiveUsers * (targetPercentage / 100));
+      // FIXED: Get ALL users in the system - no restrictions
+      const totalUsers = await Profile.countDocuments({});
 
       // Get users who haven't been assigned this survey
       const assignedUserIds = await SurveyAssignment.distinct('user_id', {
         survey_id: survey._id
       });
 
-      const eligibleQuery = {
-        _id: { $nin: assignedUserIds.map(id => new Types.ObjectId(id)) },
-        is_active: true,
-        is_approved: true,
-        approval_status: 'approved',
-        status: 'active'
-      };
+      // Get all users not yet assigned to this survey
+      const usersToAssign = await Profile.find({
+        _id: { $nin: assignedUserIds.map(id => new Types.ObjectId(id)) }
+      }).select('_id');
 
-      // Priority 1: New users (joined in last 7 days)
-      if (survey.priority_new_users !== false) {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        
-        const newUsers = await Profile.find({
-          ...eligibleQuery,
-          created_at: { $gte: oneWeekAgo }
-        }).limit(targetUserCount).select('_id');
-
-        for (const user of newUsers) {
-          const assignment = new SurveyAssignment({
-            survey_id: survey._id,
-            user_id: user._id,
-            assigned_reason: 'new_user'
-          });
-          await assignment.save();
-          assignedUserIds.push(user._id.toString());
-        }
+      if (usersToAssign.length === 0) {
+        console.log(`All users already assigned to survey "${survey.title}"`);
+        continue;
       }
 
-      // Priority 2: Top referrers
-      if (survey.priority_top_referrers !== false && assignedUserIds.length < targetUserCount) {
-        const remainingSlots = targetUserCount - assignedUserIds.length;
-        
-        const topReferrers = await Referral.aggregate([
-          {
-            $group: {
-              _id: '$referrer_id',
-              referralCount: { $sum: 1 }
-            }
-          },
-          {
-            $match: {
-              _id: { $nin: assignedUserIds.map(id => new Types.ObjectId(id)) }
-            }
-          },
-          {
-            $sort: { referralCount: -1 }
-          },
-          {
-            $limit: remainingSlots
-          }
-        ]);
+      // Create assignments for ALL users who aren't already assigned
+      const assignments = usersToAssign.map(user => ({
+        survey_id: survey._id,
+        user_id: user._id,
+        assigned_reason: 'auto_assigned'
+      }));
 
-        for (const referrer of topReferrers) {
-          const assignment = new SurveyAssignment({
-            survey_id: survey._id,
-            user_id: referrer._id,
-            assigned_reason: 'top_referrer'
-          });
-          await assignment.save();
-          assignedUserIds.push(referrer._id.toString());
-        }
-      }
-
-      // Priority 3: High accuracy users (users with good survey completion rate)
-      if (assignedUserIds.length < targetUserCount) {
-        const remainingSlots = targetUserCount - assignedUserIds.length;
-        
-        const highAccuracyUsers = await Profile.find({
-          ...eligibleQuery,
-          survey_accuracy_rate: { $gte: 70 } // Users with 70%+ accuracy
-        })
-        .sort({ survey_accuracy_rate: -1 })
-        .limit(remainingSlots)
-        .select('_id');
-
-        for (const user of highAccuracyUsers) {
-          const assignment = new SurveyAssignment({
-            survey_id: survey._id,
-            user_id: user._id,
-            assigned_reason: 'high_accuracy'
-          });
-          await assignment.save();
-          assignedUserIds.push(user._id.toString());
-        }
-      }
-
-      // Priority 4: Random selection for remaining slots
-      if (assignedUserIds.length < targetUserCount) {
-        const remainingSlots = targetUserCount - assignedUserIds.length;
-        
-        const randomUsers = await Profile.aggregate([
-          {
-            $match: eligibleQuery
-          },
-          { $sample: { size: remainingSlots } },
-          { $project: { _id: 1 } }
-        ]);
-
-        for (const user of randomUsers) {
-          const assignment = new SurveyAssignment({
-            survey_id: survey._id,
-            user_id: user._id,
-            assigned_reason: 'random'
-          });
-          await assignment.save();
-        }
-      }
-
-      console.log(`Assigned survey "${survey.title}" to ${assignedUserIds.length} users`);
+      await SurveyAssignment.insertMany(assignments);
+      console.log(`Assigned survey "${survey.title}" to ${assignments.length} users`);
     }
   } catch (error) {
     console.error('Error assigning surveys:', error);
