@@ -293,7 +293,7 @@ export default function SurveysPage() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Earn with Surveys</h1>
-          <p className="text-gray-600 mt-2">Complete surveys and earn KSH 50 for each correct submission</p>
+          <p className="text-gray-600 mt-2">Complete surveys and earn rewards for each successful submission</p>
           
           {/* ADDED: Display user accuracy rate */}
           {userStats && typeof userStats.accuracy_rate === 'number' && (
@@ -568,12 +568,6 @@ export default function SurveysPage() {
                   
                   <div className="space-y-2 mb-4">
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Payout:</span>
-                      <span className="font-semibold text-green-600">
-                        KSH {(survey.payout_cents / 100).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-500">Duration:</span>
                       <span className="font-medium">{survey.duration_minutes} minutes</span>
                     </div>
@@ -634,7 +628,7 @@ export default function SurveysPage() {
             <svg className="w-4 h-4 mr-2 mt-0.5 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
             </svg>
-            Each survey pays KSH 50 for successful completion
+            Each survey pays KSH 10 for successful completion
           </li>
           <li className="flex items-start">
             <svg className="w-4 h-4 mr-2 mt-0.5 text-blue-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
