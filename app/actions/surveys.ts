@@ -201,22 +201,20 @@ function serializeDocument(doc: any): Record<string, any> | null {
 
 /**
  * Automatically assign users to a survey
- * NOW: Assign to ALL users who have paid activation fees (activation_paid_at exists)
- * This ensures all eligible users have access to the survey
+ * FIXED: Assign to ALL users (active or inactive, with or without activation payment)
+ * This ensures surveys are accessible to all users by default
  */
 async function assignUsersToSurvey(surveyId: Types.ObjectId, targetPercentage: number = 15): Promise<number> {
   try {
     await connectToDatabase();
     
-    // Get all users who have paid activation fees (have dashboard access)
-    const eligibleUsers = await Profile.find({
-      activation_paid_at: { $exists: true, $ne: null }
-    }).select('_id').lean();
+    // Get ALL users in the system - no restrictions
+    const eligibleUsers = await Profile.find({}).select('_id').lean();
     
-    console.log(`[ASSIGNMENT] Total users with activation paid: ${eligibleUsers.length}`);
+    console.log(`[ASSIGNMENT] Total users in system: ${eligibleUsers.length}`);
     
     if (eligibleUsers.length === 0) {
-      console.log(`[ASSIGNMENT] No users with activation fees found`);
+      console.log(`[ASSIGNMENT] No users found in system`);
       return 0;
     }
     
@@ -236,11 +234,11 @@ async function assignUsersToSurvey(surveyId: Types.ObjectId, targetPercentage: n
     console.log(`[ASSIGNMENT] Users to assign: ${newUsersToAssign.length}`);
     
     if (newUsersToAssign.length === 0) {
-      console.log(`[ASSIGNMENT] All eligible users already assigned to survey`);
+      console.log(`[ASSIGNMENT] All users already assigned to survey`);
       return 0;
     }
     
-    // Create assignments for all eligible users who aren't already assigned
+    // Create assignments for ALL users who aren't already assigned
     const assignments = newUsersToAssign.map(user => ({
       survey_id: surveyId,
       user_id: user._id,
@@ -1379,17 +1377,10 @@ export async function getAvailableSurveys(): Promise<{
     const userId = user._id
     const now = new Date()
 
-    // Check if user has paid activation fee
-    if (!user.activation_paid_at) {
-      return {
-        success: true,
-        data: [],
-        message: "Please complete account activation to access surveys.",
-      }
-    }
+    // FIXED: Surveys are accessible to ALL users by default (no activation restriction)
 
     // Get ALL active surveys that haven't expired
-    // Accessible to all users who have paid activation fees
+    // Accessible to ALL users by default (no restrictions)
     // Only condition: survey must be active AND not already completed by this user
     const activeSurveys = await Survey.aggregate([
       {
@@ -1497,11 +1488,7 @@ export async function startSurvey(surveyId: string): Promise<{
       return { success: false, message: "Survey not available or expired." }
     }
 
-    const assignment = await findSurveyAssignment(surveyObjectId, userId)
-
-    if (!assignment) {
-      return { success: false, message: "You are not assigned to this survey." }
-    }
+    // FIXED: All users can access active surveys without assignment restriction
 
     const existingResponseQuery = SurveyResponse.findOne({
       survey_id: surveyObjectId,
