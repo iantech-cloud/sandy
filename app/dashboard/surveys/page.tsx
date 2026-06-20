@@ -8,10 +8,6 @@ import {
   submitSurveyAnswers, 
   getSurveyHistory
 } from '@/app/actions/surveys';
-import {
-  initiateSurveyPayment,
-  getSurveyPaymentStatus
-} from '@/app/actions/survey-payments';
 import type { Survey, SurveyAnswer } from '@/types/survey';
 
 export default function SurveysPage() {
@@ -101,18 +97,30 @@ export default function SurveysPage() {
   const loadSurveys = async () => {
     setLoading(true);
     try {
+      // Check if today is Tuesday
+      const today = new Date();
+      const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday, etc.
+      const isTuesday = dayOfWeek === 2;
+      
       const result = await getAvailableSurveys();
-      if (result && result.success) {
-        setSurveys(result.data || []);
-        if (result.message && result.data?.length === 0) {
-          setAvailabilityMessage(result.message);
-        } else {
-          setAvailabilityMessage('');
-        }
+      if (result && result.success && result.data) {
+        setSurveys(result.data);
+        setAvailabilityMessage('');
       } else {
-        setMessage(result?.message || 'Failed to load surveys.');
+        setSurveys([]);
+        
+        // Set custom message based on day of week
+        let messageToShow = result?.message || 'Failed to load surveys.';
+        if (!isTuesday) {
+          const daysUntilTuesday = dayOfWeek === 2 ? 0 : (9 - dayOfWeek) % 7;
+          const nextTuesday = new Date(today);
+          nextTuesday.setDate(nextTuesday.getDate() + daysUntilTuesday);
+          messageToShow = `Surveys are only available on Tuesdays. Next available: ${nextTuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`;
+        }
+        
+        setMessage(messageToShow);
         setMessageType('error');
-        setAvailabilityMessage(result?.message || '');
+        setAvailabilityMessage(messageToShow);
       }
     } catch (error) {
       setMessage('Failed to load surveys.');
@@ -146,48 +154,24 @@ export default function SurveysPage() {
     setMessage(null);
     
     try {
-      // First check if user already paid for this survey
-      const paymentStatus = await getSurveyPaymentStatus(surveyId);
+      const result = await startSurvey(surveyId);
       
-      if (paymentStatus.success && paymentStatus.data?.paid) {
-        // User already paid, proceed to start survey
-        const result = await startSurvey(surveyId);
-        
-        if (result && result.success && result.survey && result.responseId) {
-          setActiveSurvey(result.survey);
-          setCurrentResponseId(result.responseId);
-          setTimeLeft(result.survey.duration_minutes * 60);
-          setShowSurveyForm(true);
-          setAnswers([]);
-          setCurrentQuestionIndex(0);
-          setMessage(result.message);
-          setMessageType('info');
-        } else {
-          setMessage(result?.message || 'Failed to start survey.');
-          setMessageType('error');
-        }
-      } else {
-        // User hasn't paid yet, initiate payment
-        setMessage('Initiating payment for survey access...');
+      if (result && result.success && result.survey && result.responseId) {
+        setActiveSurvey(result.survey);
+        setCurrentResponseId(result.responseId);
+        setTimeLeft(result.survey.duration_minutes * 60);
+        setShowSurveyForm(true);
+        setAnswers([]);
+        setCurrentQuestionIndex(0);
+        setMessage(result.message);
         setMessageType('info');
-        
-        const paymentResult = await initiateSurveyPayment(surveyId);
-        
-        if (paymentResult.success) {
-          setMessage(paymentResult.message || 'Payment prompt sent to your phone. Complete the M-Pesa transaction to access the survey.');
-          setMessageType('success');
-          // Reload surveys after a delay to allow payment processing
-          setTimeout(() => {
-            loadSurveys();
-          }, 5000);
-        } else {
-          setMessage(paymentResult.message || 'Failed to initiate payment.');
-          setMessageType('error');
-        }
+      } else {
+        setMessage(result?.message || 'Failed to start survey.');
+        setMessageType('error');
       }
     } catch (error) {
       console.error('Error starting survey:', error);
-      setMessage('Failed to process survey. Please try again.');
+      setMessage('Failed to start survey. Please try again.');
       setMessageType('error');
     } finally {
       setLoading(false);
@@ -608,6 +592,10 @@ export default function SurveysPage() {
                       <span className="text-gray-500">Payout:</span>
                       <span className="font-bold text-green-600">KES {(survey.payout_cents / 100).toFixed(2)}</span>
                     </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Available:</span>
+                      <span className="font-medium text-blue-600">Tuesdays Only</span>
+                    </div>
                     {survey.expires_at && (
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-gray-500">Expires:</span>
@@ -623,7 +611,7 @@ export default function SurveysPage() {
                     disabled={loading}
                     className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition duration-150 font-medium shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {loading ? 'Processing...' : 'Start Survey (KES 30)'}
+                    {loading ? 'Starting...' : 'Start Survey'}
                   </button>
                 </div>
                 
