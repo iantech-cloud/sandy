@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { getAdminStats, toggleSpinWheel } from '../actions/admin';
 import { redirect } from 'next/navigation';
+import { CardSkeleton, TableRowSkeleton, ChartSkeleton } from '../components/admin/SkeletonLoader';
 import { 
   Users, 
   UserCheck, 
@@ -67,7 +68,11 @@ interface AdminStats {
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [userStats, setUserStats] = useState<any>(null);
+  const [financialStats, setFinancialStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [userLoading, setUserLoading] = useState(true);
+  const [financialLoading, setFinancialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [spinWheelLoading, setSpinWheelLoading] = useState(false);
   const [spinStatus, setSpinStatus] = useState<{ active: boolean; mode: string }>({ 
@@ -76,10 +81,10 @@ export default function AdminDashboard() {
   });
 
   useEffect(() => {
-    loadStats();
+    loadDashboardProgressively();
   }, []);
 
-  const loadStats = async () => {
+  const loadDashboardProgressively = async () => {
     try {
       setLoading(true);
       const statsResult = await getAdminStats();
@@ -104,6 +109,43 @@ export default function AdminDashboard() {
       console.error('Error loading stats:', err);
     } finally {
       setLoading(false);
+    }
+
+    // Load user stats separately
+    loadUserStats();
+    // Load financial stats separately  
+    loadFinancialStats();
+  };
+
+  const loadUserStats = async () => {
+    try {
+      setUserLoading(true);
+      const response = await fetch('/api/admin/stats/users');
+      if (!response.ok) throw new Error('Failed to load user stats');
+      const data = await response.json();
+      if (data.success) {
+        setUserStats(data.data);
+      }
+    } catch (err) {
+      console.error('[v0] Error loading user stats:', err);
+    } finally {
+      setUserLoading(false);
+    }
+  };
+
+  const loadFinancialStats = async () => {
+    try {
+      setFinancialLoading(true);
+      const response = await fetch('/api/admin/stats/financial');
+      if (!response.ok) throw new Error('Failed to load financial stats');
+      const data = await response.json();
+      if (data.success) {
+        setFinancialStats(data.data);
+      }
+    } catch (err) {
+      console.error('[v0] Error loading financial stats:', err);
+    } finally {
+      setFinancialLoading(false);
     }
   };
 
@@ -133,7 +175,8 @@ export default function AdminDashboard() {
     return `KES ${(cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  if (loading) {
+  // Show minimal loading state while initial data loads
+  if (loading && !stats) {
     return (
       <div className="flex items-center justify-center min-h-64">
         <div className="text-center">
@@ -187,57 +230,68 @@ export default function AdminDashboard() {
 
       {/* Financial Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Company Wallet Balance */}
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-4">
-            <Wallet size={32} />
-            <span className="text-blue-100 text-sm font-medium">BALANCE</span>
-          </div>
-          <div>
-            <p className="text-3xl font-bold">{formatCurrency(stats.companyWalletBalance)}</p>
-            <p className="text-blue-100 text-sm mt-1">Company Wallet</p>
-          </div>
-        </div>
+        {financialLoading ? (
+          <>
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </>
+        ) : (
+          <>
+            {/* Company Wallet Balance */}
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between mb-4">
+                <Wallet size={32} />
+                <span className="text-blue-100 text-sm font-medium">BALANCE</span>
+              </div>
+              <div>
+                <p className="text-3xl font-bold">{formatCurrency(financialStats?.companyWalletBalance || stats.companyWalletBalance)}</p>
+                <p className="text-blue-100 text-sm mt-1">Company Wallet</p>
+              </div>
+            </div>
 
-        {/* Total Revenue */}
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-4">
-            <TrendingUp size={32} />
-            <span className="text-green-100 text-sm font-medium">REVENUE</span>
-          </div>
-          <div>
-            <p className="text-3xl font-bold">{formatCurrency(stats.totalCompanyRevenue)}</p>
-            <p className="text-green-100 text-sm mt-1">Total Income</p>
-          </div>
-        </div>
+            {/* Total Revenue */}
+            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between mb-4">
+                <TrendingUp size={32} />
+                <span className="text-green-100 text-sm font-medium">REVENUE</span>
+              </div>
+              <div>
+                <p className="text-3xl font-bold">{formatCurrency(financialStats?.totalCompanyRevenue || stats.totalCompanyRevenue)}</p>
+                <p className="text-green-100 text-sm mt-1">Total Income</p>
+              </div>
+            </div>
 
-        {/* Total Expenses */}
-        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-4">
-            <TrendingDown size={32} />
-            <span className="text-orange-100 text-sm font-medium">EXPENSES</span>
-          </div>
-          <div>
-            <p className="text-3xl font-bold">{formatCurrency(stats.totalCompanyExpenses)}</p>
-            <p className="text-orange-100 text-sm mt-1">Total Payouts</p>
-          </div>
-        </div>
+            {/* Total Expenses */}
+            <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-6 text-white shadow-lg">
+              <div className="flex items-center justify-between mb-4">
+                <TrendingDown size={32} />
+                <span className="text-orange-100 text-sm font-medium">EXPENSES</span>
+              </div>
+              <div>
+                <p className="text-3xl font-bold">{formatCurrency(financialStats?.totalCompanyExpenses || stats.totalCompanyExpenses)}</p>
+                <p className="text-orange-100 text-sm mt-1">Total Payouts</p>
+              </div>
+            </div>
 
-        {/* Net Profit */}
-        <div className={`bg-gradient-to-br ${isProfitable ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'} rounded-lg p-6 text-white shadow-lg`}>
-          <div className="flex items-center justify-between mb-4">
-            <DollarSign size={32} />
-            <span className={`${isProfitable ? 'text-emerald-100' : 'text-red-100'} text-sm font-medium`}>
-              {isProfitable ? 'PROFIT' : 'LOSS'}
-            </span>
-          </div>
-          <div>
-            <p className="text-3xl font-bold">{formatCurrency(stats.netProfit)}</p>
-            <p className={`${isProfitable ? 'text-emerald-100' : 'text-red-100'} text-sm mt-1`}>
-              Margin: {profitMargin}%
-            </p>
-          </div>
-        </div>
+            {/* Net Profit */}
+            <div className={`bg-gradient-to-br ${isProfitable ? 'from-emerald-500 to-emerald-600' : 'from-red-500 to-red-600'} rounded-lg p-6 text-white shadow-lg`}>
+              <div className="flex items-center justify-between mb-4">
+                <DollarSign size={32} />
+                <span className={`${isProfitable ? 'text-emerald-100' : 'text-red-100'} text-sm font-medium`}>
+                  {isProfitable ? 'PROFIT' : 'LOSS'}
+                </span>
+              </div>
+              <div>
+                <p className="text-3xl font-bold">{formatCurrency(financialStats?.netProfit || stats.netProfit)}</p>
+                <p className={`${isProfitable ? 'text-emerald-100' : 'text-red-100'} text-sm mt-1`}>
+                  Margin: {profitMargin}%
+                </p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Liabilities & Obligations */}
@@ -247,25 +301,29 @@ export default function AdminDashboard() {
             <h3 className="text-lg font-semibold text-gray-900">Company Liabilities</h3>
             <AlertCircle className="text-yellow-500" size={24} />
           </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Total User Balances</span>
-              <span className="font-semibold text-gray-900">{formatCurrency(stats.totalUserBalances)}</span>
+          {financialLoading ? (
+            <TableRowSkeleton />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Total User Balances</span>
+                <span className="font-semibold text-gray-900">{formatCurrency(financialStats?.totalUserBalances || stats.totalUserBalances)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Pending Withdrawals</span>
+                <span className="font-semibold text-orange-600">
+                  {formatCurrency(financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount)}
+                  <span className="text-sm text-gray-500 ml-2">({financialStats?.pendingWithdrawalsCount || stats.pendingWithdrawalsCount})</span>
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 pt-3 border-t-2">
+                <span className="font-semibold text-gray-700">Total Liabilities</span>
+                <span className="font-bold text-red-600 text-lg">
+                  {formatCurrency((financialStats?.totalUserBalances || stats.totalUserBalances) + (financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount))}
+                </span>
+              </div>
             </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Pending Withdrawals</span>
-              <span className="font-semibold text-orange-600">
-                {formatCurrency(stats.pendingWithdrawalsAmount)}
-                <span className="text-sm text-gray-500 ml-2">({stats.pendingWithdrawalsCount})</span>
-              </span>
-            </div>
-            <div className="flex justify-between items-center py-2 pt-3 border-t-2">
-              <span className="font-semibold text-gray-700">Total Liabilities</span>
-              <span className="font-bold text-red-600 text-lg">
-                {formatCurrency(stats.totalUserBalances + stats.pendingWithdrawalsAmount)}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
@@ -273,24 +331,28 @@ export default function AdminDashboard() {
             <h3 className="text-lg font-semibold text-gray-900">Financial Health</h3>
             <PieChart className="text-blue-500" size={24} />
           </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Wallet Balance</span>
-              <span className="font-semibold text-blue-600">{formatCurrency(stats.companyWalletBalance)}</span>
+          {financialLoading ? (
+            <TableRowSkeleton />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Wallet Balance</span>
+                <span className="font-semibold text-blue-600">{formatCurrency(financialStats?.companyWalletBalance || stats.companyWalletBalance)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b">
+                <span className="text-gray-600">Total Obligations</span>
+                <span className="font-semibold text-red-600">
+                  {formatCurrency((financialStats?.totalUserBalances || stats.totalUserBalances) + (financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount))}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2 pt-3 border-t-2">
+                <span className="font-semibold text-gray-700">Net Position</span>
+                <span className={`font-bold text-lg ${(financialStats?.companyWalletBalance || stats.companyWalletBalance) - (financialStats?.totalUserBalances || stats.totalUserBalances) - (financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency((financialStats?.companyWalletBalance || stats.companyWalletBalance) - (financialStats?.totalUserBalances || stats.totalUserBalances) - (financialStats?.pendingWithdrawalsAmount || stats.pendingWithdrawalsAmount))}
+                </span>
+              </div>
             </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-gray-600">Total Obligations</span>
-              <span className="font-semibold text-red-600">
-                {formatCurrency(stats.totalUserBalances + stats.pendingWithdrawalsAmount)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center py-2 pt-3 border-t-2">
-              <span className="font-semibold text-gray-700">Net Position</span>
-              <span className={`font-bold text-lg ${stats.companyWalletBalance - stats.totalUserBalances - stats.pendingWithdrawalsAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(stats.companyWalletBalance - stats.totalUserBalances - stats.pendingWithdrawalsAmount)}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
