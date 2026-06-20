@@ -692,7 +692,7 @@ export async function getSurveyHistory(): Promise<{
       {
         $sort: { completed_at: -1 },
       },
-    ]) as any).exec() as any[];
+    ]) as any) as any[];
 
     const serializedHistory = surveyHistory.map(serializeDocument);
 
@@ -827,7 +827,7 @@ export async function getAdminSurveyResponses(page = 1, limit = 10, search?: str
       })
     }
 
-    const totalCount = (await (SurveyResponse.aggregate([...pipeline, { $count: "total" }]) as Query<any, any>).exec()) as any[]
+    const totalCount = (await SurveyResponse.aggregate([...pipeline, { $count: "total" }])) as any[]
     const total = totalCount.length > 0 ? totalCount[0].total : 0
 
     pipeline.push(
@@ -855,7 +855,7 @@ export async function getAdminSurveyResponses(page = 1, limit = 10, search?: str
       },
     )
 
-    const responses = (await (SurveyResponse.aggregate(pipeline) as Query<any, any>).exec()) as any[]
+    const responses = (await SurveyResponse.aggregate(pipeline)) as any[]
 
     const serializedResponses = responses.map(serializeDocument)
 
@@ -1409,7 +1409,7 @@ export async function getAvailableSurveys(): Promise<{
     // Simplified query: Get ALL active surveys that haven't expired
     // No restrictions on user level, referrals, account age, or subscription status
     // Only condition: survey must be active AND not already completed by this user
-    const activeSurveys = (await (SurveyAssignment.aggregate([
+    const activeSurveys = await SurveyAssignment.aggregate([
       {
         $match: { user_id: userId },
       },
@@ -1479,7 +1479,7 @@ export async function getAvailableSurveys(): Promise<{
       {
         $sort: { scheduled_for: -1 },
       },
-    ]) as Query<any, any>).exec()) as any[]
+    ]) as any[]
 
     const serializedSurveys = activeSurveys.map(serializeDocument)
 
