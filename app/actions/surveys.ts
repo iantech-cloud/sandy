@@ -14,15 +14,8 @@ import {
 } from "@/app/lib/models"
 import { Types, Query } from "mongoose"
 
-// Import the Google Gen AI library
-import { GoogleGenAI, Type } from "@google/genai"
-
-// Initialize Gemini
-const ai = process.env.GEMINI_API_KEY
-  ? new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-    })
-  : null
+// Import NVIDIA AI service
+import { getLLMResponse } from "@/app/lib/services/nvidia-ai"
 
 // --- Core Data Interfaces (Lean results) ---
 export interface SurveyQuestion {
@@ -905,79 +898,44 @@ export async function generateAISurvey(
       return { success: false, message: "Admin access required" }
     }
 
-    if (!ai) {
-      return { success: false, message: "Gemini API key not configured." }
-    }
-
     const prompt = `
-      Create a market research survey with the following specifications:
-      - Topics: ${topics.join(", ")}
-      - Category: ${category}
-      - Number of questions: ${questionCount}
-      - Question type: multiple choice only
-      - Each question should have 4 options.
-      - Questions should be relevant to the Kenyan market and consumers.
-      - Make questions engaging and easy to understand.
-      - Ensure the 'correct_answer_index' points to one of the 4 options (0, 1, 2, or 3).
-    `
+You are a professional market research survey creator. Create a survey in valid JSON format with the following specifications:
+- Topics: ${topics.join(", ")}
+- Category: ${category}
+- Number of questions: ${questionCount}
+- Each question must have exactly 4 multiple-choice options
+- Questions should be relevant to the Kenyan market and consumers
+- Make questions engaging and easy to understand
 
-    const surveySchema = {
-      type: Type.OBJECT,
-      properties: {
-        title: {
-          type: Type.STRING,
-          description: "A compelling title for the survey.",
-        },
-        description: {
-          type: Type.STRING,
-          description: "A brief description of the survey.",
-        },
-        questions: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              question_text: {
-                type: Type.STRING,
-                description: "The main text of the question.",
-              },
-              options: {
-                type: Type.ARRAY,
-                description: "A list of exactly 4 multiple-choice options (strings).",
-                items: { type: Type.STRING },
-              },
-              correct_answer_index: {
-                type: Type.NUMBER,
-                description: "The zero-based index (0, 1, 2, or 3) of the correct option.",
-              },
-            },
-            required: ["question_text", "options", "correct_answer_index"],
-          },
-        },
-      },
-      required: ["title", "description", "questions"],
+Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
+{
+  "title": "Survey Title",
+  "description": "Brief description",
+  "questions": [
+    {
+      "question_text": "Question here?",
+      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+      "correct_answer_index": 0
     }
+  ]
+}
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: surveySchema,
-        temperature: 0.7,
-      },
-    })
+Ensure correct_answer_index is 0, 1, 2, or 3 for each question.`
 
-    if (!response.text) {
-      return { success: false, message: "Failed to generate survey content from AI." }
-    }
+    try {
+      const response = await getLLMResponse(prompt)
+      
+      if (!response) {
+        return { success: false, message: "Failed to generate survey content from AI." }
+      }
 
-    const responseText = response.text.trim()
-    if (!responseText) {
-      return { success: false, message: "Failed to generate survey content from AI." }
-    }
+      // Extract JSON from response (handles cases where there's extra text)
+      const jsonMatch = response.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        return { success: false, message: "Failed to parse AI response as JSON." }
+      }
 
-    const surveyData = JSON.parse(responseText) as any
+      const surveyData = JSON.parse(jsonMatch[0]) as any
 
     const questions = surveyData.questions.map((q: any) => ({
       question_text: q.question_text,
@@ -1067,7 +1025,7 @@ export async function createSurvey(surveyData: {
       questions: surveyData.questions,
       
       // Payout and timing
-      payout_cents: 5000, // KSH 50
+      payout_cents: 1000, // KSH 10
       duration_minutes: 5,
       
       // Selection criteria
@@ -1441,31 +1399,10 @@ export async function getAvailableSurveys(): Promise<{
     const userId = user._id
     const now = new Date()
 
-    // Check if surveys are enabled (either manually or by schedule)
-    const surveysEnabled = await areSurveysEnabled()
-    
-    if (!surveysEnabled) {
-      return {
-        success: true,
-        data: [],
-        message: "Surveys are currently not available. Check back on Tuesday at 9:00 PM EAT or when admin enables them.",
-      }
-    }
-
-    // Build query for available surveys
-    const surveyQuery: any = {
-      status: "active",
-      expires_at: { $gt: now },
-      $or: [
-        { is_manually_enabled: true },
-        { 
-          scheduled_for: { $lte: now },
-          is_manually_enabled: { $ne: false } // Include surveys that are not explicitly disabled
-        }
-      ]
-    }
-
-    const assignedSurveys = (await (SurveyAssignment.aggregate([
+    // Simplified query: Get ALL active surveys that haven't expired
+    // No restrictions on user level, referrals, account age, or subscription status
+    // Only condition: survey must be active AND not already completed by this user
+    const activeSurveys = (await (SurveyAssignment.aggregate([
       {
         $match: { user_id: userId },
       },
@@ -1477,7 +1414,8 @@ export async function getAvailableSurveys(): Promise<{
             {
               $match: {
                 $expr: { $eq: ["$_id", "$$surveyId"] },
-                ...surveyQuery,
+                status: "active",
+                expires_at: { $gt: now },
               },
             },
           ],
@@ -1497,18 +1435,19 @@ export async function getAvailableSurveys(): Promise<{
                 $expr: {
                   $and: [
                     { $eq: ["$survey_id", "$$surveyId"] }, 
-                    { $eq: ["$user_id", "$$userId"] }
+                    { $eq: ["$user_id", "$$userId"] },
+                    { $eq: ["$status", "completed"] }
                   ],
                 },
               },
             },
           ],
-          as: "responses",
+          as: "completed_responses",
         },
       },
       {
         $match: {
-          "responses.0": { $exists: false }, // No existing responses
+          "completed_responses.0": { $exists: false }, // User hasn't completed this survey
         },
       },
       {
@@ -1528,12 +1467,14 @@ export async function getAvailableSurveys(): Promise<{
           max_responses: "$survey.max_responses",
           is_manually_enabled: "$survey.is_manually_enabled",
           scheduled_for: "$survey.scheduled_for",
-          assigned_reason: "$assigned_reason",
         },
+      },
+      {
+        $sort: { scheduled_for: -1 },
       },
     ]) as Query<any, any>).exec()) as any[]
 
-    const serializedSurveys = assignedSurveys.map(serializeDocument)
+    const serializedSurveys = activeSurveys.map(serializeDocument)
 
     return {
       success: true,
