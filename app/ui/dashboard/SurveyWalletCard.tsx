@@ -7,10 +7,9 @@ import { getSurveyWallet } from '@/app/actions/survey-wallet';
 
 interface SurveyWalletData {
   totalEarnings: number;
-  availableBalance: number;
   surveysCompleted: number;
   lastSurveyDate: Date | null;
-  canWithdraw: boolean;
+  nextAvailableDate?: string;
 }
 
 export default function SurveyWalletCard() {
@@ -93,11 +92,11 @@ export default function SurveyWalletCard() {
             </p>
           </div>
 
-          {/* Available Balance */}
+          {/* Next Available Date */}
           <div className="bg-white rounded-lg p-4 border border-emerald-100">
-            <p className="text-xs text-gray-600 font-medium mb-1">Available</p>
-            <p className="text-2xl font-bold text-blue-600">
-              KES {data.availableBalance.toFixed(2)}
+            <p className="text-xs text-gray-600 font-medium mb-1">Next Available</p>
+            <p className="text-sm font-semibold text-blue-600">
+              {data.nextAvailableDate || 'Next Tuesday'}
             </p>
           </div>
 
@@ -114,20 +113,6 @@ export default function SurveyWalletCard() {
             <p className="text-xs text-emerald-700">
               Last survey: {new Date(data.lastSurveyDate).toLocaleDateString()}
             </p>
-          )}
-          
-          {data.canWithdraw ? (
-            <div className="bg-green-100 border border-green-300 rounded-lg p-3">
-              <p className="text-sm text-green-800 font-medium">
-                ✓ You can withdraw! Minimum KES 200 reached.
-              </p>
-            </div>
-          ) : (
-            <div className="bg-amber-100 border border-amber-300 rounded-lg p-3">
-              <p className="text-sm text-amber-800 font-medium">
-                Complete {Math.ceil((20000 - data.availableBalance * 100) / 1000)} more surveys to reach minimum withdrawal (KES 200)
-              </p>
-            </div>
           )}
 
           <p className="text-xs text-emerald-700 italic">
