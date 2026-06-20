@@ -28,6 +28,7 @@ interface SurveyPaymentData {
 
 /**
  * Initiate payment for survey access (KSH 30 via Coop Bank)
+ * Follows same pattern as activation.ts for consistency
  */
 export async function initiateSurveyPayment(
   surveyId: string
@@ -61,7 +62,7 @@ export async function initiateSurveyPayment(
     // Check if user already has a pending payment for this survey
     const existingPending = await MpesaTransaction.findOne({
       user_id: user._id,
-      metadata: { survey_id: surveyId },
+      'metadata.survey_id': surveyId,
       status: 'pending'
     });
 
@@ -75,7 +76,7 @@ export async function initiateSurveyPayment(
     // Check if user already paid for this survey
     const alreadyPaid = await MpesaTransaction.findOne({
       user_id: user._id,
-      metadata: { survey_id: surveyId },
+      'metadata.survey_id': surveyId,
       status: 'completed'
     });
 
@@ -86,61 +87,107 @@ export async function initiateSurveyPayment(
       };
     }
 
-    const coopBankService = createCoopBankService();
-    const phoneNumber = getMpesaPhoneFormat(user.phone_number);
+    const formattedPhone = formatPhoneNumber(user.phone_number);
+    const phoneNumber = getMpesaPhoneFormat(formattedPhone);
     const amountInCents = 3000; // KSH 30 = 3000 cents
     const amountInKsh = 30;
+    const messageReference = `SURVEY${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL}/api/payments/coop-bank/callback`;
 
-    // Create transaction record
-    const transaction = new MpesaTransaction({
+    // Create MpesaTransaction BEFORE calling API (idempotency)
+    const mpesaTransaction = new MpesaTransaction({
       user_id: user._id,
-      phone_number: phoneNumber,
-      amount: amountInKsh,
       amount_cents: amountInCents,
-      status: 'pending',
-      transaction_type: 'survey_payment',
+      phone_number: phoneNumber,
+      account_reference: `SURVEY-${surveyId.substring(0, 8)}`,
+      transaction_desc: `Survey access payment - Survey ID: ${surveyId}`,
+      checkout_request_id: messageReference,
+      status: 'initiated',
+      source: 'survey_payment',
       metadata: {
         survey_id: surveyId,
-        payment_reason: 'survey_access'
-      }
+        payment_reason: 'survey_access',
+        user_username: user.username,
+        initiated_at: new Date().toISOString(),
+      },
     });
 
-    await transaction.save();
+    await mpesaTransaction.save();
 
-    // Initiate STK Push
-    const stkResult = await coopBankService.initiateSTKPush({
-      phoneNumber,
-      amount: amountInKsh,
-      accountReference: `SURVEY_${surveyId}`,
-      description: `Sandy Survey Access - ${amountInKsh} KSH`,
-      callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/payments/coop-bank/callback`,
-      messageReference: `ACT.survey.${surveyId}.${transaction._id}`
+    // Audit transaction record
+    await Transaction.create({
+      user_id: user._id,
+      amount_cents: amountInCents,
+      type: 'SURVEY_PAYMENT',
+      description: `Survey payment for survey: ${surveyId}`,
+      status: 'pending',
+      mpesa_transaction_id: mpesaTransaction._id,
+      target_type: 'survey',
+      target_id: surveyId,
+      metadata: {
+        phoneNumber,
+        provider: 'coop_bank',
+        messageReference,
+        initiated_at: new Date().toISOString(),
+      },
     });
 
-    if (!stkResult.success) {
-      transaction.status = 'failed';
-      transaction.result_desc = stkResult.error || 'STK Push initiation failed';
-      await transaction.save();
+    // Initiate STK Push with correct signature
+    const coopBank = createCoopBankService();
+    let stkResponse;
+    
+    try {
+      console.log('[SurveyPayment] Calling initiateSTKPush...');
+      stkResponse = await coopBank.initiateSTKPush(
+        phoneNumber,
+        amountInKsh,
+        `Sandy Survey Access - KES ${amountInKsh}`,
+        callbackUrl,
+        messageReference
+      );
+      console.log('[SurveyPayment] STK Push response:', stkResponse);
+    } catch (stkError) {
+      console.error('[SurveyPayment] STK Push initiation failed:', stkError);
+      // Mark transaction as failed
+      await MpesaTransaction.findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_desc: stkError instanceof Error ? stkError.message : 'STK Push request failed',
+        failed_at: new Date(),
+      });
 
       return {
         success: false,
-        message: 'Failed to initiate payment. Please try again.',
-        error: stkResult.error,
+        message: stkError instanceof Error ? stkError.message : 'Failed to initiate payment. Please check your connection and try again.',
       };
     }
 
-    // Store the message reference for callback matching
-    transaction.checkout_request_id = stkResult.messageReference;
-    await transaction.save();
+    // Check response validity
+    if (!stkResponse || stkResponse.ResponseCode !== '0') {
+      console.error('[SurveyPayment] STK Push rejected:', stkResponse?.ResponseDescription);
+      await MpesaTransaction.findByIdAndUpdate(mpesaTransaction._id, {
+        status: 'failed',
+        result_desc: stkResponse?.ResponseDescription || 'STK Push rejected by bank',
+        failed_at: new Date(),
+      });
+
+      return {
+        success: false,
+        message: stkResponse?.ResponseDescription || 'Failed to initiate payment. Please try again.',
+      };
+    }
+
+    // Update transaction with successful STK initiation
+    mpesaTransaction.status = 'pending';
+    await mpesaTransaction.save();
 
     return {
       success: true,
       data: {
-        messageReference: stkResult.messageReference || '',
+        messageReference,
         amount: amountInKsh,
         phoneNumber,
         surveyId,
-        callbackUrl: stkResult.callbackUrl || ''
+        callbackUrl,
       },
       message: `Survey payment initiated. You will receive an M-Pesa prompt on ${phoneNumber}`,
     };
@@ -159,7 +206,7 @@ export async function initiateSurveyPayment(
  * Called from payment callback route when payment succeeds
  */
 export async function completeSurveyPayment(
-  transactionId: string,
+  messageReference: string,
   surveyId: string
 ): Promise<ApiResponse> {
   let session: mongoose.ClientSession | null = null;
@@ -170,8 +217,13 @@ export async function completeSurveyPayment(
     session = await mongoose.startSession();
     session.startTransaction();
 
-    const transaction = await MpesaTransaction.findById(transactionId).session(session);
-    if (!transaction) {
+    // Find transaction by messageReference (idempotency key)
+    const mpesaTransaction = await MpesaTransaction.findOne({
+      checkout_request_id: messageReference
+    }).session(session);
+
+    if (!mpesaTransaction) {
+      console.warn('[SurveyPayment] Transaction not found for messageReference:', messageReference);
       await session.abortTransaction();
       return {
         success: false,
@@ -179,7 +231,7 @@ export async function completeSurveyPayment(
       };
     }
 
-    const user = await Profile.findById(transaction.user_id).session(session);
+    const user = await Profile.findById(mpesaTransaction.user_id).session(session);
     if (!user) {
       await session.abortTransaction();
       return {
@@ -188,37 +240,21 @@ export async function completeSurveyPayment(
       };
     }
 
-    // Debit survey wallet
-    const amountToPay = transaction.amount_cents || 3000;
-    if (user.survey_wallet_cents < amountToPay) {
-      // This shouldn't happen in normal flow, but handle it
-      user.survey_wallet_cents = 0;
-    } else {
-      user.survey_wallet_cents -= amountToPay;
-    }
+    // Update transaction status to completed
+    mpesaTransaction.status = 'completed';
+    mpesaTransaction.completed_at = new Date();
+    await mpesaTransaction.save({ session });
 
-    // Note: We don't actually debit from survey_wallet_cents on payment
-    // The user deposits to their wallet separately
-    // This transaction just confirms payment received
-    
-    await user.save({ session });
-
-    // Create Transaction record for audit
-    const auditTransaction = new Transaction({
-      user_id: user._id,
-      transaction_type: 'survey_payment',
-      amount_cents: amountToPay,
-      status: 'completed',
-      description: `Survey access payment - Survey ID: ${surveyId}`,
-      metadata: {
-        survey_id: surveyId,
-        mpesa_transaction_id: transaction._id
-      }
-    });
-
-    await auditTransaction.save({ session });
+    // Update audit transaction status
+    await Transaction.findOneAndUpdate(
+      { mpesa_transaction_id: mpesaTransaction._id },
+      { status: 'completed', completed_at: new Date() },
+      { session }
+    );
 
     await session.commitTransaction();
+
+    console.log('[SurveyPayment] Payment completed successfully for survey:', surveyId);
 
     return {
       success: true,
@@ -249,8 +285,8 @@ export async function getSurveyPaymentStatus(surveyId: string): Promise<ApiRespo
   pendingPayment: boolean;
 }>> {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
+    const authSession = await auth();
+    if (!authSession?.user?.email) {
       return {
         success: false,
         message: 'You must be logged in.',
@@ -259,7 +295,7 @@ export async function getSurveyPaymentStatus(surveyId: string): Promise<ApiRespo
 
     await connectToDatabase();
 
-    const user = await Profile.findOne({ email: session.user.email });
+    const user = await Profile.findOne({ email: authSession.user.email });
     if (!user) {
       return {
         success: false,
@@ -267,18 +303,18 @@ export async function getSurveyPaymentStatus(surveyId: string): Promise<ApiRespo
       };
     }
 
-    // Check for completed payment
+    // Check for completed payment using correct nested field query
     const completedPayment = await MpesaTransaction.findOne({
       user_id: user._id,
-      metadata: { survey_id: surveyId },
+      'metadata.survey_id': surveyId,
       status: 'completed'
     });
 
     // Check for pending payment
     const pendingPayment = await MpesaTransaction.findOne({
       user_id: user._id,
-      metadata: { survey_id: surveyId },
-      status: 'pending'
+      'metadata.survey_id': surveyId,
+      status: { $in: ['pending', 'initiated'] }
     });
 
     return {

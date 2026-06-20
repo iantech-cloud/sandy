@@ -13,6 +13,7 @@ import { CoopBankService } from '@/app/lib/services/coop-bank';
 import mongoose from 'mongoose';
 import { completeActivationAfterPayment } from '@/app/actions/activation';
 import { completeBotUnlockPayment, completeWalletDeposit } from '@/app/actions/chat-foreigners/payments';
+import { completeSurveyPayment } from '@/app/actions/survey-payments';
 
 // ---------------------------------------------------------------------------
 // Co-op Bank Callback payload shape
@@ -302,14 +303,34 @@ export async function POST(request: NextRequest) {
     // ========================================================================
     // SURVEY PAYMENT (Access payment - KSH 30)
     // ========================================================================
-    const surveyPayment = mpesaTransaction.metadata?.survey_id;
-    if (surveyPayment && paymentStatus === 'completed') {
-      // For survey payments, we mark the transaction as completed
-      // The user can now access the survey
+    const surveyId = mpesaTransaction.metadata?.survey_id;
+    if (surveyId && paymentStatus === 'completed') {
+      // Commit the transaction and process survey payment completion in background
+      await session.commitTransaction();
+      session.endSession();
+      session = null;
+
       console.log(
-        `[CoopCallback] Survey payment completed: User ${mpesaTransaction.user_id} paid for survey ${surveyPayment}`
+        `[CoopCallback] Survey payment completed: User ${mpesaTransaction.user_id} paid for survey ${surveyId}`
       );
-      // Transaction is already marked as completed above
+
+      // Fire-and-forget: Process survey payment in background
+      // This is similar to activation - we confirm payment immediately, then unlock access in background
+      void completeSurveyPayment(messageReference, surveyId).catch(
+        (surveyError) => {
+          console.error(
+            '[CoopCallback] Background survey payment completion error (recovery job can retry):',
+            surveyId,
+            surveyError
+          );
+        }
+      );
+
+      return NextResponse.json({
+        success: true,
+        data: { status: paymentStatus, messageReference },
+        message: 'Survey payment confirmed. Access is being unlocked.',
+      });
     }
 
     // ========================================================================
