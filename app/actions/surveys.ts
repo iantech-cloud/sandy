@@ -201,82 +201,51 @@ function serializeDocument(doc: any): Record<string, any> | null {
 
 /**
  * Automatically assign users to a survey
- * If active users > 20, assign 15% of active users
- * If active users <= 20, assign all active users
+ * NOW: Assign to ALL users who have paid activation fees (activation_paid_at exists)
+ * This ensures all eligible users have access to the survey
  */
 async function assignUsersToSurvey(surveyId: Types.ObjectId, targetPercentage: number = 15): Promise<number> {
   try {
     await connectToDatabase();
     
-    // Count total active users
-    const totalUsers = await Profile.countDocuments({
-      $or: [
-        { status: 'active' },
-        { status: { $exists: false } } // Assume active if no status field
-      ]
-    });
+    // Get all users who have paid activation fees (have dashboard access)
+    const eligibleUsers = await Profile.find({
+      activation_paid_at: { $exists: true, $ne: null }
+    }).select('_id').lean();
     
-    console.log(`[ASSIGNMENT] Total active users: ${totalUsers}`);
+    console.log(`[ASSIGNMENT] Total users with activation paid: ${eligibleUsers.length}`);
     
-    // Calculate target user count
-    let targetUserCount: number;
-    
-    if (totalUsers > 20) {
-      // If more than 20 users, assign target percentage
-      targetUserCount = Math.max(1, Math.ceil(totalUsers * (targetPercentage / 100)));
-    } else {
-      // If 20 or fewer users, assign all users
-      targetUserCount = totalUsers;
+    if (eligibleUsers.length === 0) {
+      console.log(`[ASSIGNMENT] No users with activation fees found`);
+      return 0;
     }
     
-    console.log(`[ASSIGNMENT] Target users for survey ${surveyId}: ${targetUserCount}`);
-    
-    // Get users who are not already assigned to this survey
+    // Get users who are already assigned to this survey
     const alreadyAssignedUsers = await SurveyAssignment.find({ 
       survey_id: surveyId 
     }).select('user_id').lean();
     
-    const alreadyAssignedUserIds = alreadyAssignedUsers.map(a => a.user_id);
-    console.log(`[ASSIGNMENT] Already assigned users: ${alreadyAssignedUserIds.length}`);
+    const alreadyAssignedUserIds = new Set(alreadyAssignedUsers.map(a => a.user_id.toString()));
+    console.log(`[ASSIGNMENT] Already assigned users: ${alreadyAssignedUserIds.size}`);
     
-    // Calculate how many more users we need to assign
-    const neededAssignments = Math.max(0, targetUserCount - alreadyAssignedUserIds.length);
+    // Filter out already assigned users
+    const newUsersToAssign = eligibleUsers.filter(user => 
+      !alreadyAssignedUserIds.has(user._id.toString())
+    );
     
-    if (neededAssignments === 0) {
-      console.log(`[ASSIGNMENT] Survey ${surveyId} already has enough assignments`);
+    console.log(`[ASSIGNMENT] Users to assign: ${newUsersToAssign.length}`);
+    
+    if (newUsersToAssign.length === 0) {
+      console.log(`[ASSIGNMENT] All eligible users already assigned to survey`);
       return 0;
     }
     
-    console.log(`[ASSIGNMENT] Need to assign ${neededAssignments} more users`);
-    
-    // Get eligible users (not already assigned, active)
-    const eligibleUsers = await Profile.aggregate([
-      {
-        $match: {
-          _id: { $nin: alreadyAssignedUserIds },
-          $or: [
-            { status: 'active' },
-            { status: { $exists: false } }
-          ]
-        }
-      },
-      { $sample: { size: neededAssignments } },
-      { $project: { _id: 1 } }
-    ]);
-    
-    console.log(`[ASSIGNMENT] Found ${eligibleUsers.length} eligible users`);
-    
-    if (eligibleUsers.length === 0) {
-      console.log(`[ASSIGNMENT] No eligible users found for assignment`);
-      return 0;
-    }
-    
-    // Create assignments with VALID enum values
-    const assignments = eligibleUsers.map(user => ({
+    // Create assignments for all eligible users who aren't already assigned
+    const assignments = newUsersToAssign.map(user => ({
       survey_id: surveyId,
       user_id: user._id,
       assigned_at: new Date(),
-      assigned_reason: "random" // Use the valid enum value
+      assigned_reason: "admin" // Assigned to all eligible users
     }));
     
     const result = await SurveyAssignment.insertMany(assignments);
