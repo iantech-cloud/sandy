@@ -253,13 +253,22 @@ export default function ChatForeignersPage() {
                     {flag} {nationalityLabel}
                   </p>
 
-                  {/* Earn button */}
-                  <div className="w-full mt-0.5 bg-[#2a1f00] border border-[#7a5500] hover:bg-[#3a2a00] rounded-xl px-1 py-2 flex items-center justify-center gap-1 transition-colors">
-                    <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="text-[10px] font-bold text-amber-400 text-center leading-tight">
-                      Earn Ksh{'\n'}1,000
-                    </span>
-                  </div>
+                  {/* Status badge or earn button */}
+                  {unlocked ? (
+                    <div className="w-full mt-0.5 bg-[#1a3a2a] border border-[#00c97a]/50 rounded-xl px-1 py-2 flex items-center justify-center gap-1 transition-colors">
+                      <span className="w-1.5 h-1.5 bg-[#00c97a] rounded-full animate-pulse" />
+                      <span className="text-[10px] font-bold text-[#00c97a] text-center leading-tight">
+                        Lifetime{'\n'}Access
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="w-full mt-0.5 bg-[#2a1f00] border border-[#7a5500] hover:bg-[#3a2a00] rounded-xl px-1 py-2 flex items-center justify-center gap-1 transition-colors">
+                      <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-[10px] font-bold text-amber-400 text-center leading-tight">
+                        Earn Ksh{'\n'}10/msg
+                      </span>
+                    </div>
+                  )}
                 </Link>
               );
             })}

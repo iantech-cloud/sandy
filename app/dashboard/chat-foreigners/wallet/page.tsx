@@ -24,8 +24,8 @@ interface WalletData {
 
 const DEBIT_TYPES = new Set(['CHAT_WITHDRAWAL', 'UNLOCK', 'UNLOCK_FEE']);
 const HIDDEN_TYPES = new Set(['PLATFORM_FEE']);
-const DOWNLINE_TYPES = new Set(['REFERRAL']);
-const CHAT_EARNING_TYPES = new Set(['CHAT_EARNINGS']);
+const DOWNLINE_TYPES = new Set(['REFERRAL', 'CHAT_REFERRAL_EARNING']);
+const CHAT_EARNING_TYPES = new Set(['CHAT_MESSAGE_EARNING', 'CHAT_EARNINGS']);
 
 function isDownlineTx(type: string) {
   return DOWNLINE_TYPES.has(type) && type !== 'CHAT_DEPOSIT';
@@ -223,11 +223,11 @@ export default function WalletPage() {
           />
           <WalletCard
             label="Chat Earnings"
-            sublabel="From completing 20-message chat sessions"
+            sublabel="From two-way message interactions"
             amount_cents={wallet.chat_earnings_cents}
             icon={<MessageSquare size={20} className="text-white" />}
             gradient="bg-gradient-to-br from-[#00c97a] to-emerald-700"
-            note="KSH 100 per completed chat session (20+ messages)."
+            note="KSH 10 per qualifying message: you send → bot replies → you send again."
           />
         </div>
 

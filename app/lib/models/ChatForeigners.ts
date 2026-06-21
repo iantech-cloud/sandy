@@ -473,7 +473,7 @@ const ChatForeignersTransactionSchema = new Schema({
   },
   type: {
     type: String,
-    enum: ['CHAT_DEPOSIT', 'CHAT_EARNINGS', 'CHAT_WITHDRAWAL'],
+    enum: ['CHAT_DEPOSIT', 'CHAT_MESSAGE_EARNING', 'CHAT_WITHDRAWAL', 'CHAT_REFERRAL_EARNING'],
     required: true,
     index: true
   },
@@ -483,12 +483,17 @@ const ChatForeignersTransactionSchema = new Schema({
   status: {
     type: String,
     enum: ['pending', 'completed', 'failed'],
-    default: 'pending',
+    default: 'completed',
     index: true
   },
   mpesa_transaction_id: {
     type: Schema.Types.ObjectId,
     ref: 'ChatForeignersMpesaTransaction',
+    index: true
+  },
+  bot_id: {
+    type: Schema.Types.ObjectId,
+    ref: 'ChatForeignersBot',
     index: true
   },
   target_type: {
@@ -516,6 +521,7 @@ const ChatForeignersTransactionSchema = new Schema({
   indexes: [
     { fields: { user_id: 1, created_at: -1 } },
     { fields: { type: 1 } },
+    { fields: { user_id: 1, type: 1 } },
   ]
 });
 
