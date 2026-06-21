@@ -612,7 +612,8 @@ export async function POST(request: NextRequest) {
 
       // Check daily earning limit (max 60 messages per day = KSH 600)
       const lastEarningDate = access.lastEarningDate;
-      const isNewDay = !lastEarningDate || now.toDateString() !== new Date(lastEarningDate).toDateString();
+      const lastEarningDateObj = lastEarningDate ? new Date(lastEarningDate) : null;
+      const isNewDay = !lastEarningDateObj || now.toDateString() !== lastEarningDateObj.toDateString();
 
       if (isNewDay) {
         access.messagesEarnedToday = 0;
