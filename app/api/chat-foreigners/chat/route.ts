@@ -590,57 +590,58 @@ export async function POST(request: NextRequest) {
       reply = fallbackReply(message, person.personalityType || person.category || 'relationship');
     }
 
-  // FIXED: Per-message earnings - KSH 10 per message after bot reply
-  // Credit earning to chat_earnings_cents wallet only if:
-  // 1. Fraud check passes (throttle to 1 message per 5 seconds, max 60/day)
-  // 2. Bot replied with content (non-empty reply)
-  let messageEarningCredited = false;
-  let fraudDetected = false;
+    // FIXED: Per-message earnings - KSH 10 per message after bot reply
+    // Credit earning to chat_earnings_cents wallet only if:
+    // 1. Fraud check passes (throttle to 1 message per 5 seconds, max 60/day)
+    // 2. Bot replied with content (non-empty reply)
+    let messageEarningCredited = false;
+    let fraudDetected = false;
 
-  if (reply && reply.trim().length > 0) {
-    const now = new Date();
-    const messageEarning = person.messageEarning_cents || 1000; // 10 KSh
+    if (reply && reply.trim().length > 0) {
+      const now = new Date();
+      const messageEarning = person.messageEarning_cents || 1000; // 10 KSh
 
-    // Fraud detection: Check if enough time has passed since last earned message (min 5 seconds)
-    if (access.lastMessageEarnedAt) {
-      const timeSinceLastEarning = (now.getTime() - access.lastMessageEarnedAt.getTime()) / 1000;
-      if (timeSinceLastEarning < 5) {
+      // Fraud detection: Check if enough time has passed since last earned message (min 5 seconds)
+      if (access.lastMessageEarnedAt) {
+        const timeSinceLastEarning = (now.getTime() - access.lastMessageEarnedAt.getTime()) / 1000;
+        if (timeSinceLastEarning < 5) {
+          fraudDetected = true;
+          console.warn('[CF Chat] Fraud detection: Message spam throttle triggered');
+        }
+      }
+
+      // Check daily earning limit (max 60 messages per day = KSH 600)
+      const lastEarningDate = access.lastEarningDate;
+      const isNewDay = !lastEarningDate || now.getDate() !== new Date(lastEarningDate).getDate();
+
+      if (isNewDay) {
+        access.messagesEarnedToday = 0;
+      }
+
+      if (access.messagesEarnedToday >= 60) {
         fraudDetected = true;
-        console.warn('[CF Chat] Fraud detection: Message spam throttle triggered');
+        console.warn('[CF Chat] Fraud detection: Daily earning limit reached (60 messages)');
+      }
+
+      // Credit earnings if no fraud detected
+      if (!fraudDetected) {
+        access.chat_earnings_cents = (access.chat_earnings_cents || 0) + messageEarning;
+        access.lastMessageEarnedAt = now;
+        access.lastEarningDate = now;
+        access.messagesEarnedToday = (access.messagesEarnedToday || 0) + 1;
+        messageEarningCredited = true;
+
+        // Log earning for audit
+        console.log('[CF Chat] Message earning credited:', {
+          userId: (currentUser as any)._id,
+          botId: personId,
+          amount: messageEarning / 100,
+          total: access.chat_earnings_cents / 100,
+        });
       }
     }
 
-    // Check daily earning limit (max 60 messages per day = KSH 600)
-    const lastEarningDate = access.lastEarningDate;
-    const isNewDay = !lastEarningDate || now.getDate() !== new Date(lastEarningDate).getDate();
-
-    if (isNewDay) {
-      access.messagesEarnedToday = 0;
-    }
-
-    if (access.messagesEarnedToday >= 60) {
-      fraudDetected = true;
-      console.warn('[CF Chat] Fraud detection: Daily earning limit reached (60 messages)');
-    }
-
-    // Credit earnings if no fraud detected
-    if (!fraudDetected) {
-      access.chat_earnings_cents = (access.chat_earnings_cents || 0) + messageEarning;
-      access.lastMessageEarnedAt = now;
-      access.lastEarningDate = now;
-      access.messagesEarnedToday = (access.messagesEarnedToday || 0) + 1;
-      messageEarningCredited = true;
-
-      console.log('[CF Chat] Message earning credited:', {
-        userId: (currentUser as any)._id,
-        botId: personId,
-        amount: messageEarning / 100,
-        total: access.chat_earnings_cents / 100,
-      });
-    }
-  }
-
-  await access.save();
+    await access.save();
 
     // Persist the new user + assistant message pair to the DB so the history
     // survives page refreshes and navigation away. Messages are only cleared
@@ -660,14 +661,14 @@ export async function POST(request: NextRequest) {
       }
     );
 
-  return NextResponse.json({
-    success: true,
-    reply,
-    messageEarningCredited,
-    fraudDetected,
-    totalChatEarnings: access.chat_earnings_cents / 100, // Return in KSH
-    dailyMessagesCount: access.messagesEarnedToday,
-  });
+    return NextResponse.json({
+      success: true,
+      reply,
+      messageEarningCredited,
+      fraudDetected,
+      totalChatEarnings: access.chat_earnings_cents / 100, // Return in KSH
+      dailyMessagesCount: access.messagesEarnedToday,
+    });
   } catch (error) {
     console.error('[CF Chat] Error:', error);
     return NextResponse.json(
