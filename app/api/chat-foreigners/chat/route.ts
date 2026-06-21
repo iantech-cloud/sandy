@@ -368,15 +368,21 @@ export async function GET(request: NextRequest) {
       bot_id: personId,
     }).lean() as any;
 
-    if (!access) {
-      return NextResponse.json({ success: true, messages: [], messageCount: 0 });
-    }
-
-    return NextResponse.json({
-      success: true,
-      messages: access.messages || [],
-      messageCount: access.messageCount || 0,
+  if (!access) {
+    return NextResponse.json({ 
+      success: true, 
+      messages: [], 
+      totalChatEarnings: 0,
+      lifetimeAccessUnlocked: false,
     });
+  }
+
+  return NextResponse.json({
+    success: true,
+    messages: access.messages || [],
+    totalChatEarnings: (access.chat_earnings_cents || 0) / 100,
+    lifetimeAccessUnlocked: access.lifetimeAccessUnlocked || false,
+  });
   } catch (error) {
     console.error('[CF Chat] GET error:', error);
     return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 });
@@ -447,7 +453,14 @@ export async function POST(request: NextRequest) {
         reply = fallbackReply(message, person.personalityType || person.category || 'relationship');
       }
 
-      return NextResponse.json({ success: true, reply, messageCount: 0, milestoneReached: false });
+      return NextResponse.json({ 
+    success: true, 
+    reply, 
+    messageEarningCredited: false,
+    fraudDetected: false,
+    totalChatEarnings: 0,
+    dailyMessagesCount: 0,
+  });
     }
 
     // ── Authenticated path ────────────────────────────────────────────────────
@@ -577,68 +590,57 @@ export async function POST(request: NextRequest) {
       reply = fallbackReply(message, person.personalityType || person.category || 'relationship');
     }
 
-    // Update message count and check milestone
-    access.messageCount = (access.messageCount || 0) + 1;
-    const milestone = person.messageLimitForMilestone || 20;
-    let milestoneReached = false;
+  // FIXED: Per-message earnings - KSH 10 per message after bot reply
+  // Credit earning to chat_earnings_cents wallet only if:
+  // 1. Fraud check passes (throttle to 1 message per 5 seconds, max 60/day)
+  // 2. Bot replied with content (non-empty reply)
+  let messageEarningCredited = false;
+  let fraudDetected = false;
 
-    if (!access.firstMilestoneComplete && access.messageCount >= milestone) {
-      access.firstMilestoneComplete = true;
-      access.milestoneCompletedAt = new Date();
-      milestoneReached = true;
+  if (reply && reply.trim().length > 0) {
+    const now = new Date();
+    const messageEarning = person.messageEarning_cents || 1000; // 10 KSh
 
-      // Credit referrer milestone bonus
-      try {
-        const referralRecord = await Referral.findOne({ referred_id: (currentUser as any)._id });
-        if (referralRecord) {
-          const referrerId = referralRecord.referrer_id;
-          const bonusAmount = person.milestoneBonus_cents || 1000; // 10 KSh
-
-          const existingBonus = await ChatForeignersReferralEarning.findOne({
-            referrer_id: referrerId,
-            referee_id: (currentUser as any)._id,
-            bot_id: personId,
-            earningType: 'milestone_bonus',
-          });
-
-          if (!existingBonus) {
-            await ChatForeignersReferralEarning.create({
-              referrer_id: referrerId,
-              referee_id: (currentUser as any)._id,
-              bot_id: personId,
-              earningType: 'milestone_bonus',
-              amount_cents: bonusAmount,
-              status: 'completed',
-            });
-
-            // Credit referrer's wallet
-            let referrerWallet = await ChatForeignersWallet.findOne({ user_id: referrerId });
-            if (!referrerWallet) {
-              referrerWallet = new ChatForeignersWallet({ user_id: referrerId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0 });
-            }
-            referrerWallet.balance_cents += bonusAmount;
-            referrerWallet.total_earned_cents += bonusAmount;
-            await referrerWallet.save();
-
-            await ChatForeignersTransaction.create({
-              user_id: referrerId,
-              amount_cents: bonusAmount,
-              type: 'CHAT_EARNINGS',
-              description: `Milestone bonus: referred user reached ${milestone} messages`,
-              status: 'completed',
-              target_type: 'user',
-              target_id: referrerId.toString(),
-            });
-
-            console.log('[CF Chat] Milestone bonus paid to referrer:', { referrerId, amount: bonusAmount / 100 });
-          }
-        }
-      } catch (err) {
-        console.error('[CF Chat] Milestone bonus error (non-fatal):', err);
+    // Fraud detection: Check if enough time has passed since last earned message (min 5 seconds)
+    if (access.lastMessageEarnedAt) {
+      const timeSinceLastEarning = (now.getTime() - access.lastMessageEarnedAt.getTime()) / 1000;
+      if (timeSinceLastEarning < 5) {
+        fraudDetected = true;
+        console.warn('[CF Chat] Fraud detection: Message spam throttle triggered');
       }
     }
 
-    await access.save();
+    // Check daily earning limit (max 60 messages per day = KSH 600)
+    const lastEarningDate = access.lastEarningDate;
+    const isNewDay = !lastEarningDate || now.getDate() !== new Date(lastEarningDate).getDate();
+
+    if (isNewDay) {
+      access.messagesEarnedToday = 0;
+    }
+
+    if (access.messagesEarnedToday >= 60) {
+      fraudDetected = true;
+      console.warn('[CF Chat] Fraud detection: Daily earning limit reached (60 messages)');
+    }
+
+    // Credit earnings if no fraud detected
+    if (!fraudDetected) {
+      access.chat_earnings_cents = (access.chat_earnings_cents || 0) + messageEarning;
+      access.lastMessageEarnedAt = now;
+      access.lastEarningDate = now;
+      access.messagesEarnedToday = (access.messagesEarnedToday || 0) + 1;
+      messageEarningCredited = true;
+
+      console.log('[CF Chat] Message earning credited:', {
+        userId: (currentUser as any)._id,
+        botId: personId,
+        amount: messageEarning / 100,
+        total: access.chat_earnings_cents / 100,
+      });
+    }
+  }
+
+  await access.save();
 
     // Persist the new user + assistant message pair to the DB so the history
     // survives page refreshes and navigation away. Messages are only cleared
@@ -658,12 +660,14 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    return NextResponse.json({
-      success: true,
-      reply,
-      messageCount: access.messageCount,
-      milestoneReached,
-    });
+  return NextResponse.json({
+    success: true,
+    reply,
+    messageEarningCredited,
+    fraudDetected,
+    totalChatEarnings: access.chat_earnings_cents / 100, // Return in KSH
+    dailyMessagesCount: access.messagesEarnedToday,
+  });
   } catch (error) {
     console.error('[CF Chat] Error:', error);
     return NextResponse.json(
