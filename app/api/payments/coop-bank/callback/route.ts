@@ -322,6 +322,30 @@ export async function POST(request: NextRequest) {
     }).session(session);
 
     if (chatForeignersUnlock && paymentStatus === 'completed') {
+      // FIXED: Grant lifetime access immediately for chat-foreigners
+      // Set lifetimeAccessUnlocked = true for permanent chat access after KSH 100 payment
+      try {
+        await ChatForeignersBotAccess.findOneAndUpdate(
+          {
+            user_id: chatForeignersUnlock.user_id,
+            bot_id: chatForeignersUnlock.metadata?.bot_id,
+          },
+          {
+            lifetimeAccessUnlocked: true,
+            lifetimeAccessUnlockedAt: new Date(),
+          },
+          { session }
+        );
+
+        console.log('[CoopCallback] Lifetime access granted for chat-foreigners:', {
+          userId: chatForeignersUnlock.user_id,
+          botId: chatForeignersUnlock.metadata?.bot_id,
+          amount: chatForeignersUnlock.amount_cents / 100,
+        });
+      } catch (err) {
+        console.error('[CoopCallback] Error granting lifetime access:', err);
+      }
+
       // Commit the main transaction first, then process the unlock in the background
       // so the callback response is never delayed by the unlock work.
       await session.commitTransaction();
@@ -337,7 +361,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         data: { status: paymentStatus, messageReference },
-        message: 'Chat foreigners unlock payment confirmed. Processing in background.',
+        message: 'Lifetime chat access unlocked! Enjoy unlimited chatting.',
       });
     }
 
