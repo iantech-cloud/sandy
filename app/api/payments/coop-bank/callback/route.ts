@@ -322,7 +322,7 @@ export async function POST(request: NextRequest) {
     }).session(session);
 
     if (chatForeignersUnlock && paymentStatus === 'completed') {
-      // FIXED: Grant lifetime access immediately for chat-foreigners
+      // Grant lifetime access immediately for chat-foreigners
       // Set lifetimeAccessUnlocked = true for permanent chat access after KSH 100 payment
       try {
         await ChatForeignersBotAccess.findOneAndUpdate(

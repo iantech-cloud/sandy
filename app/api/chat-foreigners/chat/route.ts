@@ -369,15 +369,21 @@ export async function GET(request: NextRequest) {
       bot_id: personId,
     }).lean() as any;
 
-    if (!access) {
-      return NextResponse.json({ success: true, messages: [], messageCount: 0 });
-    }
-
-    return NextResponse.json({
-      success: true,
-      messages: access.messages || [],
-      messageCount: access.messageCount || 0,
+  if (!access) {
+    return NextResponse.json({ 
+      success: true, 
+      messages: [], 
+      totalChatEarnings: 0,
+      lifetimeAccessUnlocked: false,
     });
+  }
+
+  return NextResponse.json({
+    success: true,
+    messages: access.messages || [],
+    totalChatEarnings: (access.chat_earnings_cents || 0) / 100,
+    lifetimeAccessUnlocked: access.lifetimeAccessUnlocked || false,
+  });
   } catch (error) {
     console.error('[CF Chat] GET error:', error);
     return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 });
@@ -448,7 +454,14 @@ export async function POST(request: NextRequest) {
         reply = fallbackReply(message, person.personalityType || person.category || 'relationship');
       }
 
-      return NextResponse.json({ success: true, reply, messageCount: 0, milestoneReached: false });
+      return NextResponse.json({ 
+    success: true, 
+    reply, 
+    messageEarningCredited: false,
+    fraudDetected: false,
+    totalChatEarnings: 0,
+    dailyMessagesCount: 0,
+  });
     }
 
     // ── Authenticated path ────────────────────────────────────────────────────
@@ -578,7 +591,7 @@ export async function POST(request: NextRequest) {
       reply = fallbackReply(message, person.personalityType || person.category || 'relationship');
     }
 
-    // FIXED: Per-message earnings - KSH 10 per message after bot reply
+    // Per-message earnings - KSH 10 per message after bot reply
     // Credit earning to chat_earnings_cents wallet only if:
     // 1. Fraud check passes (throttle to 1 message per 5 seconds, max 60/day)
     // 2. Bot replied with content (non-empty reply)
@@ -600,7 +613,8 @@ export async function POST(request: NextRequest) {
 
       // Check daily earning limit (max 60 messages per day = KSH 600)
       const lastEarningDate = access.lastEarningDate;
-      const isNewDay = !lastEarningDate || now.getDate() !== new Date(lastEarningDate).getDate();
+      const lastEarningDateObj = lastEarningDate ? new Date(lastEarningDate) : null;
+      const isNewDay = !lastEarningDateObj || now.toDateString() !== lastEarningDateObj.toDateString();
 
       if (isNewDay) {
         access.messagesEarnedToday = 0;

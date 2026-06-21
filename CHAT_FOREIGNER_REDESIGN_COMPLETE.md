@@ -16,7 +16,7 @@ Transformed the Chat Foreigner system from milestone-based (KSH 100 per 20 messa
 - Added: messageEarning_cents (1000 = 10 KSh per message)
 
 **ChatForeignersWallet Model:**
-- Renamed: chat_earnings_cents field to track per-message earnings
+- Retained: chat_earnings_cents field for wallet-level earnings totals
 
 ### 2. Per-Message Earnings Logic (chat/route.ts)
 Implemented automatic KSH 10 earnings credited to chat_earnings_cents wallet when:

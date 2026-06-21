@@ -70,12 +70,11 @@ const ChatForeignersBotSchema = new Schema({
     default: true,
     index: true 
   },
-  // One-time lifetime access unlock cost
   unlockCost_cents: {
     type: Number,
     default: 10000, // 100 KSh - one-time payment for lifetime access
   },
-  // Per-message earning amount (KSH 10)
+  // Per-message earning amount (1000 cents = KSH 10)
   messageEarning_cents: {
     type: Number,
     default: 1000, // 10 KSh per message after bot reply
