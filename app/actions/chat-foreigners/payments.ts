@@ -329,9 +329,11 @@ export async function completeBotUnlockPayment(
 
     if (existingAccess) {
       // Already unlocked (should not happen due to payment guard, but be safe)
-      // Just ensure it's not closed
+      // Just ensure it's not closed and mark lifetime access
       existingAccess.isClosed = false;
       existingAccess.closedAt = undefined;
+      existingAccess.lifetimeAccessUnlocked = true;
+      existingAccess.lifetimeAccessUnlockedAt = new Date();
       await existingAccess.save({ session });
     } else {
       await ChatForeignersBotAccess.create(
@@ -341,6 +343,8 @@ export async function completeBotUnlockPayment(
             bot_id: payment.bot_id,
             unlockedAt: new Date(),
             isClosed: false,
+            lifetimeAccessUnlocked: true,
+            lifetimeAccessUnlockedAt: new Date(),
           },
         ],
         { session }

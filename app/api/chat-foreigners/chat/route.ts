@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import OpenAI from 'openai';
 import { generateText } from 'ai';
 import { rateLimit } from '@/app/lib/rate-limit';
+import mongoose from 'mongoose';
 
 const nvidiaClient = process.env.NVIDIA_API_KEY
   ? new OpenAI({
@@ -617,6 +618,26 @@ export async function POST(request: NextRequest) {
         access.lastEarningDate = now;
         access.messagesEarnedToday = (access.messagesEarnedToday || 0) + 1;
         messageEarningCredited = true;
+
+        // Create transaction record for audit trail
+        try {
+          await ChatForeignersTransaction.create({
+            user_id: (currentUser as any)._id.toString(),
+            amount_cents: messageEarning,
+            type: 'CHAT_MESSAGE_EARNING',
+            description: `Message earning from chat with ${person.name}`,
+            status: 'completed',
+            bot_id: new mongoose.Types.ObjectId(personId),
+            target_type: 'user',
+            target_id: (currentUser as any)._id.toString(),
+            metadata: {
+              totalChatEarnings: access.chat_earnings_cents / 100,
+              dailyCount: (access.messagesEarnedToday || 0),
+            },
+          });
+        } catch (txnErr) {
+          console.error('[CF Chat] Transaction creation failed:', txnErr);
+        }
 
         // Log earning for audit
         console.log('[CF Chat] Message earning credited:', {
