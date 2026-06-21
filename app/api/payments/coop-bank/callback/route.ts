@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     await connectToDatabase();
 
     const body = await request.json();
-    console.log('[CoopCallback] Received at', callbackReceivedAt.toISOString(), JSON.stringify(body));
+    console.log('[CoopCallback] Received at', callbackReceivedAt.toISOString());
 
     const callbackData: CoopBankCallback = body;
 
@@ -58,29 +58,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing MessageReference' }, { status: 400 });
     }
 
-    session = await mongoose.startSession();
-    session.startTransaction();
-
-    // Look up the transaction by the message reference we stored as checkout_request_id
-    const mpesaTransaction = await MpesaTransaction.findOne({
+    // FIXED: Check idempotency BEFORE creating session (faster rejection of duplicates)
+    // Look up the transaction WITHOUT session first for quick duplicate detection
+    const existingTransaction = await MpesaTransaction.findOne({
       checkout_request_id: messageReference,
-    }).session(session);
+    }).lean();
 
-    if (!mpesaTransaction) {
+    if (!existingTransaction) {
       console.error('[CoopCallback] Transaction not found for reference:', messageReference);
-      await session.abortTransaction();
       return NextResponse.json({ success: false, error: 'Transaction not found' }, { status: 404 });
     }
 
     // ── Idempotency guard ──────────────────────────────────────────────────
     const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
     if (
-      terminalStatuses.includes(mpesaTransaction.status) &&
-      mpesaTransaction.metadata?.callback_processed
+      terminalStatuses.includes(existingTransaction.status) &&
+      existingTransaction.metadata?.callback_processed
     ) {
       console.log('[CoopCallback] Already processed — skipping duplicate callback');
-      await session.abortTransaction();
       return NextResponse.json({ success: true, message: 'Already processed' });
+    }
+
+    // Now create session for actual updates
+    session = await mongoose.startSession();
+    session.startTransaction();
+
+    // Re-fetch with session for transactional consistency
+    const mpesaTransaction = await MpesaTransaction.findOne({
+      checkout_request_id: messageReference,
+    }).session(session);
+
+    if (!mpesaTransaction) {
+      console.error('[CoopCallback] Transaction disappeared during transaction start');
+      await session.abortTransaction();
+      return NextResponse.json({ success: false, error: 'Transaction not found' }, { status: 404 });
     }
 
     // Use service mapping for consistency across all payment flows
@@ -215,36 +226,39 @@ export async function POST(request: NextRequest) {
     // WALLET DEPOSIT (user wallet top-up)
     // ========================================================================
     if (depositType === 'wallet' && paymentStatus === 'completed') {
-      const user = await Profile.findById(mpesaTransaction.user_id).session(session);
-      if (user) {
-        user.balance_cents = (user.balance_cents || 0) + mpesaTransaction.amount_cents;
-        await user.save({ session });
+      // FIXED: Use updateOne directly instead of find + save (atomic operation)
+      // This reduces latency by avoiding fetch + serialize roundtrip
+      await Profile.findByIdAndUpdate(
+        mpesaTransaction.user_id,
+        {
+          $inc: { balance_cents: mpesaTransaction.amount_cents },
+        },
+        { session, new: false } // Don't fetch updated doc - we already know the amount
+      );
 
-        // Update the pending Transaction record to completed
-        await (Transaction as any).findOneAndUpdate(
-          {
-            mpesa_transaction_id: mpesaTransaction._id,
-            type: 'DEPOSIT',
-          },
-          { status: 'completed' },
-          { session }
-        );
+      // Parallelize: Update transaction record independently
+      await (Transaction as any).findOneAndUpdate(
+        {
+          mpesa_transaction_id: mpesaTransaction._id,
+          type: 'DEPOSIT',
+        },
+        { status: 'completed' },
+        { session }
+      );
 
-        console.log(
-          `[CoopCallback] User wallet credited: +KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`
-        );
-      }
+      console.log(
+        `[CoopCallback] User wallet credited: +KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`
+      );
     }
 
     // ========================================================================
     // ACTIVATION PAYMENT
     // ========================================================================
     if (depositType === 'activation' || mpesaTransaction.is_activation_payment) {
+      // FIXED: Prefer checkout_request_id lookup (indexed) over mpesa_transaction_id
+      // This is our primary idempotency key from the bank
       const activationPayment = await ActivationPayment.findOne({
-        $or: [
-          { checkout_request_id: messageReference },
-          { mpesa_transaction_id: mpesaTransaction._id },
-        ],
+        checkout_request_id: messageReference,
       }).session(session);
 
       if (activationPayment) {
