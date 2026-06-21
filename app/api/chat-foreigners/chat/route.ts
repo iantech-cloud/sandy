@@ -590,7 +590,7 @@ export async function POST(request: NextRequest) {
       reply = fallbackReply(message, person.personalityType || person.category || 'relationship');
     }
 
-    // FIXED: Per-message earnings - KSH 10 per message after bot reply
+    // Per-message earnings - KSH 10 per message after bot reply
     // Credit earning to chat_earnings_cents wallet only if:
     // 1. Fraud check passes (throttle to 1 message per 5 seconds, max 60/day)
     // 2. Bot replied with content (non-empty reply)
