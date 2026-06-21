@@ -70,21 +70,15 @@ const ChatForeignersBotSchema = new Schema({
     default: true,
     index: true 
   },
+  // One-time lifetime access unlock cost
   unlockCost_cents: {
     type: Number,
-    default: 10000, // 100 KSh
+    default: 10000, // 100 KSh - one-time payment for lifetime access
   },
-  renewalCost_cents: {
+  // Per-message earning amount (KSH 10)
+  messageEarning_cents: {
     type: Number,
-    default: 5000, // 50 KSh (if applicable)
-  },
-  messageLimitForMilestone: {
-    type: Number,
-    default: 20,
-  },
-  milestoneBonus_cents: {
-    type: Number,
-    default: 1000, // 10 KSh
+    default: 1000, // 10 KSh per message after bot reply
   },
   training_data: {
     type: String,
@@ -131,19 +125,33 @@ const ChatForeignersBotAccessSchema = new Schema({
     type: Date,
     default: Date.now,
   },
-  messageCount: {
-    type: Number,
-    default: 0,
-  },
-  firstMilestoneComplete: {
+  // Lifetime access tracking - once paid KSH 100, user has permanent access
+  lifetimeAccessUnlocked: {
     type: Boolean,
     default: false,
   },
-  milestoneCompletedAt: {
-    type: Date
+  lifetimeAccessUnlockedAt: {
+    type: Date,
+    default: null,
   },
-  expiresAt: {
-    type: Date // For subscription-based access
+  // Per-message earnings - KSH 10 credited after bot reply
+  chat_earnings_cents: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  // Fraud detection - throttle to 1 message per 5 seconds
+  lastMessageEarnedAt: {
+    type: Date,
+    default: null,
+  },
+  messagesEarnedToday: {
+    type: Number,
+    default: 0,
+  },
+  lastEarningDate: {
+    type: Date,
+    default: null,
   },
   // Persisted message history — kept for the full duration of the active chat
   // session and cleared only when the chat is explicitly completed (isClosed = true).
