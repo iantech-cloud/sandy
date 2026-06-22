@@ -12,9 +12,6 @@ interface Transaction {
   type: string;
   type_label: string;
   source: string;
-  /** 'user' | 'company' — raw schema value */
-  target_type?: string;
-  /** 'User Wallet' | 'Company' — display label */
   target: string;
   earning_source_type: string;
   description: string;
@@ -68,13 +65,10 @@ function safeDate(date: string | null | undefined): string {
   }
 }
 
-function refLabel(txn: Transaction): { primary: string | null; secondary: string | null } {
-  return {
-    // M-Pesa receipt number from the Coop bank callback (e.g. UFM248OFZF)
-    primary:   txn.mpesa_reference_id || null,
-    // Coop/platform reference as returned by the bank (e.g. SPINDY17821…)
-    secondary: txn.coop_reference_id  || null,
-  };
+function refLabel(txn: Transaction): string {
+  if (txn.coop_reference_id)  return `Coop: ${txn.coop_reference_id.slice(0, 14)}`;
+  if (txn.mpesa_reference_id) return `M-Pesa: ${txn.mpesa_reference_id.slice(0, 14)}`;
+  return txn.id.slice(-8).toUpperCase();
 }
 
 export default function TransactionsPage() {
@@ -164,9 +158,8 @@ export default function TransactionsPage() {
           </div>
 
           <div className="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-lg p-5">
-            <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide">Available Balance</p>
+            <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide">Wallet Balance</p>
             <p className="text-2xl font-bold text-blue-400">KES {stats.walletBalance.toLocaleString('en-KE', { minimumFractionDigits: 0 })}</p>
-            <p className="text-slate-500 text-xs mt-1">Main wallet</p>
           </div>
         </div>
 
@@ -271,27 +264,8 @@ export default function TransactionsPage() {
                               {txn.status ? txn.status.charAt(0).toUpperCase() + txn.status.slice(1) : 'Unknown'}
                             </span>
                           </td>
-                          <td className="px-5 py-4 text-xs font-mono">
-                            {(() => {
-                              const { primary, secondary } = refLabel(txn);
-                              if (!primary && !secondary) return <span className="text-slate-600">—</span>;
-                              return (
-                                <div className="space-y-0.5">
-                                  {primary && (
-                                    <div>
-                                      <span className="text-slate-500 font-sans text-[10px] uppercase tracking-wide">M-Pesa: </span>
-                                      <span className="text-blue-400">{primary}</span>
-                                    </div>
-                                  )}
-                                  {secondary && (
-                                    <div>
-                                      <span className="text-slate-500 font-sans text-[10px] uppercase tracking-wide">Ref: </span>
-                                      <span className="text-slate-400">{secondary}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
+                          <td className="px-5 py-4 text-xs text-slate-500 font-mono whitespace-nowrap">
+                            {refLabel(txn)}
                           </td>
                         </tr>
                       );

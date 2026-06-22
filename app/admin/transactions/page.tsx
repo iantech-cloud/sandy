@@ -20,9 +20,7 @@ interface Transaction {
   status: string;
   description: string;
   date: string;
-  /** 'user' | 'company' — raw field from schema */
-  target_type?: string;
-  /** 'User Wallet' | 'Company' — display label */
+  /** 'User Wallet' | 'Company' — always set, never N/A */
   target: string;
   coop_reference_id?: string | null;
   mpesa_reference_id?: string | null;
@@ -268,18 +266,18 @@ export default function TransactionsPage() {
 
   const exportToCSV = () => {
     const headers = [
-      'Date', 'Target', 'User', 'Type', 'Amount (KES)', 'Status',
-      'Ref ID (Coop/SPINDY)', 'MPESA Ref ID', 'Description',
+      'Date', 'Coop Reference', 'M-Pesa Receipt', 'Target', 'User', 'Type',
+      'Amount (KES)', 'Status', 'Description',
     ];
     const rows = transactions.map(t => [
       new Date(t.date).toLocaleString(),
+      t.coop_reference_id  || 'N/A',
+      t.mpesa_reference_id || 'N/A',
       t.target,
       `${t.user_username || 'N/A'} (${t.user_email || 'N/A'})`,
       t.type_label && t.type_label !== 'N/A' ? t.type_label : t.type,
       t.amount.toFixed(2),
       t.status,
-      t.coop_reference_id  || 'N/A',
-      t.mpesa_reference_id || 'N/A',
       t.description,
     ]);
     
@@ -526,7 +524,6 @@ export default function TransactionsPage() {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Type</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Amount</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ref IDs</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
               </tr>
@@ -534,7 +531,7 @@ export default function TransactionsPage() {
             <tbody>
               {transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                     No transactions found
                   </td>
                 </tr>
@@ -583,26 +580,20 @@ export default function TransactionsPage() {
                         {txn.status}
                       </span>
                     </td>
-                    {/* Dedicated Ref IDs column — Coop (SPINDY…) and M-Pesa receipt */}
-                    <td className="px-4 py-3 text-xs font-mono min-w-[160px]">
-                      {txn.coop_reference_id ? (
-                        <div className="mb-1">
-                          <span className="text-gray-400 font-sans text-[10px] uppercase tracking-wide">Ref ID: </span>
-                          <span className="text-gray-700 break-all">{txn.coop_reference_id}</span>
-                        </div>
-                      ) : null}
-                      {txn.mpesa_reference_id ? (
-                        <div>
-                          <span className="text-gray-400 font-sans text-[10px] uppercase tracking-wide">MPESA Ref ID: </span>
-                          <span className="text-blue-600 break-all">{txn.mpesa_reference_id}</span>
-                        </div>
-                      ) : null}
-                      {!txn.coop_reference_id && !txn.mpesa_reference_id && (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
-                      {txn.description || '—'}
+                      <div>
+                        <span>{txn.description || '—'}</span>
+                        {txn.mpesa_reference_id && (
+                          <span className="block text-xs text-blue-600 mt-1 font-mono">
+                            M-Pesa: {txn.mpesa_reference_id}
+                          </span>
+                        )}
+                        {txn.coop_reference_id && (
+                          <span className="block text-xs text-gray-500 mt-1 font-mono">
+                            Coop: {txn.coop_reference_id}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {/* Update action temporarily disabled */}
