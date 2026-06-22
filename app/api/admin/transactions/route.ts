@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectToDatabase, Profile, ChatForeignersTransaction } from '@/app/lib/models';
+import mongoose from 'mongoose';
 
 const TYPE_LABELS: Record<string, string> = {
   REFERRAL:            'Referral Bonus',
@@ -35,13 +36,6 @@ const DEBIT_TYPES = new Set([
   'COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SURVEY_REVOKE',
 ]);
 
-// Transaction types that represent real platform payouts to users
-// (excludes DEPOSIT — that is user-funded money deposited INTO the platform, not a payout)
-const PAYOUT_TYPES = [
-  'WITHDRAWAL', 'REFERRAL', 'TASK_PAYMENT', 'BONUS',
-  'SPIN_WIN', 'SPIN_PRIZE', 'SPIN_WALLET_DEPOSIT',
-  'SURVEY', 'ADMIN_CREDIT',
-];
 
 export async function GET(request: NextRequest) {
   try {
@@ -69,8 +63,8 @@ export async function GET(request: NextRequest) {
     const collection = searchParams.get('collection') || 'all';
     const skip       = (page - 1) * limit;
 
-    const mongoose = (await import('mongoose')).default;
     const LegacyTransaction = mongoose.models['Transaction'] || null;
+    const WithdrawalModel   = mongoose.models['Withdrawal']  || null;
 
     // ─── Date range ──────────────────────────────────────────────
     const dateRange: any = {};
@@ -111,6 +105,18 @@ export async function GET(request: NextRequest) {
     }
     if (legacyMpesaIds !== null) {
       legacyMatch.mpesa_transaction_id = { $in: legacyMpesaIds };
+    }
+
+    // ─── Total User Payouts: sourced from the Withdrawal collection ──────────────
+    // This matches exactly what the admin/withdrawals page shows.
+    // Sum all completed + approved withdrawals (approved = queued for disbursement).
+    let totalPayoutsFromWithdrawals = 0;
+    if (WithdrawalModel) {
+      const wResult = await WithdrawalModel.aggregate([
+        { $match: { status: { $in: ['completed', 'approved'] } } },
+        { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+      ]);
+      totalPayoutsFromWithdrawals = (wResult[0]?.total || 0) / 100;
     }
 
     // ─── $facet: paginated data + all-time totals in one query ───
@@ -159,12 +165,8 @@ export async function GET(request: NextRequest) {
                   { $match: { target_type: 'company' } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
-                // Payouts = money the PLATFORM pays OUT to users
-                // Excludes DEPOSIT (user-funded) — those inflate the figure incorrectly
-                totalPayouts:  [
-                  { $match: { type: { $in: PAYOUT_TYPES } } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
+                // totalPayouts is now sourced from the Withdrawal model — not the transaction stream
+                totalPayouts: [{ $limit: 0 }, { $count: 'n' }],
                 completedCount: [{ $match: { status: 'completed' } }, { $count: 'n' }],
                 pendingCount:   [{ $match: { status: 'pending'   } }, { $count: 'n' }],
                 failedCount:    [{ $match: { status: 'failed'    } }, { $count: 'n' }],
@@ -210,12 +212,8 @@ export async function GET(request: NextRequest) {
                   { $match: { target_type: 'company' } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
-                // CF payouts = money going to users (CHAT_MESSAGE_EARNING, CHAT_REFERRAL_EARNING)
-                // Excludes CHAT_DEPOSIT (user-funded)
-                totalPayouts:  [
-                  { $match: { type: { $in: ['CHAT_MESSAGE_EARNING', 'CHAT_REFERRAL_EARNING'] } } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
+                // totalPayouts is sourced from the Withdrawal model — not the transaction stream
+                totalPayouts: [{ $limit: 0 }, { $count: 'n' }],
                 completedCount: [{ $match: { status: 'completed' } }, { $count: 'n' }],
                 pendingCount:   [{ $match: { status: 'pending'   } }, { $count: 'n' }],
                 failedCount:    [{ $match: { status: 'failed'    } }, { $count: 'n' }],
@@ -311,7 +309,8 @@ export async function GET(request: NextRequest) {
     const summary = {
       totalCount,
       totalRevenue:   ((lr.totalRevenue[0]?.total  || 0) + (cr.totalRevenue[0]?.total  || 0)) / 100,
-      totalPayouts:   ((lr.totalPayouts[0]?.total  || 0) + (cr.totalPayouts[0]?.total  || 0)) / 100,
+      // totalPayouts is sourced from the Withdrawal model (same source as admin/withdrawals page)
+      totalPayouts:   totalPayoutsFromWithdrawals,
       completedCount: (lr.completedCount[0]?.n || 0) + (cr.completedCount[0]?.n || 0),
       pendingCount:   (lr.pendingCount[0]?.n   || 0) + (cr.pendingCount[0]?.n   || 0),
       failedCount:    (lr.failedCount[0]?.n    || 0) + (cr.failedCount[0]?.n    || 0),
