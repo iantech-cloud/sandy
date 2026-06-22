@@ -1,6 +1,6 @@
 'use server';
 
-import { connectToDatabase, Profile, Referral, Transaction, ChatForeignersTransaction } from '../lib/models';
+import { connectToDatabase, Profile, Referral, Transaction } from '../lib/models';
 import { auth } from '@/auth'; 
 import { Session } from '@auth/core/types';
 
@@ -131,11 +131,9 @@ export async function getReferrals(filters?: {
     }
 
     // Optimized query: only select needed fields and use database-level pagination
-    // Note: Profile schema uses is_verified (boolean) and activation_paid_at (Date),
-    // NOT activation_status — populate both to determine activation state.
     const userReferrals = await (Referral as any)
       .find(query)
-      .populate('referred_id', 'username email status created_at is_verified activation_paid_at')
+      .populate('referred_id', 'username email status created_at activation_status') // Reduced fields
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limit)
@@ -144,8 +142,7 @@ export async function getReferrals(filters?: {
 
     const totalCount = await (Referral as any).countDocuments(query);
 
-    // Get referral earnings from LEGACY Transaction collection
-    // Referral bonuses are stored here (not in ChatForeignersTransaction)
+    // Get referral earnings from REFERRAL transactions for this user
     const referralTransactions = await (Transaction as any)
       .find({
         user_id: currentUser._id,
@@ -156,11 +153,10 @@ export async function getReferrals(filters?: {
       .lean()
       .exec();
 
-    // Build earnings map keyed by referred user ID string.
-    // activation.ts stores both referred_user_id and referredUser in metadata — check both.
+    // Build earnings map keyed by referred user ID string
     const earningsMap = new Map<string, number>();
     (referralTransactions as TransactionDocument[]).forEach((tx) => {
-      const refId = (tx.metadata?.referred_user_id || tx.metadata?.referredUser)?.toString();
+      const refId = tx.metadata?.referredUser?.toString();
       if (refId) {
         earningsMap.set(refId, (earningsMap.get(refId) || 0) + tx.amount_cents);
       }
@@ -184,10 +180,7 @@ export async function getReferrals(filters?: {
       const referredUser = ref.referred_id;
       const userId = referredUser?._id?.toString() || '';
       const earnings = earningsMap.get(userId) || 0;
-      // is_verified is set to true when the user pays the activation fee
-      const activationStatus = referredUser?.is_verified || referredUser?.activation_paid_at
-        ? 'activated'
-        : 'not_activated';
+      const activationStatus = referredUser?.activation_status === 'activated' ? 'activated' : 'not_activated';
 
       return {
         id: ref._id.toString(),
@@ -241,8 +234,7 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
       return { success: false, message: 'User not found' };
     }
 
-    // Get all completed REFERRAL transactions earned by this user from the LEGACY Transaction
-    // collection — that is where referral bonuses (activation + CF unlock) are recorded.
+    // Get all completed REFERRAL transactions earned by this user, split by level
     const allReferralTransactions = await (Transaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
@@ -323,7 +315,7 @@ export async function getReferralSummary(): Promise<{
     });
 
     // Get total referral earnings
-    const earningsResult = await (ChatForeignersTransaction as any).aggregate([
+    const earningsResult = await (Transaction as any).aggregate([
       {
         $match: {
           user_id: currentUser._id,
@@ -340,7 +332,7 @@ export async function getReferralSummary(): Promise<{
     ]);
 
     // Get pending referral earnings
-    const pendingEarningsResult = await (ChatForeignersTransaction as any).aggregate([
+    const pendingEarningsResult = await (Transaction as any).aggregate([
       {
         $match: {
           user_id: currentUser._id,

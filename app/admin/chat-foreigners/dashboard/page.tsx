@@ -11,7 +11,6 @@ interface Analytics {
   totalRevenue: number;
   totalMilestones: number;
   totalCFEarningsPaid: number;
-  totalChatEarningsCredited: number;
   topPersons: Array<{ name: string; unlocks: number; revenue: number }>;
 }
 
@@ -69,17 +68,6 @@ export default function AnalyticsDashboard() {
         ? (downlineData.data?.totalCFEarnings || 0) / 100
         : 0;
 
-      // Calculate total chat earnings credited across all users
-      const totalChatEarningsCredited = persons.reduce(
-        (sum: number, p: any) =>
-          sum +
-          (p.userAccess || []).reduce(
-            (s: number, a: any) => s + ((a.chat_earnings_cents || 0) / 100),
-            0
-          ),
-        0
-      );
-
       setAnalytics({
         totalPersons: persons.length,
         totalPersonUnlocks,
@@ -87,7 +75,6 @@ export default function AnalyticsDashboard() {
         totalRevenue,
         totalMilestones,
         totalCFEarningsPaid,
-        totalChatEarningsCredited,
         topPersons,
       });
     } catch (error) {
@@ -154,13 +141,6 @@ export default function AnalyticsDashboard() {
       icon: <Network className="w-6 h-6 text-teal-600" />,
       bg: 'bg-teal-50',
       sub: 'Paid to referrers',
-    },
-    {
-      label: 'Chat Earnings Credited',
-      value: `KES ${analytics.totalChatEarningsCredited.toLocaleString()}`,
-      icon: <TrendingUp className="w-6 h-6 text-lime-600" />,
-      bg: 'bg-lime-50',
-      sub: 'From message interactions',
     },
   ];
 

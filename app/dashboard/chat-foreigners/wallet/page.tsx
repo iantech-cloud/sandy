@@ -24,33 +24,8 @@ interface WalletData {
 
 const DEBIT_TYPES = new Set(['CHAT_WITHDRAWAL', 'UNLOCK', 'UNLOCK_FEE']);
 const HIDDEN_TYPES = new Set(['PLATFORM_FEE']);
-const DOWNLINE_TYPES = new Set(['REFERRAL', 'CHAT_REFERRAL_EARNING']);
-const CHAT_EARNING_TYPES = new Set(['CHAT_MESSAGE_EARNING', 'CHAT_EARNINGS']);
-
-// Human-readable label overrides — used when the stored description is stale or unclear
-const TX_LABEL_MAP: Record<string, string> = {
-  CHAT_DEPOSIT:          'Chat wallet deposit',
-  CHAT_MESSAGE_EARNING:  'Chat message earning',
-  CHAT_WITHDRAWAL:       'Chat wallet withdrawal',
-  CHAT_REFERRAL_EARNING: 'Downline bot-unlock commission',
-  CHAT_EARNINGS:         'Chat Foreigners earnings',
-  REFERRAL:              'Referral bonus',
-};
-
-// Correct the description shown so "Milestone bonus: referred user reached 20 messages"
-// is no longer displayed. If the stored description is stale, override it.
-function friendlyDescription(tx: Transaction): string {
-  // If description contains old incorrect copy, replace it
-  const raw = tx.description || '';
-  if (
-    raw.toLowerCase().includes('milestone') ||
-    raw.toLowerCase().includes('20 messages') ||
-    raw.toLowerCase().includes('reached 20')
-  ) {
-    return 'Downline bot-unlock commission (KES 10)';
-  }
-  return raw || TX_LABEL_MAP[tx.type] || tx.type;
-}
+const DOWNLINE_TYPES = new Set(['REFERRAL']);
+const CHAT_EARNING_TYPES = new Set(['CHAT_EARNINGS']);
 
 function isDownlineTx(type: string) {
   return DOWNLINE_TYPES.has(type) && type !== 'CHAT_DEPOSIT';
@@ -100,22 +75,37 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function WalletCard({
+  label,
+  sublabel,
   amount_cents,
   icon,
   gradient,
+  note,
 }: {
+  label: string;
+  sublabel: string;
   amount_cents: number;
   icon: React.ReactNode;
   gradient: string;
+  note?: string;
 }) {
   return (
-    <div className={`rounded-2xl p-5 ${gradient} relative overflow-hidden flex items-center justify-between`}>
+    <div className={`rounded-2xl p-5 ${gradient} relative overflow-hidden`}>
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-white/70 text-xs font-semibold uppercase tracking-widest mb-0.5">{label}</p>
+          <p className="text-white/50 text-[10px]">{sublabel}</p>
+        </div>
+        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 ml-3">
+          {icon}
+        </div>
+      </div>
       <p className="text-3xl font-bold text-white tracking-tight">
         KES {(amount_cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </p>
-      <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 ml-3">
-        {icon}
-      </div>
+      {note && (
+        <p className="text-white/50 text-[10px] mt-2 leading-relaxed">{note}</p>
+      )}
     </div>
   );
 }
@@ -224,14 +214,20 @@ export default function WalletPage() {
         {/* Two wallet cards */}
         <div className="space-y-3">
           <WalletCard
+            label="Downline Earnings"
+            sublabel="From your referrals unlocking chats"
             amount_cents={wallet.downline_earnings_cents}
             icon={<Users size={20} className="text-white" />}
             gradient="bg-gradient-to-br from-amber-600 to-orange-700"
+            note="KSH 75 credited per referred user chat unlock. Transferred to your main wallet."
           />
           <WalletCard
+            label="Chat Earnings"
+            sublabel="From completing 20-message chat sessions"
             amount_cents={wallet.chat_earnings_cents}
             icon={<MessageSquare size={20} className="text-white" />}
             gradient="bg-gradient-to-br from-[#00c97a] to-emerald-700"
+            note="KSH 100 per completed chat session (20+ messages)."
           />
         </div>
 
@@ -318,7 +314,7 @@ export default function WalletPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-zinc-200 truncate leading-tight">
-                        {friendlyDescription(tx)}
+                        {(tx.description || tx.type).replace(/\s*\([^)]*\)/g, '')}
                       </p>
                       <p className="text-[10px] text-zinc-600 mt-0.5">
                         {new Date(tx.createdAt).toLocaleDateString('en-KE', {

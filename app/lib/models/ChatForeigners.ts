@@ -72,12 +72,19 @@ const ChatForeignersBotSchema = new Schema({
   },
   unlockCost_cents: {
     type: Number,
-    default: 10000, // 100 KSh - one-time payment for lifetime access
+    default: 10000, // 100 KSh
   },
-  // Per-message earning amount (1000 cents = KSH 10)
-  messageEarning_cents: {
+  renewalCost_cents: {
     type: Number,
-    default: 1000, // 10 KSh per message after bot reply
+    default: 5000, // 50 KSh (if applicable)
+  },
+  messageLimitForMilestone: {
+    type: Number,
+    default: 20,
+  },
+  milestoneBonus_cents: {
+    type: Number,
+    default: 1000, // 10 KSh
   },
   training_data: {
     type: String,
@@ -124,33 +131,19 @@ const ChatForeignersBotAccessSchema = new Schema({
     type: Date,
     default: Date.now,
   },
-  // Lifetime access tracking - once paid KSH 100, user has permanent access
-  lifetimeAccessUnlocked: {
+  messageCount: {
+    type: Number,
+    default: 0,
+  },
+  firstMilestoneComplete: {
     type: Boolean,
     default: false,
   },
-  lifetimeAccessUnlockedAt: {
-    type: Date,
-    default: null,
+  milestoneCompletedAt: {
+    type: Date
   },
-  // Per-message earnings - KSH 10 credited after bot reply
-  chat_earnings_cents: {
-    type: Number,
-    default: 0,
-    min: 0,
-  },
-  // Fraud detection - throttle to 1 message per 5 seconds
-  lastMessageEarnedAt: {
-    type: Date,
-    default: null,
-  },
-  messagesEarnedToday: {
-    type: Number,
-    default: 0,
-  },
-  lastEarningDate: {
-    type: Date,
-    default: null,
+  expiresAt: {
+    type: Date // For subscription-based access
   },
   // Persisted message history — kept for the full duration of the active chat
   // session and cleared only when the chat is explicitly completed (isClosed = true).
@@ -472,7 +465,7 @@ const ChatForeignersTransactionSchema = new Schema({
   },
   type: {
     type: String,
-    enum: ['CHAT_DEPOSIT', 'CHAT_MESSAGE_EARNING', 'CHAT_WITHDRAWAL', 'CHAT_REFERRAL_EARNING'],
+    enum: ['CHAT_DEPOSIT', 'CHAT_EARNINGS', 'CHAT_WITHDRAWAL'],
     required: true,
     index: true
   },
@@ -482,17 +475,12 @@ const ChatForeignersTransactionSchema = new Schema({
   status: {
     type: String,
     enum: ['pending', 'completed', 'failed'],
-    default: 'completed',
+    default: 'pending',
     index: true
   },
   mpesa_transaction_id: {
     type: Schema.Types.ObjectId,
     ref: 'ChatForeignersMpesaTransaction',
-    index: true
-  },
-  bot_id: {
-    type: Schema.Types.ObjectId,
-    ref: 'ChatForeignersBot',
     index: true
   },
   target_type: {
@@ -520,7 +508,6 @@ const ChatForeignersTransactionSchema = new Schema({
   indexes: [
     { fields: { user_id: 1, created_at: -1 } },
     { fields: { type: 1 } },
-    { fields: { user_id: 1, type: 1 } },
   ]
 });
 

@@ -1,269 +1,528 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Profile, connectToDatabase, ChatForeignersTransaction } from '@/app/lib/models';
+import { Transaction, MpesaTransaction, Profile, connectToDatabase } from '@/app/lib/models';
 import { auth } from '@/auth';
-
-const TYPE_LABELS: Record<string, string> = {
-  REFERRAL:            'Referral Bonus',
-  ACTIVATION_FEE:      'Account Activation Fee',
-  ACCOUNT_ACTIVATION:  'Account Activated',
-  DEPOSIT:             'Wallet Deposit',
-  WITHDRAWAL:          'Withdrawal',
-  BONUS:               'Bonus',
-  TASK_PAYMENT:        'Task Payment',
-  SPIN_WIN:            'Spin Win',
-  SPIN_PRIZE:          'Spin Prize',
-  SPIN_COST:           'Spin Entry Cost',
-  SPIN_WALLET_DEPOSIT: 'Spin Wallet Deposit',
-  SURVEY:              'Survey Reward',
-  SURVEY_REVOKE:       'Survey Reward Revoked',
-  ADMIN_CREDIT:        'Admin Credit',
-  ADMIN_DEBIT:         'Admin Debit',
-  COMPANY_REVENUE:     'Platform Fee',
-  UNCLAIMED_REFERRAL:  'Unclaimed Referral',
-};
-
-const CF_TYPE_LABELS: Record<string, string> = {
-  CHAT_DEPOSIT:          'Chat Wallet Deposit',
-  CHAT_MESSAGE_EARNING:  'Chat Message Earning',
-  CHAT_WITHDRAWAL:       'Chat Wallet Withdrawal',
-  CHAT_REFERRAL_EARNING: 'Chat Foreigners Referral Earnings',
-  CHAT_EARNINGS:         'Chat Foreigners Platform Fee',
-};
-
-// Debit types — money leaving user wallet
-const DEBIT_TYPES = new Set([
-  'WITHDRAWAL', 'ACTIVATION_FEE', 'SPIN_COST', 'ADMIN_DEBIT',
-  'COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SURVEY_REVOKE',
-]);
 
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.email) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     await connectToDatabase();
 
-    const currentUser = await Profile.findOne({ email: session.user.email }).select('_id').lean();
+    const currentUser = await Profile.findOne({ email: session.user.email });
     if (!currentUser) {
-      return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
+      return NextResponse.json(
+        { success: false, message: 'User not found' },
+        { status: 404 }
+      );
     }
 
     const { searchParams } = new URL(request.url);
-    const sourceType = searchParams.get('sourceType') || 'all';
-    const status     = searchParams.get('status') || '';
-    const limit      = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
-    const page       = Math.max(parseInt(searchParams.get('page') || '1'), 1);
-    const skip       = (page - 1) * limit;
+    const type = searchParams.get('type');
+    const status = searchParams.get('status');
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const page = parseInt(searchParams.get('page') || '1');
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const includeMpesaDetails = searchParams.get('includeMpesaDetails') === 'true';
 
-    const userId = (currentUser as any)._id.toString();
-
-    const mongoose = (await import('mongoose')).default;
-    const LegacyTransaction = mongoose.models['Transaction'] || null;
-    const MpesaTransaction  = mongoose.models['MpesaTransaction'] || null;
-
-    // ─── Build filters ────────────────────────────────────────────
-    let legacyMatch: any = { user_id: userId };
-    if (status) legacyMatch.status = status;
-    if (sourceType === 'downline') legacyMatch.type = 'REFERRAL';
-    else if (sourceType === 'direct') legacyMatch.type = { $nin: ['REFERRAL'] };
-
-    const cfMatch: any = { user_id: userId };
-    if (status) cfMatch.status = status;
-    if (sourceType === 'downline') cfMatch.type = 'CHAT_REFERRAL_EARNING';
-    else if (sourceType === 'direct') cfMatch.type = { $ne: 'CHAT_REFERRAL_EARNING' };
-
-    // ─── Run aggregations in parallel ─────────────────────────────
-    // Each uses $facet to get BOTH paginated rows AND all-time totals in ONE query
-    const [legacyResult, cfResult, profileDoc] = await Promise.all([
-      LegacyTransaction
-        ? LegacyTransaction.aggregate([
-            { $match: legacyMatch },
-            {
-              $facet: {
-                data: [
-                  { $sort: { created_at: -1 } },
-                  { $skip: skip },
-                  { $limit: limit },
-                  // Populate mpesa_transaction_id for real receipt number
-                  {
-                    $lookup: {
-                      from: 'mpesatransactions',
-                      localField: 'mpesa_transaction_id',
-                      foreignField: '_id',
-                      as: '_mpesa',
-                    },
-                  },
-                  // Populate user_id for username/email
-                  {
-                    $lookup: {
-                      from: 'profiles',
-                      localField: 'user_id',
-                      foreignField: '_id',
-                      as: '_profile',
-                    },
-                  },
-                ],
-                totalCount: [{ $count: 'n' }],
-                // All-time totals via aggregation — not in-memory
-                creditSum: [
-                  { $match: { target_type: { $in: ['user', null] }, $expr: { $not: { $in: ['$type', Array.from(DEBIT_TYPES)] } } } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
-                debitSum: [
-                  { $match: { $expr: { $in: ['$type', Array.from(DEBIT_TYPES)] } } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
-                downlineSum: [
-                  { $match: { type: 'REFERRAL' } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
-              },
-            },
-          ])
-        : Promise.resolve([{ data: [], totalCount: [], creditSum: [], debitSum: [], downlineSum: [] }]),
-
-      (ChatForeignersTransaction as any).aggregate([
-        { $match: cfMatch },
-        {
-          $facet: {
-            data: [
-              { $sort: { created_at: -1 } },
-              { $skip: skip },
-              { $limit: limit },
-            ],
-            totalCount: [{ $count: 'n' }],
-            creditSum: [
-              { $match: { target_type: 'user' } },
-              { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-            ],
-            debitSum: [
-              { $match: { target_type: 'company' } },
-              { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-            ],
-            downlineSum: [
-              { $match: { type: 'CHAT_REFERRAL_EARNING' } },
-              { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-            ],
-          },
-        },
-      ]),
-
-      // Fetch main wallet balance from Profile (the available/withdrawable balance)
-      Profile.findById(userId)
-        .select('balance_cents')
-        .lean(),
-    ]);
-
-    const lr = legacyResult[0];
-    const cr = cfResult[0];
-
-    // ─── Normalise rows ────────────────────────────────────────────
-    const normLegacy = (txn: any) => {
-      const isDebit = DEBIT_TYPES.has(txn.type);
-      const meta    = txn.metadata || {};
-      const mpesa   = txn._mpesa?.[0];
-      const profile = txn._profile?.[0];
-
-      let description = txn.description || TYPE_LABELS[txn.type] || txn.type;
-      if (txn.type === 'REFERRAL') {
-        const level = meta.level === 2 ? 'Level 2 (KES 10)' : 'Level 1 (KES 65)';
-        const src   = meta.source === 'chat_foreigners_unlock'
-          ? `downline unlocked a Chat Foreigners personality — ${level}`
-          : description;
-        description = description.toLowerCase().includes('chat foreigners') ? description : `Referral commission: ${src}`;
-      } else if (txn.type === 'ACTIVATION_FEE') {
-        description = 'Account activation fee paid';
-      }
-
-      return {
-        id:               txn._id?.toString(),
-        amount:           (txn.amount_cents || 0) / 100,
-        amount_cents:     txn.amount_cents || 0,
-        transaction_type: isDebit ? 'debit' : 'credit',
-        type:             txn.type || 'N/A',
-        type_label:       TYPE_LABELS[txn.type] || txn.type || 'N/A',
-        source:           txn.source || txn.type || 'N/A',
-        target_type:      txn.target_type || 'user',
-        target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
-        earning_source_type: txn.type === 'REFERRAL' ? 'downline' : 'direct',
-        description,
-        status:           txn.status || 'completed',
-        date:             txn.created_at,
-        // Real Coop bank reference from transaction_code field
-        coop_reference_id:  txn.transaction_code || null,
-        // Real M-Pesa receipt number from populated MpesaTransaction document
-        mpesa_reference_id: mpesa?.mpesa_receipt_number || null,
-        downline_level:   meta.level ?? null,
-        collection:       'legacy',
-      };
+    // Get user's transactions with backward compatibility
+    const filter: any = { 
+      user_id: currentUser._id.toString(),
+      // CRITICAL FIX: Support both old (no target_type) and new (with target_type) transactions
+      $or: [
+        { target_type: 'user' },
+        { target_type: { $exists: false } } // Include old transactions without target_type
+      ]
     };
 
-    const normCF = (txn: any) => ({
-      id:               txn._id?.toString(),
-      amount:           (txn.amount_cents || 0) / 100,
-      amount_cents:     txn.amount_cents || 0,
-      transaction_type: txn.target_type === 'company' ? 'debit' : 'credit',
-      type:             txn.type || 'N/A',
-      type_label:       CF_TYPE_LABELS[txn.type] || txn.type || 'N/A',
-      source:           txn.type || 'chat_foreigners',
-      target_type:      txn.target_type || 'user',
-      target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
-      earning_source_type: txn.type === 'CHAT_REFERRAL_EARNING' ? 'downline' : 'direct',
-      description:      txn.description || CF_TYPE_LABELS[txn.type] || 'Chat Foreigners Transaction',
-      status:           txn.status || 'completed',
-      date:             txn.created_at,
-      coop_reference_id:  null,
-      mpesa_reference_id: null,
-      downline_level:   null,
-      collection:       'chat_foreigners',
-    });
+    if (type) {
+      filter.type = type;
+    }
 
-    // Merge paginated rows and re-sort
-    const rows = [
-      ...(lr.data || []).map(normLegacy),
-      ...(cr.data || []).map(normCF),
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-     .slice(0, limit);
+    if (status) {
+      filter.status = status;
+    }
 
-    // ─── Totals from aggregation (all-time, not just current page) ─
-    const legacyTotal    = (lr.totalCount[0]?.n    || 0);
-    const cfTotal        = (cr.totalCount[0]?.n    || 0);
-    const totalCount     = legacyTotal + cfTotal;
-    const totalPages     = Math.max(Math.ceil(totalCount / limit), 1);
+    if (startDate || endDate) {
+      filter.created_at = {};
+      if (startDate) {
+        filter.created_at.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.created_at.$lte = new Date(endDate);
+      }
+    }
 
-    const totalEarnings    = ((lr.creditSum[0]?.total   || 0) + (cr.creditSum[0]?.total   || 0)) / 100;
-    const totalWithdrawals = ((lr.debitSum[0]?.total    || 0) + (cr.debitSum[0]?.total    || 0)) / 100;
-    const downlineEarnings = ((lr.downlineSum[0]?.total || 0) + (cr.downlineSum[0]?.total || 0)) / 100;
+    const skip = (page - 1) * limit;
+
+    let transactionsQuery = Transaction.find(filter)
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    if (includeMpesaDetails) {
+      transactionsQuery = transactionsQuery.populate('mpesa_transaction_id');
+    }
+
+    const transactions = await transactionsQuery.lean();
+    const totalCount = await Transaction.countDocuments(filter);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const formattedTransactions = await Promise.all(
+      transactions.map(async (transaction) => {
+        let mpesaDetails = null;
+        
+        if (transaction.mpesa_transaction_id && includeMpesaDetails) {
+          const mpesaTransaction = await MpesaTransaction.findById(transaction.mpesa_transaction_id).lean();
+          if (mpesaTransaction) {
+            mpesaDetails = {
+              checkoutRequestId: mpesaTransaction.checkout_request_id,
+              mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+              phoneNumber: mpesaTransaction.phone_number,
+              status: mpesaTransaction.status,
+              resultCode: mpesaTransaction.result_code,
+              resultDesc: mpesaTransaction.result_desc,
+              initiatedAt: mpesaTransaction.initiated_at,
+              completedAt: mpesaTransaction.completed_at
+            };
+          }
+        }
+
+        const mpesaReceiptNumber = transaction.metadata?.mpesaReceiptNumber || 
+                                     transaction.transaction_code;
+
+        return {
+          id: transaction._id?.toString(),
+          amount: transaction.amount_cents / 100,
+          type: transaction.type,
+          description: transaction.description,
+          status: transaction.status,
+          date: transaction.created_at,
+          transaction_code: transaction.transaction_code,
+          mpesa_receipt_number: mpesaReceiptNumber,
+          user_id: transaction.user_id,
+          // FIXED: Provide default for old transactions
+          target_type: transaction.target_type || 'user',
+          target_id: transaction.target_id?.toString() || transaction.user_id?.toString(),
+          metadata: transaction.metadata || {},
+          mpesaDetails,
+          source: transaction.source || 'wallet',
+          reconciled: transaction.reconciled || false
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,
       data: {
-        transactions: rows,
-        stats: {
-          totalEarnings,
-          totalWithdrawals,
-          downlineEarnings,
-          // Main wallet available balance from Profile.balance_cents
-          walletBalance: profileDoc ? (profileDoc as any).balance_cents / 100 : 0,
-        },
+        transactions: formattedTransactions,
         pagination: {
           currentPage: page,
           totalPages,
           totalCount,
           hasNext: page < totalPages,
           hasPrev: page > 1,
-          limit,
-        },
+          limit
+        }
       },
+      message: 'Transactions fetched successfully'
     });
 
   } catch (error) {
     console.error('Transactions API Error:', error);
+    
     return NextResponse.json(
-      { success: false, message: 'Internal server error fetching transactions.' },
+      { 
+        success: false, 
+        message: 'Internal Server Error while fetching transactions.' 
+      },
       { status: 500 }
     );
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    await connectToDatabase();
+
+    const currentUser = await Profile.findOne({ email: session.user.email });
+    if (!currentUser) {
+      return NextResponse.json(
+        { success: false, message: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    const body = await request.json();
+    const { 
+      amount, 
+      type, 
+      description, 
+      status = 'pending',
+      metadata = {},
+      mpesaTransactionId = null,
+      source = 'api'
+    } = body;
+
+    // Validation
+    if (!amount || !type || !description) {
+      return NextResponse.json(
+        { success: false, message: 'Missing required fields: amount, type, description' },
+        { status: 400 }
+      );
+    }
+
+    if (amount <= 0) {
+      return NextResponse.json(
+        { success: false, message: 'Amount must be greater than 0' },
+        { status: 400 }
+      );
+    }
+
+    const validTypes = [
+      'DEPOSIT', 'WITHDRAWAL', 'BONUS', 'TASK_PAYMENT', 'SPIN_WIN', 
+      'REFERRAL', 'SURVEY', 'ACTIVATION_FEE', 'SPIN_COST', 'SPIN_PRIZE'
+    ];
+    
+    if (!validTypes.includes(type)) {
+      return NextResponse.json(
+        { success: false, message: `Invalid transaction type. Must be one of: ${validTypes.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    const validStatuses = ['pending', 'completed', 'failed', 'cancelled', 'timeout'];
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, message: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // Validate M-Pesa transaction if provided
+    if (mpesaTransactionId) {
+      const mpesaTransaction = await MpesaTransaction.findById(mpesaTransactionId);
+      if (!mpesaTransaction) {
+        return NextResponse.json(
+          { success: false, message: 'Referenced M-Pesa transaction not found' },
+          { status: 400 }
+        );
+      }
+      
+      if (mpesaTransaction.user_id.toString() !== currentUser._id.toString()) {
+        return NextResponse.json(
+          { success: false, message: 'M-Pesa transaction does not belong to current user' },
+          { status: 403 }
+        );
+      }
+    }
+
+    const transactionCode = `TX${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const amountCents = Math.round(amount * 100);
+
+    // Get current balance for tracking
+    const balanceBeforeCents = currentUser.balance_cents || 0;
+    let balanceAfterCents = balanceBeforeCents;
+
+    // Calculate balance after based on transaction type
+    if (status === 'completed') {
+      switch (type) {
+        case 'DEPOSIT':
+        case 'BONUS':
+        case 'TASK_PAYMENT':
+        case 'SPIN_WIN':
+        case 'REFERRAL':
+        case 'SURVEY':
+        case 'SPIN_PRIZE':
+          balanceAfterCents = balanceBeforeCents + amountCents;
+          break;
+        case 'WITHDRAWAL':
+        case 'ACTIVATION_FEE':
+        case 'SPIN_COST':
+          balanceAfterCents = balanceBeforeCents - amountCents;
+          break;
+      }
+    }
+
+    // CRITICAL FIX: Add target_type and target_id
+    const newTransaction = await Transaction.create({
+      target_type: 'user', // FIXED: Always 'user' for API-created transactions
+      target_id: currentUser._id.toString(), // FIXED: Set target_id
+      user_id: currentUser._id.toString(),
+      amount_cents: amountCents,
+      type,
+      description,
+      status,
+      transaction_code: transactionCode,
+      balance_before_cents: balanceBeforeCents,
+      balance_after_cents: balanceAfterCents,
+      metadata: {
+        ...metadata,
+        createdVia: 'api',
+        userEmail: currentUser.email,
+        userPhone: currentUser.phone_number,
+        apiCreatedAt: new Date().toISOString()
+      },
+      mpesa_transaction_id: mpesaTransactionId,
+      source,
+      created_at: new Date()
+    });
+
+    console.log('✅ Transaction created via API:', {
+      id: newTransaction._id.toString(),
+      type,
+      amount: amount,
+      status,
+      target_type: 'user',
+      target_id: currentUser._id.toString()
+    });
+
+    // Update user balance if transaction is completed
+    if (status === 'completed') {
+      await updateUserBalance(currentUser._id.toString(), type, amountCents);
+    }
+
+    const formattedTransaction = {
+      id: newTransaction._id.toString(),
+      amount: newTransaction.amount_cents / 100,
+      type: newTransaction.type,
+      description: newTransaction.description,
+      status: newTransaction.status,
+      date: newTransaction.created_at,
+      transaction_code: newTransaction.transaction_code,
+      mpesa_receipt_number: newTransaction.metadata?.mpesaReceiptNumber || newTransaction.transaction_code,
+      user_id: newTransaction.user_id,
+      target_type: newTransaction.target_type,
+      target_id: newTransaction.target_id,
+      balance_before: newTransaction.balance_before_cents / 100,
+      balance_after: newTransaction.balance_after_cents / 100,
+      metadata: newTransaction.metadata,
+      source: newTransaction.source,
+      mpesaTransactionId: newTransaction.mpesa_transaction_id
+    };
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: formattedTransaction,
+        message: 'Transaction created successfully'
+      },
+      { status: 201 }
+    );
+
+  } catch (error) {
+    console.error('Create Transaction API Error:', error);
+    
+    return NextResponse.json(
+      { 
+        success: false, 
+        message: 'Internal Server Error while creating transaction.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * FIXED: Update user balance helper with proper error handling
+ */
+async function updateUserBalance(userId: string, type: string, amountCents: number) {
+  try {
+    const updateQuery: any = {};
+    
+    switch (type) {
+      case 'DEPOSIT':
+      case 'BONUS':
+      case 'TASK_PAYMENT':
+      case 'SPIN_WIN':
+      case 'REFERRAL':
+      case 'SURVEY':
+      case 'SPIN_PRIZE':
+        updateQuery.$inc = { 
+          balance_cents: amountCents,
+          total_earnings_cents: amountCents
+        };
+        break;
+        
+      case 'WITHDRAWAL':
+      case 'ACTIVATION_FEE':
+      case 'SPIN_COST':
+        updateQuery.$inc = { 
+          balance_cents: -amountCents,
+          total_withdrawals_cents: amountCents
+        };
+        break;
+        
+      default:
+        console.log(`ℹ️ No balance update needed for transaction type: ${type}`);
+        return;
+    }
+
+    const updatedUser = await Profile.findByIdAndUpdate(userId, updateQuery, { new: true });
+    
+    if (updatedUser) {
+      console.log('✅ User balance updated:', {
+        userId,
+        type,
+        amountCents,
+        newBalance: updatedUser.balance_cents / 100
+      });
+    } else {
+      console.error('❌ Failed to update user balance - user not found:', userId);
+    }
+  } catch (error) {
+    console.error('❌ Error updating user balance:', error);
+    throw error;
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    await connectToDatabase();
+
+    const body = await request.json();
+    const { transactionId, status, metadata } = body;
+
+    if (!transactionId || !status) {
+      return NextResponse.json(
+        { success: false, message: 'Missing required fields: transactionId, status' },
+        { status: 400 }
+      );
+    }
+
+    const validStatuses = ['pending', 'completed', 'failed', 'cancelled', 'timeout'];
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, message: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    const transaction = await Transaction.findById(transactionId);
+    if (!transaction) {
+      return NextResponse.json(
+        { success: false, message: 'Transaction not found' },
+        { status: 404 }
+      );
+    }
+
+    const currentUser = await Profile.findOne({ email: session.user.email });
+    if (!currentUser || transaction.user_id.toString() !== currentUser._id.toString()) {
+      return NextResponse.json(
+        { success: false, message: 'Access denied' },
+        { status: 403 }
+      );
+    }
+
+    const previousStatus = transaction.status;
+
+    const updateData: any = { 
+      status,
+      updated_at: new Date()
+    };
+
+    if (metadata) {
+      updateData.metadata = { ...transaction.metadata, ...metadata };
+    }
+
+    // FIXED: Ensure target fields are preserved if missing
+    if (!transaction.target_type) {
+      updateData.target_type = 'user';
+    }
+    if (!transaction.target_id) {
+      updateData.target_id = transaction.user_id.toString();
+    }
+
+    const updatedTransaction = await Transaction.findByIdAndUpdate(
+      transactionId,
+      updateData,
+      { new: true }
+    ).lean();
+
+    console.log('✅ Transaction updated:', {
+      id: transactionId,
+      previousStatus,
+      newStatus: status,
+      type: updatedTransaction.type
+    });
+
+    // Update user balance if status changed to completed
+    if (status === 'completed' && previousStatus !== 'completed') {
+      await updateUserBalance(
+        currentUser._id.toString(), 
+        transaction.type, 
+        transaction.amount_cents
+      );
+    }
+
+    // Revert balance if status changed from completed to failed/cancelled
+    if (previousStatus === 'completed' && ['failed', 'cancelled'].includes(status)) {
+      // Reverse the transaction
+      const reverseAmountCents = -transaction.amount_cents;
+      await updateUserBalance(
+        currentUser._id.toString(), 
+        transaction.type, 
+        reverseAmountCents
+      );
+    }
+
+    const formattedTransaction = {
+      id: updatedTransaction._id.toString(),
+      amount: updatedTransaction.amount_cents / 100,
+      type: updatedTransaction.type,
+      description: updatedTransaction.description,
+      status: updatedTransaction.status,
+      date: updatedTransaction.created_at,
+      transaction_code: updatedTransaction.transaction_code,
+      mpesa_receipt_number: updatedTransaction.metadata?.mpesaReceiptNumber || updatedTransaction.transaction_code,
+      user_id: updatedTransaction.user_id,
+      target_type: updatedTransaction.target_type || 'user',
+      target_id: updatedTransaction.target_id?.toString() || updatedTransaction.user_id?.toString(),
+      balance_before: updatedTransaction.balance_before_cents / 100,
+      balance_after: updatedTransaction.balance_after_cents / 100,
+      metadata: updatedTransaction.metadata
+    };
+
+    return NextResponse.json({
+      success: true,
+      data: formattedTransaction,
+      message: 'Transaction updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Update Transaction API Error:', error);
+    
+    return NextResponse.json(
+      { 
+        success: false, 
+        message: 'Internal Server Error while updating transaction.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
