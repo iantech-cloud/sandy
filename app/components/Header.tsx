@@ -55,12 +55,6 @@ const Header: React.FC = () => {
         <Link href="/blog" className="text-gray-600 hover:text-indigo-600 transition-colors">Blog</Link>
         <Link href="/contact" className="text-gray-600 hover:text-indigo-600 transition-colors">Contact</Link>
         <Link href="/auth/login" className="text-gray-600 hover:text-indigo-600 transition-colors">Login</Link>
-        <Link 
-          href="/auth/sign-up"
-          className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors text-sm"
-        >
-          Sign Up
-        </Link>
       </nav>
 
       <nav 
@@ -73,13 +67,6 @@ const Header: React.FC = () => {
         <Link href="/blog" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>Blog</Link>
         <Link href="/contact" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>Contact</Link>
         <Link href="/auth/login" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>Login</Link>
-        <Link 
-          href="/auth/sign-up"
-          className="w-full mt-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors text-center block"
-          onClick={toggleMenu}
-        >
-          Sign Up
-        </Link>
       </nav>
     </header>
   );
