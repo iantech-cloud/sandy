@@ -234,22 +234,50 @@ export async function GET(request: NextRequest) {
           };
         });
 
-        // User summary - Get stats from ALL referrals, not just current page
-        const allUserReferrals = await Referral.find({ referrer_id: currentUser._id })
-          .populate('referred_id', 'status is_verified activation_paid_at');
-        
-        const activeReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.status === 'active').length;
-        const pendingReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.status === 'pending').length;
-        const activatedReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.is_verified || ref.referred_id?.activation_paid_at).length;
-        
+        // User summary — use a single aggregate join instead of fetching all docs
+        const summaryAgg = await Referral.aggregate([
+          { $match: { referrer_id: currentUser._id } },
+          {
+            $lookup: {
+              from: 'profiles',
+              localField: 'referred_id',
+              foreignField: '_id',
+              as: '_p',
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              total:     { $sum: 1 },
+              active:    { $sum: { $cond: [{ $eq: [{ $arrayElemAt: ['$_p.status', 0] }, 'active']   }, 1, 0] } },
+              pending:   { $sum: { $cond: [{ $eq: [{ $arrayElemAt: ['$_p.status', 0] }, 'pending']  }, 1, 0] } },
+              activated: {
+                $sum: {
+                  $cond: [
+                    {
+                      $or: [
+                        { $eq: [{ $arrayElemAt: ['$_p.is_verified', 0] }, true] },
+                        { $gt: [{ $arrayElemAt: ['$_p.activation_paid_at', 0] }, null] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ]);
+
+        const s = summaryAgg[0] || { total: 0, active: 0, pending: 0, activated: 0 };
         const totalUserEarnings = referralTransactions.reduce((sum: number, transaction: any) => sum + transaction.amount_cents, 0);
 
         summary = {
-          total: allUserReferrals.length,
-          active: activeReferrals,
-          pending: pendingReferrals,
-          activated: activatedReferrals,
-          totalEarnings: totalUserEarnings / 100
+          total:         s.total,
+          active:        s.active,
+          pending:       s.pending,
+          activated:     s.activated,
+          totalEarnings: totalUserEarnings / 100,
         };
         break;
     }
