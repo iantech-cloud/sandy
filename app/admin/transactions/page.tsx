@@ -11,16 +11,24 @@ interface Transaction {
   user_email: string;
   user_username: string;
   amount: number;
-  type: string;
+  amount_cents: number;
+  transaction_type: 'credit' | 'debit';
+  source: string;
+  earning_source_type: 'direct' | 'downline' | 'system';
   status: 'pending' | 'completed' | 'failed' | 'cancelled' | 'timeout';
   description: string;
   date: string;
-  transaction_code: string;
-  mpesa_receipt_number?: string;
-  phone_number?: string;
-  target_type: 'user' | 'company';
-  target_id: string;
-  mpesa_transaction_id?: string;
+  payment_method?: string;
+  coop_reference_id?: string;
+  mpesa_reference_id?: string;
+  coop_bank_transaction_id?: string;
+  referrer_id?: string;
+  referrer_email?: string;
+  referrer_username?: string;
+  downline_user_id?: string;
+  downline_user_email?: string;
+  downline_level?: number;
+  commission_percentage?: number;
   metadata?: any;
 }
 
@@ -71,9 +79,11 @@ export default function TransactionsPage() {
 
   const [filters, setFilters] = useState({
     search: '',
-    type: 'all',
+    source: 'all',
+    sourceType: 'all', // 'all', 'direct', 'downline'
     status: 'all',
-    targetType: 'all',
+    coopRef: '',
+    mpesaRef: '',
     dateFrom: '',
     dateTo: ''
   });
@@ -105,8 +115,11 @@ export default function TransactionsPage() {
       const params = new URLSearchParams();
       params.append('limit', pagination.limit.toString());
       params.append('page', pagination.page.toString());
-      if (filters.type !== 'all') params.append('type', filters.type);
+      if (filters.source !== 'all') params.append('source', filters.source);
+      if (filters.sourceType !== 'all') params.append('sourceType', filters.sourceType);
       if (filters.status !== 'all') params.append('status', filters.status);
+      if (filters.coopRef) params.append('coopRef', filters.coopRef);
+      if (filters.mpesaRef) params.append('mpesaRef', filters.mpesaRef);
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
 
@@ -447,19 +460,42 @@ export default function TransactionsPage() {
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <h3 className="text-lg font-semibold mb-4">Filters</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-            <input
-              type="text"
-              placeholder="Search by email, username, code..."
-              value={filters.search}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Source</label>
+            <select
+              value={filters.source}
               onChange={(e) => {
-                setFilters({...filters, search: e.target.value});
+                setFilters({...filters, source: e.target.value});
                 setPagination({...pagination, page: 1});
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            >
+              <option value="all">All Sources</option>
+              <option value="freelance_payment">Freelance Payment</option>
+              <option value="subscription_earnings">Subscription</option>
+              <option value="digital_product_sale">Digital Products</option>
+              <option value="tutoring">Tutoring</option>
+              <option value="ai_task">AI Tasks</option>
+              <option value="local_gig">Local Gigs</option>
+              <option value="referral_bonus">Referral Bonus</option>
+              <option value="downline_commission">Downline Commission</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Earning Source</label>
+            <select
+              value={filters.sourceType}
+              onChange={(e) => {
+                setFilters({...filters, sourceType: e.target.value});
+                setPagination({...pagination, page: 1});
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Types</option>
+              <option value="direct">Direct Earnings</option>
+              <option value="downline">Downline Commissions</option>
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -476,23 +512,33 @@ export default function TransactionsPage() {
               <option value="completed">Completed</option>
               <option value="failed">Failed</option>
               <option value="cancelled">Cancelled</option>
-              <option value="timeout">Timeout</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Target Type</label>
-            <select
-              value={filters.targetType}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Coop Reference</label>
+            <input
+              type="text"
+              placeholder="Search Coop Ref..."
+              value={filters.coopRef}
               onChange={(e) => {
-                setFilters({...filters, targetType: e.target.value});
+                setFilters({...filters, coopRef: e.target.value});
                 setPagination({...pagination, page: 1});
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Types</option>
-              <option value="company">Company</option>
-              <option value="user">User</option>
-            </select>
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">M-Pesa Reference</label>
+            <input
+              type="text"
+              placeholder="Search M-Pesa Ref..."
+              value={filters.mpesaRef}
+              onChange={(e) => {
+                setFilters({...filters, mpesaRef: e.target.value});
+                setPagination({...pagination, page: 1});
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
       </div>
