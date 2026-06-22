@@ -13,22 +13,28 @@ interface Transaction {
   amount: number;
   amount_cents: number;
   transaction_type: 'credit' | 'debit';
+  type: string;
   source: string;
-  earning_source_type: 'direct' | 'downline' | 'system';
-  status: 'pending' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+  earning_source_type: string;
+  status: string;
   description: string;
   date: string;
+  target_type?: string;
   payment_method?: string;
   coop_reference_id?: string;
   mpesa_reference_id?: string;
+  mpesa_receipt_number?: string;
+  phone_number?: string;
+  mpesa_transaction_id?: string;
   coop_bank_transaction_id?: string;
   referrer_id?: string;
   referrer_email?: string;
   referrer_username?: string;
   downline_user_id?: string;
   downline_user_email?: string;
-  downline_level?: number;
-  commission_percentage?: number;
+  downline_level?: number | string;
+  commission_percentage?: number | string;
+  collection?: string;
   metadata?: any;
 }
 
@@ -127,14 +133,14 @@ export default function TransactionsPage() {
       const data = await response.json();
       
       if (data.success) {
-        setTransactions(data.data.transactions);
+        const txns = data.data.transactions || [];
+        setTransactions(txns);
         if (data.data.pagination) {
           setPagination(data.data.pagination);
         }
-        setSelectedIds(new Set()); // Clear selections on fetch
-        
-        // Fetch ALL transactions (without pagination) for stats calculation across all pages
-        fetchAllTransactionsForStats();
+        setSelectedIds(new Set());
+        // Calculate stats from current page only — avoids slow 10k fetch
+        calculateStats(txns, data.data.pagination?.total || txns.length);
       } else {
         console.error('Failed to fetch transactions:', data.message);
       }
@@ -145,33 +151,7 @@ export default function TransactionsPage() {
     }
   };
 
-  const fetchAllTransactionsForStats = async () => {
-    try {
-      // Fetch all transactions with a high limit to get complete data for stats
-      const params = new URLSearchParams();
-      params.append('limit', '10000'); // Fetch up to 10k transactions for stats
-      params.append('page', '1');
-      
-      // Apply the same filters as current page
-      if (filters.source !== 'all') params.append('source', filters.source);
-      if (filters.sourceType !== 'all') params.append('sourceType', filters.sourceType);
-      if (filters.status !== 'all') params.append('status', filters.status);
-      if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
-      if (filters.dateTo) params.append('dateTo', filters.dateTo);
-
-      const response = await fetch(`/api/admin/transactions?${params}`);
-      const data = await response.json();
-      
-      if (data.success && data.data.transactions) {
-        // Calculate stats from ALL transactions (all pages)
-        calculateStats(data.data.transactions);
-      }
-    } catch (error) {
-      console.error('Error fetching all transactions for stats:', error);
-    }
-  };
-
-  const calculateStats = (txns: Transaction[]) => {
+  const calculateStats = (txns: Transaction[], totalCount?: number) => {
     const completedTxns = txns.filter(t => t.status === 'completed');
     
     // Categorize transactions by type
@@ -187,7 +167,7 @@ export default function TransactionsPage() {
       .reduce((sum, t) => sum + t.amount, 0);
     
     setStats({
-      totalTransactions: txns.length,
+      totalTransactions: totalCount ?? txns.length,
       userTransactions: creditTxns.length,
       companyTransactions: debitTxns.length,
       userPayments: directEarnings,
@@ -623,12 +603,17 @@ export default function TransactionsPage() {
                       <div className="text-xs text-gray-500">{txn.user_email || 'N/A'}</div>
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      <span className={`font-medium ${getTypeColor(txn.type, txn.target_type)}`}>
-                        {txn.type}
+                      <span className={`font-medium ${getTypeColor(txn.type || txn.source, txn.target_type || 'user')}`}>
+                        {txn.type && txn.type !== 'N/A' ? txn.type : txn.source}
                       </span>
+                      {txn.collection === 'chat_foreigners' && (
+                        <span className="block text-[10px] text-teal-600 mt-0.5">Chat Foreigners</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-right font-semibold">
-                      KES {txn.amount.toFixed(2)}
+                      <span className={txn.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}>
+                        {txn.transaction_type === 'debit' ? '-' : '+'}KES {txn.amount.toFixed(2)}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(txn.status)}`}>
@@ -637,15 +622,17 @@ export default function TransactionsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
                       <div>
-                        {txn.description}
-                        {txn.mpesa_receipt_number && (
+                        <span className={txn.description === 'N/A' ? 'text-gray-400 italic' : ''}>
+                          {txn.description && txn.description !== 'N/A' ? txn.description : '—'}
+                        </span>
+                        {txn.mpesa_reference_id && txn.mpesa_reference_id !== 'N/A' && (
                           <span className="block text-xs text-blue-600 mt-1">
-                            M-Pesa: {txn.mpesa_receipt_number}
+                            M-Pesa: {txn.mpesa_reference_id}
                           </span>
                         )}
-                        {txn.phone_number && (
+                        {txn.coop_reference_id && txn.coop_reference_id !== 'N/A' && (
                           <span className="block text-xs text-gray-500 mt-1">
-                            Phone: {txn.phone_number}
+                            Ref: {txn.coop_reference_id}
                           </span>
                         )}
                       </div>
