@@ -35,6 +35,14 @@ const DEBIT_TYPES = new Set([
   'COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SURVEY_REVOKE',
 ]);
 
+// Transaction types that represent real platform payouts to users
+// (excludes DEPOSIT — that is user-funded money deposited INTO the platform, not a payout)
+const PAYOUT_TYPES = [
+  'WITHDRAWAL', 'REFERRAL', 'TASK_PAYMENT', 'BONUS',
+  'SPIN_WIN', 'SPIN_PRIZE', 'SPIN_WALLET_DEPOSIT',
+  'SURVEY', 'ADMIN_CREDIT',
+];
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -88,6 +96,23 @@ export async function GET(request: NextRequest) {
     const fetchLegacy = collection !== 'cf'     && !!LegacyTransaction;
     const fetchCF     = collection !== 'legacy';
 
+    // If mpesaRef filter is set, join MpesaTransaction first to find eligible IDs
+    // This avoids a $toObjectId conversion error and works with both ObjectId and UUID user_id values
+    let legacyMpesaIds: any[] | null = null;
+    if (mpesaRef && fetchLegacy && LegacyTransaction) {
+      const MpesaTxn = mongoose.models['MpesaTransaction'] || null;
+      if (MpesaTxn) {
+        const matched = await MpesaTxn.find(
+          { mpesa_receipt_number: new RegExp(mpesaRef, 'i') },
+          { _id: 1 }
+        ).lean();
+        legacyMpesaIds = matched.map((m: any) => m._id);
+      }
+    }
+    if (legacyMpesaIds !== null) {
+      legacyMatch.mpesa_transaction_id = { $in: legacyMpesaIds };
+    }
+
     // ─── $facet: paginated data + all-time totals in one query ───
     const [legacyResult, cfResult] = await Promise.all([
       fetchLegacy
@@ -99,6 +124,7 @@ export async function GET(request: NextRequest) {
                   { $sort: { created_at: -1 } },
                   { $skip: skip },
                   { $limit: limit },
+                  // Safe lookup — no $toObjectId needed; user_id stored as ObjectId in legacy
                   {
                     $lookup: {
                       from: 'profiles',
@@ -109,28 +135,14 @@ export async function GET(request: NextRequest) {
                   },
                   {
                     $addFields: {
-                      '_profile': {
+                      _profile: {
                         $cond: [
                           { $eq: [{ $size: '$_profile' }, 0] },
-                          [
-                            {
-                              $cond: [
-                                {
-                                  $regexMatch: {
-                                    input: '$user_id',
-                                    regex: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-                                    options: 'i'
-                                  }
-                                },
-                                { username: 'Unknown (UUID)', email: 'N/A' },
-                                { username: 'Unknown', email: 'N/A' }
-                              ]
-                            }
-                          ],
-                          '$_profile'
-                        ]
-                      }
-                    }
+                          [{ username: 'Unknown', email: 'N/A' }],
+                          '$_profile',
+                        ],
+                      },
+                    },
                   },
                   {
                     $lookup: {
@@ -142,12 +154,15 @@ export async function GET(request: NextRequest) {
                   },
                 ],
                 totalCount:    [{ $count: 'n' }],
+                // Revenue = money into the company
                 totalRevenue:  [
                   { $match: { target_type: 'company' } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
+                // Payouts = money the PLATFORM pays OUT to users
+                // Excludes DEPOSIT (user-funded) — those inflate the figure incorrectly
                 totalPayouts:  [
-                  { $match: { target_type: 'user' } },
+                  { $match: { type: { $in: PAYOUT_TYPES } } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
                 completedCount: [{ $match: { status: 'completed' } }, { $count: 'n' }],
@@ -180,28 +195,14 @@ export async function GET(request: NextRequest) {
                   },
                   {
                     $addFields: {
-                      '_profile': {
+                      _profile: {
                         $cond: [
                           { $eq: [{ $size: '$_profile' }, 0] },
-                          [
-                            {
-                              $cond: [
-                                {
-                                  $regexMatch: {
-                                    input: '$user_id',
-                                    regex: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-                                    options: 'i'
-                                  }
-                                },
-                                { username: 'Unknown (UUID)', email: 'N/A' },
-                                { username: 'Unknown', email: 'N/A' }
-                              ]
-                            }
-                          ],
-                          '$_profile'
-                        ]
-                      }
-                    }
+                          [{ username: 'Unknown', email: 'N/A' }],
+                          '$_profile',
+                        ],
+                      },
+                    },
                   },
                 ],
                 totalCount:    [{ $count: 'n' }],
@@ -209,8 +210,10 @@ export async function GET(request: NextRequest) {
                   { $match: { target_type: 'company' } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
+                // CF payouts = money going to users (CHAT_MESSAGE_EARNING, CHAT_REFERRAL_EARNING)
+                // Excludes CHAT_DEPOSIT (user-funded)
                 totalPayouts:  [
-                  { $match: { target_type: 'user' } },
+                  { $match: { type: { $in: ['CHAT_MESSAGE_EARNING', 'CHAT_REFERRAL_EARNING'] } } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
                 completedCount: [{ $match: { status: 'completed' } }, { $count: 'n' }],
@@ -254,15 +257,15 @@ export async function GET(request: NextRequest) {
         type:             txn.type     || 'N/A',
         type_label:       TYPE_LABELS[txn.type] || txn.type || 'N/A',
         source:           txn.source   || txn.type || 'N/A',
-        // target_type from schema is always 'user' or 'company' — never N/A
+        target_type:      txn.target_type || 'user',
         target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
         earning_source_type: txn.type === 'REFERRAL' ? 'downline' : 'direct',
         status:           txn.status   || 'N/A',
         description,
         date:             txn.created_at,
-        // Coop: real bank reference from transaction_code (set by Coop callback)
+        // Coop bank reference stored in transaction_code (e.g. SPINDY17821278547008CYHDH)
         coop_reference_id:  txn.transaction_code || null,
-        // M-Pesa: real receipt from populated MpesaTransaction document
+        // M-Pesa receipt number from the linked MpesaTransaction document (e.g. UFM248OFZF)
         mpesa_reference_id: mpesa?.mpesa_receipt_number || null,
         balance_after:    txn.balance_after_cents != null ? txn.balance_after_cents / 100 : null,
         collection:       'legacy',
@@ -282,6 +285,7 @@ export async function GET(request: NextRequest) {
         type:             txn.type     || 'N/A',
         type_label:       CF_TYPE_LABELS[txn.type] || txn.type || 'N/A',
         source:           txn.type     || 'chat_foreigners',
+        target_type:      txn.target_type || 'user',
         target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
         earning_source_type: txn.type === 'CHAT_REFERRAL_EARNING' ? 'downline' : 'direct',
         status:           txn.status   || 'N/A',
@@ -306,13 +310,11 @@ export async function GET(request: NextRequest) {
 
     const summary = {
       totalCount,
-      // Revenue = money that went to the company
-      totalRevenue:    ((lr.totalRevenue[0]?.total  || 0) + (cr.totalRevenue[0]?.total  || 0)) / 100,
-      // Payouts = money that went to users
-      totalPayouts:    ((lr.totalPayouts[0]?.total  || 0) + (cr.totalPayouts[0]?.total  || 0)) / 100,
-      completedCount:  (lr.completedCount[0]?.n || 0) + (cr.completedCount[0]?.n || 0),
-      pendingCount:    (lr.pendingCount[0]?.n   || 0) + (cr.pendingCount[0]?.n   || 0),
-      failedCount:     (lr.failedCount[0]?.n    || 0) + (cr.failedCount[0]?.n    || 0),
+      totalRevenue:   ((lr.totalRevenue[0]?.total  || 0) + (cr.totalRevenue[0]?.total  || 0)) / 100,
+      totalPayouts:   ((lr.totalPayouts[0]?.total  || 0) + (cr.totalPayouts[0]?.total  || 0)) / 100,
+      completedCount: (lr.completedCount[0]?.n || 0) + (cr.completedCount[0]?.n || 0),
+      pendingCount:   (lr.pendingCount[0]?.n   || 0) + (cr.pendingCount[0]?.n   || 0),
+      failedCount:    (lr.failedCount[0]?.n    || 0) + (cr.failedCount[0]?.n    || 0),
     };
 
     return NextResponse.json({

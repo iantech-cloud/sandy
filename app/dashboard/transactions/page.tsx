@@ -12,6 +12,9 @@ interface Transaction {
   type: string;
   type_label: string;
   source: string;
+  /** 'user' | 'company' — raw schema value */
+  target_type?: string;
+  /** 'User Wallet' | 'Company' — display label */
   target: string;
   earning_source_type: string;
   description: string;
@@ -158,8 +161,9 @@ export default function TransactionsPage() {
           </div>
 
           <div className="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-lg p-5">
-            <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide">Wallet Balance</p>
+            <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide">Available Balance</p>
             <p className="text-2xl font-bold text-blue-400">KES {stats.walletBalance.toLocaleString('en-KE', { minimumFractionDigits: 0 })}</p>
+            <p className="text-slate-500 text-xs mt-1">Main wallet</p>
           </div>
         </div>
 

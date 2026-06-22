@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Profile, connectToDatabase, ChatForeignersTransaction, ChatForeignersWallet } from '@/app/lib/models';
+import { Profile, connectToDatabase, ChatForeignersTransaction } from '@/app/lib/models';
 import { auth } from '@/auth';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
 
     // ─── Run aggregations in parallel ─────────────────────────────
     // Each uses $facet to get BOTH paginated rows AND all-time totals in ONE query
-    const [legacyResult, cfResult, wallet] = await Promise.all([
+    const [legacyResult, cfResult, profileDoc] = await Promise.all([
       LegacyTransaction
         ? LegacyTransaction.aggregate([
             { $match: legacyMatch },
@@ -150,7 +150,8 @@ export async function GET(request: NextRequest) {
         },
       ]),
 
-      ChatForeignersWallet.findOne({ user_id: userId })
+      // Fetch main wallet balance from Profile (the available/withdrawable balance)
+      Profile.findById(userId)
         .select('balance_cents')
         .lean(),
     ]);
@@ -184,6 +185,7 @@ export async function GET(request: NextRequest) {
         type:             txn.type || 'N/A',
         type_label:       TYPE_LABELS[txn.type] || txn.type || 'N/A',
         source:           txn.source || txn.type || 'N/A',
+        target_type:      txn.target_type || 'user',
         target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
         earning_source_type: txn.type === 'REFERRAL' ? 'downline' : 'direct',
         description,
@@ -206,6 +208,7 @@ export async function GET(request: NextRequest) {
       type:             txn.type || 'N/A',
       type_label:       CF_TYPE_LABELS[txn.type] || txn.type || 'N/A',
       source:           txn.type || 'chat_foreigners',
+      target_type:      txn.target_type || 'user',
       target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
       earning_source_type: txn.type === 'CHAT_REFERRAL_EARNING' ? 'downline' : 'direct',
       description:      txn.description || CF_TYPE_LABELS[txn.type] || 'Chat Foreigners Transaction',
@@ -242,7 +245,8 @@ export async function GET(request: NextRequest) {
           totalEarnings,
           totalWithdrawals,
           downlineEarnings,
-          walletBalance: wallet ? (wallet as any).balance_cents / 100 : 0,
+          // Main wallet available balance from Profile.balance_cents
+          walletBalance: profileDoc ? (profileDoc as any).balance_cents / 100 : 0,
         },
         pagination: {
           currentPage: page,
