@@ -153,7 +153,8 @@ export default function TransactionsPage() {
       params.append('page', '1');
       
       // Apply the same filters as current page
-      if (filters.type !== 'all') params.append('type', filters.type);
+      if (filters.source !== 'all') params.append('source', filters.source);
+      if (filters.sourceType !== 'all') params.append('sourceType', filters.sourceType);
       if (filters.status !== 'all') params.append('status', filters.status);
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
@@ -173,25 +174,24 @@ export default function TransactionsPage() {
   const calculateStats = (txns: Transaction[]) => {
     const completedTxns = txns.filter(t => t.status === 'completed');
     
-    const userTxns = completedTxns.filter(t => t.target_type === 'user');
-    const companyTxns = completedTxns.filter(t => t.target_type === 'company');
+    // Categorize transactions by type
+    const creditTxns = completedTxns.filter(t => t.transaction_type === 'credit');
+    const debitTxns = completedTxns.filter(t => t.transaction_type === 'debit');
     
-    const userPaymentTypes = ['REFERRAL', 'BONUS', 'TASK_PAYMENT', 'SURVEY', 'SPIN_WIN'];
-    const userPayments = userTxns
-      .filter(t => userPaymentTypes.includes(t.type))
+    const directEarnings = creditTxns
+      .filter(t => t.earning_source_type === 'direct')
       .reduce((sum, t) => sum + t.amount, 0);
     
-    const companyRevenueTypes = ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'UNCLAIMED_REFERRAL', 'SPIN_COST'];
-    const companyRevenue = companyTxns
-      .filter(t => companyRevenueTypes.includes(t.type))
+    const downlineEarnings = creditTxns
+      .filter(t => t.earning_source_type === 'downline')
       .reduce((sum, t) => sum + t.amount, 0);
     
     setStats({
       totalTransactions: txns.length,
-      userTransactions: userTxns.length,
-      companyTransactions: companyTxns.length,
-      userPayments,
-      companyRevenue,
+      userTransactions: creditTxns.length,
+      companyTransactions: debitTxns.length,
+      userPayments: directEarnings,
+      companyRevenue: downlineEarnings,
       pendingCount: txns.filter(t => t.status === 'pending').length,
       completedCount: txns.filter(t => t.status === 'completed').length,
       failedCount: txns.filter(t => t.status === 'failed').length,
