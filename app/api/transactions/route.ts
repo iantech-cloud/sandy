@@ -2,30 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Profile, connectToDatabase, ChatForeignersTransaction, ChatForeignersWallet } from '@/app/lib/models';
 import { auth } from '@/auth';
 
-// Label map for legacy transaction types
 const TYPE_LABELS: Record<string, string> = {
-  REFERRAL:               'Referral Bonus',
-  ACTIVATION_FEE:         'Account Activation Fee',
-  ACCOUNT_ACTIVATION:     'Account Activation',
-  DEPOSIT:                'Wallet Deposit',
-  WITHDRAWAL:             'Withdrawal',
-  BONUS:                  'Bonus',
-  TASK_PAYMENT:           'Task Payment',
-  SPIN_WIN:               'Spin Win',
-  SPIN_PRIZE:             'Spin Prize',
-  SPIN_COST:              'Spin Entry Cost',
-  SPIN_WALLET_DEPOSIT:    'Spin Wallet Deposit',
-  SURVEY:                 'Survey Reward',
-  SURVEY_REVOKE:          'Survey Reward Revoked',
-  ADMIN_CREDIT:           'Admin Credit',
-  ADMIN_DEBIT:            'Admin Debit',
-  COMPANY_REVENUE:        'Platform Fee',
-  UNCLAIMED_REFERRAL:     'Unclaimed Referral',
-  CHAT_DEPOSIT:           'Chat Wallet Deposit',
-  CHAT_MESSAGE_EARNING:   'Chat Message Earning',
-  CHAT_WITHDRAWAL:        'Chat Wallet Withdrawal',
-  CHAT_REFERRAL_EARNING:  'Chat Foreigners Referral',
-  CHAT_EARNINGS:          'Chat Foreigners Earnings',
+  REFERRAL:              'Referral Bonus',
+  ACTIVATION_FEE:        'Account Activation Fee',
+  ACCOUNT_ACTIVATION:    'Account Activation',
+  DEPOSIT:               'Wallet Deposit',
+  WITHDRAWAL:            'Withdrawal',
+  BONUS:                 'Bonus',
+  TASK_PAYMENT:          'Task Payment',
+  SPIN_WIN:              'Spin Win',
+  SPIN_PRIZE:            'Spin Prize',
+  SPIN_COST:             'Spin Entry Cost',
+  SPIN_WALLET_DEPOSIT:   'Spin Wallet Deposit',
+  SURVEY:                'Survey Reward',
+  SURVEY_REVOKE:         'Survey Reward Revoked',
+  ADMIN_CREDIT:          'Admin Credit',
+  ADMIN_DEBIT:           'Admin Debit',
+  COMPANY_REVENUE:       'Platform Fee',
+  UNCLAIMED_REFERRAL:    'Unclaimed Referral',
+  CHAT_DEPOSIT:          'Chat Wallet Deposit',
+  CHAT_MESSAGE_EARNING:  'Chat Message Earning',
+  CHAT_WITHDRAWAL:       'Chat Wallet Withdrawal',
+  CHAT_REFERRAL_EARNING: 'Chat Foreigners Referral',
+  CHAT_EARNINGS:         'Chat Foreigners Earnings',
 };
 
 const DEBIT_TYPES = new Set([
@@ -53,54 +52,92 @@ export async function GET(request: NextRequest) {
     const sourceType = searchParams.get('sourceType') || 'all';
     const status     = searchParams.get('status')     || '';
     const limit      = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
-    const page       = Math.max(parseInt(searchParams.get('page')  || '1'),  1);
+    const page       = Math.max(parseInt(searchParams.get('page')  || '1'), 1);
     const skip       = (page - 1) * limit;
 
     const userId  = (currentUser as any)._id;
     const userStr = userId.toString();
 
-    // ── lazy-load legacy model ──────────────────────────────────────────────
+    // Lazy-load the legacy Transaction model (registered in models.ts on first import)
     const mongoose = (await import('mongoose')).default;
     const LegacyTx = mongoose.models['Transaction'] || null;
 
-    // ── build filters ───────────────────────────────────────────────────────
-    let legacyFilter: any = { user_id: userId, target_type: 'user' };
+    // ── Build per-collection filters ──────────────────────────────────────────
+    const legacyFilter: any = { user_id: userId, target_type: 'user' };
     if (sourceType === 'downline') legacyFilter.type = 'REFERRAL';
     else if (sourceType === 'direct') legacyFilter.type = { $ne: 'REFERRAL' };
     if (status) legacyFilter.status = status;
 
-    let cfFilter: any = { user_id: userStr };
-    if (status) cfFilter.status = status;
-    // For downline filter on CF use CHAT_REFERRAL_EARNING
+    const cfFilter: any = { user_id: userStr };
     if (sourceType === 'downline') cfFilter.type = 'CHAT_REFERRAL_EARNING';
     else if (sourceType === 'direct') cfFilter.type = { $ne: 'CHAT_REFERRAL_EARNING' };
+    if (status) cfFilter.status = status;
 
-    // ── parallel: DB-level counts + paginated fetch + wallet ───────────────
+    // ── True DB-level pagination: parallel count + paginated fetch ────────────
+    // We split the page across both collections proportionally by using cursors.
+    // Simpler: fetch page from each collection independently, merge & re-sort.
+    // Since we can't know the exact split across two unrelated collections, we
+    // fetch (skip + limit) from each, merge-sort, then slice [skip, skip+limit].
+    // This is much faster than fetching ALL records — it caps both queries at
+    // (skip + limit) documents maximum.
+    const fetchUpTo = skip + limit;
+
     const [legacyCount, cfCount, legacyTxns, cfTxns, wallet] = await Promise.all([
       LegacyTx ? LegacyTx.countDocuments(legacyFilter) : Promise.resolve(0),
       (ChatForeignersTransaction as any).countDocuments(cfFilter),
       LegacyTx
         ? LegacyTx.find(legacyFilter)
-            .select('_id amount_cents type description status transaction_code metadata created_at balance_after_cents source target_type mpesa_transaction_id')
+            .populate('mpesa_transaction_id', 'mpesa_receipt_number')
+            .select('_id amount_cents type description status transaction_code mpesa_transaction_id metadata created_at balance_after_cents source target_type')
             .sort({ created_at: -1 })
+            .limit(fetchUpTo)
             .lean()
         : Promise.resolve([]),
       (ChatForeignersTransaction as any)
         .find(cfFilter)
         .select('_id amount_cents type description status metadata created_at target_type')
         .sort({ created_at: -1 })
+        .limit(fetchUpTo)
         .lean(),
       ChatForeignersWallet.findOne({ user_id: userStr })
         .select('balance_cents total_earned_cents downline_earnings_cents')
         .lean(),
     ]);
 
-    // ── normalise ───────────────────────────────────────────────────────────
+    // ── Stats aggregation queries (single pass each, no full load) ────────────
+    const [legacyEarningsAgg, cfEarningsAgg] = await Promise.all([
+      LegacyTx ? LegacyTx.aggregate([
+        { $match: { user_id: userId, target_type: 'user', status: 'completed' } },
+        { $group: {
+          _id: null,
+          totalCredits:    { $sum: { $cond: [{ $not: [{ $in: ['$type', Array.from(DEBIT_TYPES)] }] }, '$amount_cents', 0] } },
+          totalDebits:     { $sum: { $cond: [{ $in:  ['$type', Array.from(DEBIT_TYPES)] }, '$amount_cents', 0] } },
+          downlineCredits: { $sum: { $cond: [{ $eq: ['$type', 'REFERRAL'] }, '$amount_cents', 0] } },
+        }},
+      ]) : Promise.resolve([]),
+      (ChatForeignersTransaction as any).aggregate([
+        { $match: { user_id: userStr, status: 'completed', target_type: { $ne: 'company' } } },
+        { $group: {
+          _id: null,
+          totalCredits:    { $sum: '$amount_cents' },
+          totalDebits:     { $sum: { $cond: [{ $eq: ['$type', 'CHAT_WITHDRAWAL'] }, '$amount_cents', 0] } },
+          downlineCredits: { $sum: { $cond: [{ $eq: ['$type', 'CHAT_REFERRAL_EARNING'] }, '$amount_cents', 0] } },
+        }},
+      ]),
+    ]);
+
+    const legacyStats = legacyEarningsAgg[0] || { totalCredits: 0, totalDebits: 0, downlineCredits: 0 };
+    const cfStats     = cfEarningsAgg[0]     || { totalCredits: 0, totalDebits: 0, downlineCredits: 0 };
+
+    // ── Normalise ─────────────────────────────────────────────────────────────
     const normLegacy = (t: any) => {
-      const meta   = t.metadata || {};
+      const meta    = t.metadata || {};
       const isDebit = DEBIT_TYPES.has(t.type);
-      const coopRef  = t.transaction_code || meta.receipt || 'N/A';
-      const mpesaRef = meta.mpesaReceiptNumber || meta.receipt || 'N/A';
+
+      // Coop ref: transaction_code field (set by Coop bank payment flow)
+      const coopRef  = t.transaction_code || 'N/A';
+      // M-Pesa receipt: populate mpesa_transaction_id -> mpesa_receipt_number
+      const mpesaRef = t.mpesa_transaction_id?.mpesa_receipt_number || meta.mpesaReceiptNumber || 'N/A';
 
       let desc = t.description || TYPE_LABELS[t.type] || t.type;
       if (t.type === 'REFERRAL') {
@@ -137,7 +174,7 @@ export async function GET(request: NextRequest) {
       id:                  t._id?.toString(),
       amount:              (t.amount_cents || 0) / 100,
       amount_cents:        t.amount_cents || 0,
-      transaction_type:    (t.target_type === 'company' ? 'debit' : 'credit') as 'credit' | 'debit',
+      transaction_type:    t.target_type === 'company' ? 'debit' : 'credit',
       type_label:          TYPE_LABELS[t.type] || t.type || 'N/A',
       source:              t.type || 'chat_foreigners',
       earning_source_type: t.type === 'CHAT_REFERRAL_EARNING' ? 'downline' : 'direct',
@@ -152,43 +189,32 @@ export async function GET(request: NextRequest) {
       collection:          'chat_foreigners',
     });
 
-    // Merge, sort, paginate in memory (both sets already sorted desc, merge-sort)
-    const combined = [
+    // Merge-sort the two sets (both already sorted desc) then take [skip, skip+limit]
+    const merged = [
       ...(legacyTxns as any[]).map(normLegacy),
       ...(cfTxns     as any[]).map(normCF),
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const totalCount = legacyCount + cfCount;
     const totalPages = Math.max(Math.ceil(totalCount / limit), 1);
-    const paginated  = combined.slice(skip, skip + limit);
-
-    // ── all-time stats (from full combined array) ───────────────────────────
-    const totalEarningsCents = combined
-      .filter(t => t.transaction_type === 'credit')
-      .reduce((s, t) => s + t.amount_cents, 0);
-    const totalWithdrawalsCents = combined
-      .filter(t => t.transaction_type === 'debit')
-      .reduce((s, t) => s + t.amount_cents, 0);
-    const downlineEarningsCents = combined
-      .filter(t => t.earning_source_type === 'downline' && t.transaction_type === 'credit')
-      .reduce((s, t) => s + t.amount_cents, 0);
+    const paginated  = merged.slice(skip, skip + limit);
 
     return NextResponse.json({
       success: true,
       data: {
         transactions: paginated,
         stats: {
-          totalEarnings:    totalEarningsCents    / 100,
-          totalWithdrawals: totalWithdrawalsCents / 100,
-          downlineEarnings: downlineEarningsCents / 100,
+          totalEarnings:    (legacyStats.totalCredits    + cfStats.totalCredits)    / 100,
+          totalWithdrawals: (legacyStats.totalDebits     + cfStats.totalDebits)     / 100,
+          downlineEarnings: (legacyStats.downlineCredits + cfStats.downlineCredits) / 100,
           walletBalance:    wallet ? (wallet as any).balance_cents / 100 : 0,
         },
         pagination: {
           currentPage: page,
           totalPages,
           totalCount,
-          hasNext:  page < totalPages,
-          hasPrev:  page > 1,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
           limit,
         },
       },

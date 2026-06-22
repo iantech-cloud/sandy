@@ -14,6 +14,7 @@ interface Transaction {
   amount_cents: number;
   transaction_type: 'credit' | 'debit';
   type: string;
+  type_label: string;
   source: string;
   earning_source_type: string;
   status: string;
@@ -23,17 +24,7 @@ interface Transaction {
   payment_method?: string;
   coop_reference_id?: string;
   mpesa_reference_id?: string;
-  mpesa_receipt_number?: string;
-  phone_number?: string;
-  mpesa_transaction_id?: string;
-  coop_bank_transaction_id?: string;
-  referrer_id?: string;
-  referrer_email?: string;
-  referrer_username?: string;
-  downline_user_id?: string;
-  downline_user_email?: string;
   downline_level?: number | string;
-  commission_percentage?: number | string;
   collection?: string;
   metadata?: any;
 }
@@ -317,7 +308,7 @@ export default function TransactionsPage() {
     const rows = transactions.map(t => [
       t.date ? new Date(t.date).toLocaleString('en-KE') : 'N/A',
       `${t.user_username || 'N/A'} (${t.user_email || 'N/A'})`,
-      t.type && t.type !== 'N/A' ? t.type : t.source,
+      t.type_label && t.type_label !== 'N/A' ? t.type_label : (t.type || t.source),
       `${t.transaction_type === 'debit' ? '-' : '+'}${t.amount.toFixed(2)}`,
       t.status,
       t.description || 'N/A',
@@ -595,7 +586,7 @@ export default function TransactionsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`font-medium ${getTypeColor(txn.type || txn.source, txn.target_type || 'user')}`}>
-                        {txn.type && txn.type !== 'N/A' ? txn.type : txn.source}
+                        {txn.type_label && txn.type_label !== 'N/A' ? txn.type_label : (txn.type || txn.source)}
                       </span>
                       {txn.collection === 'chat_foreigners' && (
                         <span className="block text-[10px] text-teal-600 mt-0.5">Chat Foreigners</span>
