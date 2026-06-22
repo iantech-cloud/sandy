@@ -1,7 +1,7 @@
 // app/ui/dashboard/sidenav.tsx
 'use client';
 
-import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle, ClipboardList, BookOpen, Briefcase, MapPin, Zap, FileText, Gift, TrendingUp } from 'lucide-react';
+import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle, ClipboardList, BookOpen, Briefcase, MapPin, Zap, FileText, Gift, TrendingUp, History } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -43,6 +43,7 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
   const links = [
     { path: '/dashboard', label: 'Dashboard', icon: BarChart },
     { path: '/dashboard/wallet', label: 'Wallet & Escrow', icon: Wallet },
+    { path: '/dashboard/transactions', label: 'Transaction History', icon: History },
     
     // Earning Opportunities
     { path: '/dashboard/earnings-overview', label: '💰 All Earning Ways', icon: TrendingUp },

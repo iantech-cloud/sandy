@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth'; 
-import { connectToDatabase, Profile, Transaction } from '@/app/lib/models';
+import { connectToDatabase, Profile, TransactionLedger, CoopBankPayment } from '@/app/lib/models';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,9 +25,12 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const type = searchParams.get('type') || 'all';
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
+    const source = searchParams.get('source') || 'all';
     const status = searchParams.get('status') || 'all';
+    const sourceType = searchParams.get('sourceType') || 'all';
+    const coopRef = searchParams.get('coopRef') || '';
+    const mpesaRef = searchParams.get('mpesaRef') || '';
     const dateFrom = searchParams.get('dateFrom') || '';
     const dateTo = searchParams.get('dateTo') || '';
 
@@ -35,12 +38,24 @@ export async function GET(request: NextRequest) {
 
     let query: any = {};
     
-    if (type && type !== 'all') {
-      query.type = type;
+    if (source && source !== 'all') {
+      query.source = source;
+    }
+    
+    if (sourceType && sourceType !== 'all') {
+      query.earning_source_type = sourceType;
     }
     
     if (status && status !== 'all') {
       query.status = status;
+    }
+
+    if (coopRef) {
+      query.coop_reference_id = new RegExp(coopRef, 'i');
+    }
+
+    if (mpesaRef) {
+      query.mpesa_reference_id = new RegExp(mpesaRef, 'i');
     }
     
     if (dateFrom || dateTo) {
@@ -54,12 +69,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Get total count for pagination
-    const total = await Transaction.countDocuments(query);
+    const total = await TransactionLedger.countDocuments(query);
     const pages = Math.ceil(total / limit);
 
-    const transactions = await Transaction.find(query)
+    const transactions = await TransactionLedger.find(query)
       .populate('user_id', 'username email')
-      .populate('mpesa_transaction_id', 'mpesa_receipt_number phone_number')
+      .populate('referrer_id', 'username email')
+      .populate('downline_user_id', 'username email')
+      .populate('coop_bank_payment_id', 'coop_transaction_id')
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limit)
@@ -71,21 +88,34 @@ export async function GET(request: NextRequest) {
       user_email: txn.user_id?.email || 'System',
       user_username: txn.user_id?.username || 'System',
       amount: txn.amount_cents / 100,
-      type: txn.type,
+      amount_cents: txn.amount_cents,
+      transaction_type: txn.transaction_type,
+      source: txn.source,
+      earning_source_type: txn.earning_source_type || 'direct',
       status: txn.status,
       description: txn.description,
       date: txn.created_at,
-      transaction_code: txn.transaction_code,
-      mpesa_receipt_number: txn.mpesa_transaction_id?.mpesa_receipt_number,
-      phone_number: txn.mpesa_transaction_id?.phone_number,
-      metadata: txn.metadata,
       
-      target_type: txn.target_type || 'user', 
-      target_id: txn.target_id?.toString() || txn.user_id?._id?.toString() || null,
-      mpesa_transaction_id: txn.mpesa_transaction_id?._id?.toString(),
+      // Downline commission details
+      referrer_id: txn.referrer_id?._id?.toString() || null,
+      referrer_email: txn.referrer_id?.email || null,
+      referrer_username: txn.referrer_id?.username || null,
+      downline_user_id: txn.downline_user_id?._id?.toString() || null,
+      downline_user_email: txn.downline_user_id?.email || null,
+      downline_level: txn.downline_level || null,
+      commission_percentage: txn.commission_percentage || null,
       
-      source: txn.source || 'wallet',
-      reconciled: txn.reconciled || false
+      // Payment method tracking
+      payment_method: txn.payment_method || null,
+      coop_reference_id: txn.coop_reference_id || null,
+      mpesa_reference_id: txn.mpesa_reference_id || null,
+      coop_bank_transaction_id: txn.coop_bank_payment_id?.coop_transaction_id || null,
+      
+      reference_id: txn.reference_id || null,
+      reference_type: txn.reference_type || null,
+      balance_after: txn.balance_after_cents / 100,
+      
+      metadata: txn.metadata || {}
     }));
 
     return NextResponse.json({
