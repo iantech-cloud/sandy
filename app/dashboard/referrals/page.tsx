@@ -235,9 +235,7 @@ export default function ReferralsPage() {
               </div>
             </div>
           </div>
-          <p className="text-slate-500 text-xs mt-4">
-            Earn <span className="text-white">KES 65</span> (L1) and <span className="text-white">KES 10</span> (L2) per account activation &bull; Earn <span className="text-white">KES 70</span> (L1) and <span className="text-white">KES 10</span> (L2) per Chat Foreigners unlock. All earnings go directly to your main wallet.
-          </p>
+
         </div>
 
         {/* Commission Breakdown */}

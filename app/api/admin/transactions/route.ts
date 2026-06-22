@@ -165,8 +165,6 @@ export async function GET(request: NextRequest) {
                   { $match: { target_type: 'company' } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
-                // totalPayouts is now sourced from the Withdrawal model — not the transaction stream
-                totalPayouts: [{ $limit: 0 }, { $count: 'n' }],
                 completedCount: [{ $match: { status: 'completed' } }, { $count: 'n' }],
                 pendingCount:   [{ $match: { status: 'pending'   } }, { $count: 'n' }],
                 failedCount:    [{ $match: { status: 'failed'    } }, { $count: 'n' }],
@@ -174,7 +172,7 @@ export async function GET(request: NextRequest) {
             },
           ])
         : Promise.resolve([{
-            data: [], totalCount: [], totalRevenue: [], totalPayouts: [],
+            data: [], totalCount: [], totalRevenue: [],
             completedCount: [], pendingCount: [], failedCount: [],
           }]),
 
@@ -212,8 +210,6 @@ export async function GET(request: NextRequest) {
                   { $match: { target_type: 'company' } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
-                // totalPayouts is sourced from the Withdrawal model — not the transaction stream
-                totalPayouts: [{ $limit: 0 }, { $count: 'n' }],
                 completedCount: [{ $match: { status: 'completed' } }, { $count: 'n' }],
                 pendingCount:   [{ $match: { status: 'pending'   } }, { $count: 'n' }],
                 failedCount:    [{ $match: { status: 'failed'    } }, { $count: 'n' }],
@@ -221,7 +217,7 @@ export async function GET(request: NextRequest) {
             },
           ])
         : Promise.resolve([{
-            data: [], totalCount: [], totalRevenue: [], totalPayouts: [],
+            data: [], totalCount: [], totalRevenue: [],
             completedCount: [], pendingCount: [], failedCount: [],
           }]),
     ]);
