@@ -247,7 +247,11 @@ export async function updateBotMessageCount(botId: string) {
 }
 
 // ========================================================================
-// Record Milestone Bonus (called when milestone reached)
+// Record Downline Bot-Unlock Bonus
+// KES 10 is credited to the referrer when their downline (referee) pays
+// KES 100 to unlock a Chat Foreigners personality.
+// This function is kept for compatibility but the primary credit happens
+// in payments.ts (completeUnlockPayment) via the Transaction model.
 // ========================================================================
 export async function recordMilestoneBonus(botId: string) {
   try {
@@ -259,16 +263,16 @@ export async function recordMilestoneBonus(botId: string) {
     const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
-      return ApiError.unauthorized('Please log in to claim milestone bonus');
+      return ApiError.unauthorized('Please log in');
     }
 
     // Get bot details
-    const bot = await ChatForeignersBot.findById(botId).select('name milestoneBonus_cents').lean();
+    const bot = await ChatForeignersBot.findById(botId).select('name').lean();
     if (!bot) {
       return ApiError.notFound('Bot');
     }
 
-    // Check if user was referred
+    // Find who referred the current user
     const profile = await ChatForeignersProfile.findOne({
       user_id: currentUser._id.toString(),
     })
@@ -279,7 +283,6 @@ export async function recordMilestoneBonus(botId: string) {
       return ApiError.badRequest('User profile not found or no referral code');
     }
 
-    // Find referrer
     const referrerProfile = await ChatForeignersProfile.findOne({
       referralCode: profile.referralCode,
     })
@@ -290,7 +293,7 @@ export async function recordMilestoneBonus(botId: string) {
       return ApiError.badRequest('Referrer profile not found');
     }
 
-    // Check if milestone bonus already exists for this bot
+    // Guard: only credit once per bot unlock per referee
     const existingBonus = await ChatForeignersReferralEarning.findOne({
       referrer_id: referrerProfile.user_id,
       referee_id: currentUser._id.toString(),
@@ -301,32 +304,34 @@ export async function recordMilestoneBonus(botId: string) {
       .lean();
 
     if (existingBonus) {
-      return ApiError.badRequest('Milestone bonus already claimed for this bot');
+      return ApiError.badRequest('Downline bot-unlock bonus already recorded for this personality');
     }
 
-    // Record milestone bonus earning
+    // KES 10 (1000 cents) credited when downline pays KES 100 to unlock a personality
+    const BONUS_CENTS = 1000;
+
     const earning = await ChatForeignersReferralEarning.create({
       referrer_id: referrerProfile.user_id,
       referee_id: currentUser._id.toString(),
       bot_id: botId,
       earningType: 'milestone_bonus',
-      amount_cents: (bot as any).milestoneBonus_cents || 0,
+      amount_cents: BONUS_CENTS,
       status: 'completed',
     });
 
-    console.log('[ChatForeigners] Milestone bonus recorded:', {
+    console.log('[ChatForeigners] Downline bot-unlock bonus recorded:', {
       referrerId: referrerProfile.user_id,
       botId,
-      amount: ((bot as any).milestoneBonus_cents || 0) / 100,
+      amount: BONUS_CENTS / 100,
     });
 
     return successResponse(
       { earningId: earning._id.toString() },
-      'Milestone bonus claimed successfully'
+      'Downline bot-unlock bonus recorded successfully'
     );
   } catch (error) {
-    console.error('[ChatForeigners] Milestone bonus error:', error);
-    return ApiError.internal('Failed to claim milestone bonus', error instanceof Error ? error.message : undefined);
+    console.error('[ChatForeigners] Downline bonus error:', error);
+    return ApiError.internal('Failed to record downline bonus', error instanceof Error ? error.message : undefined);
   }
 }
 
