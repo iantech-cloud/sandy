@@ -97,30 +97,18 @@ export default function SurveysPage() {
   const loadSurveys = async () => {
     setLoading(true);
     try {
-      // Check if today is Tuesday
-      const today = new Date();
-      const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday, etc.
-      const isTuesday = dayOfWeek === 2;
-      
       const result = await getAvailableSurveys();
-      if (result && result.success && result.data) {
-        setSurveys(result.data);
-        setAvailabilityMessage('');
-      } else {
-        setSurveys([]);
-        
-        // Set custom message based on day of week
-        let messageToShow = result?.message || 'Failed to load surveys.';
-        if (!isTuesday) {
-          const daysUntilTuesday = dayOfWeek === 2 ? 0 : (9 - dayOfWeek) % 7;
-          const nextTuesday = new Date(today);
-          nextTuesday.setDate(nextTuesday.getDate() + daysUntilTuesday);
-          messageToShow = `Surveys are only available on Tuesdays. Next available: ${nextTuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`;
+      if (result && result.success) {
+        setSurveys(result.data || []);
+        if (result.message && result.data?.length === 0) {
+          setAvailabilityMessage(result.message);
+        } else {
+          setAvailabilityMessage('');
         }
-        
-        setMessage(messageToShow);
+      } else {
+        setMessage(result?.message || 'Failed to load surveys.');
         setMessageType('error');
-        setAvailabilityMessage(messageToShow);
+        setAvailabilityMessage(result?.message || '');
       }
     } catch (error) {
       setMessage('Failed to load surveys.');
@@ -159,10 +147,10 @@ export default function SurveysPage() {
       if (result && result.success && result.survey && result.responseId) {
         setActiveSurvey(result.survey);
         setCurrentResponseId(result.responseId);
-        setTimeLeft(result.survey.duration_minutes * 60);
+        setTimeLeft(result.survey.duration_minutes * 60); // Convert to seconds
         setShowSurveyForm(true);
-        setAnswers([]);
-        setCurrentQuestionIndex(0);
+        setAnswers([]); // Reset answers
+        setCurrentQuestionIndex(0); // Start with first question
         setMessage(result.message);
         setMessageType('info');
       } else {
@@ -170,8 +158,7 @@ export default function SurveysPage() {
         setMessageType('error');
       }
     } catch (error) {
-      console.error('Error starting survey:', error);
-      setMessage('Failed to start survey. Please try again.');
+      setMessage('Failed to start survey.');
       setMessageType('error');
     } finally {
       setLoading(false);
@@ -568,7 +555,7 @@ export default function SurveysPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {surveys.map((survey) => (
-              <div key={`${survey.id}-${survey.title}`} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+              <div key={survey.id} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow duration-300">
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-3">
                     <h3 className="font-bold text-lg text-gray-800 flex-1 mr-2">{survey.title}</h3>
@@ -579,7 +566,7 @@ export default function SurveysPage() {
                   
                   <p className="text-gray-600 text-sm mb-4 line-clamp-2">{survey.description}</p>
                   
-                  <div className="space-y-2 mb-6">
+                  <div className="space-y-2 mb-4">
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-500">Duration:</span>
                       <span className="font-medium">{survey.duration_minutes} minutes</span>
@@ -587,14 +574,6 @@ export default function SurveysPage() {
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-500">Questions:</span>
                       <span className="font-medium">{survey.questions.length}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Payout:</span>
-                      <span className="font-bold text-green-600">KES {(survey.payout_cents / 100).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Available:</span>
-                      <span className="font-medium text-blue-600">Tuesdays Only</span>
                     </div>
                     {survey.expires_at && (
                       <div className="flex justify-between items-center text-sm">
@@ -609,9 +588,9 @@ export default function SurveysPage() {
                   <button
                     onClick={() => handleStartSurvey(survey.id)}
                     disabled={loading}
-                    className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition duration-150 font-medium shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition duration-150 font-medium shadow-md hover:shadow-lg"
                   >
-                    {loading ? 'Starting...' : 'Start Survey'}
+                    Start Survey
                   </button>
                 </div>
                 
@@ -621,7 +600,7 @@ export default function SurveysPage() {
                     <div className="flex flex-wrap gap-1">
                       {survey.topics.slice(0, 3).map((topic, index) => (
                         <span 
-                          key={`${survey.id}-topic-${index}`}
+                          key={index}
                           className="bg-white border border-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full"
                         >
                           {topic}

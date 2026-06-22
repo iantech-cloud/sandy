@@ -4,11 +4,25 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DollarSign, Phone, Loader2, CheckCircle, AlertCircle, RefreshCw, Send } from 'lucide-react';
+import TransactionHistory from '@/app/ui/dashboard/TransactionHistory';
 import Alert from '@/app/ui/Alert';
 import { useDashboard } from '../../dashboard/DashboardContext';
 import { processWithdrawal } from '@/app/actions/transactions';
-import { getUserBalance } from '@/app/actions/deposit';
+import { getDepositHistory, getUserBalance } from '@/app/actions/deposit';
+import { reconcileSpinDepositStatus } from '@/app/actions/spin';
 import { formatPhoneNumber, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
+
+// Match the Transaction interface from TransactionHistory
+interface Transaction {
+  id: string;
+  type: 'DEPOSIT' | 'WITHDRAWAL' | 'BONUS' | 'TASK_PAYMENT' | 'SPIN_WIN' | 'REFERRAL' | 'SURVEY' | 'ACTIVATION_FEE' | 'COMPANY_REVENUE' | 'ACCOUNT_ACTIVATION';
+  amount: number;
+  description: string;
+  status: 'pending' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+  date: string;
+  transaction_code?: string;
+  mpesa_receipt_number?: string;
+}
 
 const MIN_WITHDRAWAL = 200;
 
@@ -44,10 +58,50 @@ function formatPhoneForDisplay(phone: string): string {
   }
 }
 
+// Map raw transaction to local Transaction type
+function transformTransaction(tx: any): Transaction {
+  let amount = 0;
+  if (typeof tx.amount === 'number' && !isNaN(tx.amount)) {
+    amount = tx.amount;
+  } else if (typeof tx.amount_cents === 'number' && !isNaN(tx.amount_cents)) {
+    amount = tx.amount_cents / 100;
+  }
+
+  const date = tx.created_at || tx.date || tx.transaction_date || new Date().toISOString();
+
+  const typeMap: Record<string, Transaction['type']> = {
+    DEPOSIT: 'DEPOSIT',
+    WITHDRAW: 'WITHDRAWAL',
+    WITHDRAWAL: 'WITHDRAWAL',
+    BONUS: 'BONUS',
+    TASK_PAYMENT: 'TASK_PAYMENT',
+    SPIN_WIN: 'SPIN_WIN',
+    REFERRAL: 'REFERRAL',
+    SURVEY: 'SURVEY',
+    ACTIVATION_FEE: 'ACTIVATION_FEE',
+    ACCOUNT_ACTIVATION: 'ACCOUNT_ACTIVATION',
+    COMPANY_REVENUE: 'COMPANY_REVENUE',
+  };
+
+  const type: Transaction['type'] = typeMap[(tx.type || '').toUpperCase()] ?? 'DEPOSIT';
+
+  return {
+    id: tx.id || tx._id?.toString() || `tx-${Date.now()}-${Math.random()}`,
+    type,
+    amount,
+    description: tx.description || `Transaction ${tx.type || 'DEPOSIT'}`,
+    date,
+    status: tx.status || 'completed',
+    transaction_code: tx.transaction_code,
+    mpesa_receipt_number: tx.mpesaReceiptNumber || tx.mpesa_receipt_number,
+  };
+}
+
 export default function WalletPage() {
   const { user } = useDashboard();
   const router = useRouter();
 
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [mpesaNumber, setMpesaNumber] = useState(user?.phone || '');
   const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
@@ -73,7 +127,39 @@ export default function WalletPage() {
   const fetchWalletData = async () => {
     try {
       setIsRefreshing(true);
-      const balanceResult = await getUserBalance();
+      const [historyResult, balanceResult] = await Promise.all([
+        getDepositHistory(50, 1),
+        getUserBalance(),
+      ]);
+
+      if (historyResult.success && historyResult.data) {
+        const transformed = historyResult.data
+          .map(transformTransaction)
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        // Reconcile any pending spin deposits to ensure their status is correct
+        const pendingSpinDeposits = transformed.filter(
+          tx => tx.status === 'pending' && tx.type === 'DEPOSIT' && tx.description?.includes('Spin')
+        );
+        
+        if (pendingSpinDeposits.length > 0) {
+          console.log('[v0] Found pending spin deposits, triggering reconciliation...');
+          // Trigger reconciliation for pending spin deposits without blocking the UI
+          pendingSpinDeposits.forEach(async (tx) => {
+            try {
+              if (tx.id) {
+                await reconcileSpinDepositStatus(tx.id);
+              }
+            } catch (error) {
+              console.error('[v0] Reconciliation error for transaction:', tx.id, error);
+            }
+          });
+        }
+        
+        setTransactions(transformed);
+      } else {
+        setTransactions([]);
+      }
 
       if (balanceResult.success && balanceResult.data) {
         setCurrentBalance(balanceResult.data.balance);
@@ -298,6 +384,14 @@ export default function WalletPage() {
         </div>
       </div>
 
+      {/* Transaction History */}
+      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-semibold text-gray-800">Transaction History</h3>
+          <span className="text-sm text-gray-500">{transactions.length} transaction{transactions.length !== 1 ? 's' : ''}</span>
+        </div>
+        <TransactionHistory transactions={transactions} title="" limit={30} />
+      </div>
     </div>
   );
 }

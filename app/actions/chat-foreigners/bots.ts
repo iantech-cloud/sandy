@@ -1,29 +1,48 @@
 'use server';
 
-import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, ChatForeignersReferralEarning } from '@/app/lib/models';
-import { getCurrentUserFromSession } from '@/app/lib/auth';
-import { successResponse, errorResponse, ApiError, paginatedResponse } from '@/app/lib/responses';
-import { z } from 'zod';
+import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, ChatForeignersReferralEarning, Profile } from '@/app/lib/models';
+import { auth } from '@/auth';
 
 // ========================================================================
-// List All Active Bots - Optimized with lean() and select()
+// Helper: Get Current User from Session
+// ========================================================================
+async function getCurrentUserFromSession() {
+  const session = await auth();
+  const sessionId = (session?.user as any)?.id || (session?.user as any)?.userId;
+  
+  if (!session?.user || (!sessionId && !session.user.email)) {
+    return null;
+  }
+
+  let currentUser = null;
+  if (sessionId) {
+    currentUser = await Profile.findOne({ _id: sessionId }).lean();
+  }
+  if (!currentUser && session.user.email) {
+    const emailPattern = new RegExp(
+      `^${session.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+      'i'
+    );
+    currentUser = await Profile.findOne({ email: { $regex: emailPattern } }).lean();
+  }
+
+  return currentUser;
+}
+
+// ========================================================================
+// List All Active Bots
 // ========================================================================
 export async function listChatForeignersBots() {
   try {
     await connectToDatabase();
 
-    const bots = await ChatForeignersBot.find({ isActive: true })
-      .select(
-        'name username description bio personalityType speakingStyle mood interests ' +
-        'avatar_url nationality tagline welcomeMessage purpose languages availabilityNote ' +
-        'category unlockCost_cents messageEarning_cents created_at isActive'
-      )
-      .sort({ created_at: -1 })
-      .lean()
-      .exec();
+    const bots = await ChatForeignersBot.find({ isActive: true }).sort({
+      created_at: -1,
+    });
 
-    return successResponse(
-      bots.map((bot: any) => ({
+    return {
+      success: true,
+      data: bots.map((bot) => ({
         id: bot._id.toString(),
         name: bot.name,
         username: bot.username,
@@ -44,75 +63,67 @@ export async function listChatForeignersBots() {
         category: bot.category,
         unlockCost_cents: bot.unlockCost_cents,
         unlockPrice: bot.unlockCost_cents / 100,
-        messageEarning_cents: bot.messageEarning_cents,
-        messageEarningPrice: bot.messageEarning_cents / 100,
         isActive: bot.isActive,
         createdAt: bot.created_at,
       })),
-      'Bots retrieved successfully'
-    );
+    };
   } catch (error) {
     console.error('[ChatForeigners] Bots list error:', error);
-    return ApiError.internal('Failed to retrieve bots', error instanceof Error ? error.message : undefined);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An error occurred',
+    };
   }
 }
 
 // ========================================================================
-// Get Bot Details - Optimized with lean() and select()
+// Get Bot Details
 // ========================================================================
 export async function getBotDetails(botId: string) {
   try {
-    // Validate botId format
-    if (!botId || botId.length < 1) {
-      return ApiError.badRequest('Bot ID is required');
-    }
-
     await connectToDatabase();
 
-    const bot = await ChatForeignersBot.findById(botId)
-      .select(
-        'name username description bio personalityType speakingStyle mood interests ' +
-        'avatar_url nationality tagline welcomeMessage purpose languages availabilityNote ' +
-        'category unlockCost_cents messageEarning_cents created_at'
-      )
-      .lean()
-      .exec();
-
+    const bot = await ChatForeignersBot.findById(botId);
     if (!bot) {
-      return ApiError.notFound('Bot');
+      return { success: false, error: 'Bot not found' };
     }
 
-    return successResponse({
-      id: (bot as any)._id.toString(),
-      name: bot.name,
-      username: bot.username,
-      description: bot.description || bot.bio,
-      bio: bot.bio,
-      personalityType: bot.personalityType,
-      speakingStyle: bot.speakingStyle,
-      mood: bot.mood,
-      interests: bot.interests,
-      avatar_url: bot.avatar_url,
-      nationality: bot.nationality,
-      tagline: bot.tagline,
-      welcomeMessage: bot.welcomeMessage,
-      purpose: bot.purpose,
-      languages: bot.languages,
-      availabilityNote: bot.availabilityNote,
-      category: bot.category,
-      unlockCost_cents: bot.unlockCost_cents,
-      unlockPrice: bot.unlockCost_cents / 100,
-      messageEarning_cents: bot.messageEarning_cents,
-      messageEarningPrice: bot.messageEarning_cents / 100,
-    });
+    return {
+      success: true,
+      data: {
+        id: bot._id.toString(),
+        name: bot.name,
+        username: bot.username,
+        description: bot.description || bot.bio,
+        bio: bot.bio,
+        personalityType: bot.personalityType,
+        speakingStyle: bot.speakingStyle,
+        mood: bot.mood,
+        interests: bot.interests,
+        avatar_url: bot.avatar_url,
+        nationality: bot.nationality,
+        tagline: bot.tagline,
+        welcomeMessage: bot.welcomeMessage,
+        purpose: bot.purpose,
+        languages: bot.languages,
+        availabilityNote: bot.availabilityNote,
+        category: bot.category,
+        unlockCost_cents: bot.unlockCost_cents,
+        unlockPrice: bot.unlockCost_cents / 100,
+        messageLimitForMilestone: bot.messageLimitForMilestone,
+      },
+    };
   } catch (error) {
     console.error('[ChatForeigners] Bot details error:', error);
-    return ApiError.internal('Failed to retrieve bot details', error instanceof Error ? error.message : undefined);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An error occurred',
+    };
   }
 }
 
 // ========================================================================
-// Get User's Bot Access - Optimized with lean()
+// Get User's Bot Access (which bots they've unlocked)
 // ========================================================================
 export async function getUserBotAccess() {
   try {
@@ -120,49 +131,43 @@ export async function getUserBotAccess() {
     const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
-      return ApiError.unauthorized('Please log in to view your bot access');
+      return { success: false, error: 'Not authenticated' };
     }
 
     // LIFETIME UNLOCK: include all accesses regardless of isClosed
     const accesses = await ChatForeignersBotAccess.find({
-      user_id: currentUser._id.toString(),
+      user_id: currentUser._id,
     })
-      .select('bot_id unlockedAt lifetimeAccessUnlocked chat_earnings_cents')
       .populate('bot_id', 'name description avatar_url category')
-      .sort({ unlockedAt: -1 })
-      .lean()
-      .exec();
+      .sort({ unlockedAt: -1 });
 
-    return successResponse(
-      accesses
-        .filter((access: any) => access.bot_id !== null) // Skip deleted bots
-        .map((access: any) => ({
+    return {
+      success: true,
+      data: accesses
+        .filter((access) => access.bot_id !== null) // Skip deleted bots
+        .map((access) => ({
           botId: access.bot_id._id.toString(),
           botName: access.bot_id.name,
           botAvatar: access.bot_id.avatar_url,
-          botCategory: access.bot_id.category,
+          messageCount: access.messageCount,
+          firstMilestoneComplete: access.firstMilestoneComplete,
           unlockedAt: access.unlockedAt,
-          lifetimeAccessUnlocked: access.lifetimeAccessUnlocked,
-          chatEarnings_cents: access.chat_earnings_cents,
-          chatEarnings: (access.chat_earnings_cents || 0) / 100,
         })),
-      'Bot access retrieved successfully'
-    );
+    };
   } catch (error) {
     console.error('[ChatForeigners] Bot access error:', error);
-    return ApiError.internal('Failed to retrieve bot access', error instanceof Error ? error.message : undefined);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An error occurred',
+    };
   }
 }
 
 // ========================================================================
-// Check if User Has Access to Bot - Optimized with lean()
+// Check if User Has Access to Bot
 // ========================================================================
 export async function checkBotAccess(botId: string) {
   try {
-    if (!botId || botId.length < 1) {
-      return { success: false, hasAccess: false, error: ApiError.badRequest('Bot ID required') };
-    }
-
     await connectToDatabase();
     const currentUser = await getCurrentUserFromSession();
 
@@ -171,12 +176,9 @@ export async function checkBotAccess(botId: string) {
     }
 
     const access = await ChatForeignersBotAccess.findOne({
-      user_id: currentUser._id.toString(),
+      user_id: currentUser._id,
       bot_id: botId,
-    })
-      .select('lifetimeAccessUnlocked unlockedAt isClosed chat_earnings_cents')
-      .lean()
-      .exec();
+    });
 
     // LIFETIME UNLOCK: any access record means permanent access regardless of isClosed
     const hasActiveAccess = !!access;
@@ -186,11 +188,11 @@ export async function checkBotAccess(botId: string) {
       hasAccess: hasActiveAccess,
       data: access
         ? {
-            lifetimeAccessUnlocked: access.lifetimeAccessUnlocked,
+            messageCount: access.messageCount,
+            firstMilestoneComplete: access.firstMilestoneComplete,
             isClosed: access.isClosed || false,
-            unlockedAt: access.unlockedAt,
-            chatEarnings_cents: (access as any).chat_earnings_cents || 0,
-            chatEarnings: ((access as any).chat_earnings_cents || 0) / 100,
+            // Whether the one-time KSH 100 completion reward was already claimed
+            chatCreditPaid: access.chatCreditPaid || false,
           }
         : null,
     };
@@ -209,129 +211,132 @@ export async function checkBotAccess(botId: string) {
 // ========================================================================
 export async function updateBotMessageCount(botId: string) {
   try {
-    if (!botId || botId.length < 1) {
-      return ApiError.badRequest('Bot ID is required');
-    }
-
     await connectToDatabase();
     const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
-      return ApiError.unauthorized('Please log in to send messages');
+      return { success: false, error: 'Not authenticated' };
     }
 
     const access = await ChatForeignersBotAccess.findOne({
-      user_id: currentUser._id.toString(),
+      user_id: currentUser._id,
       bot_id: botId,
     });
 
     if (!access) {
-      return ApiError.badRequest('No access to this bot');
+      return { success: false, error: 'No access to this bot' };
     }
 
-    // Note: The message earning logic is handled in the chat route
-    // This function is kept for backward compatibility
-    
-    return successResponse(
-      {
-        success: true,
-        botId,
-        userId: currentUser._id.toString(),
+    access.messageCount += 1;
+
+    const bot = await ChatForeignersBot.findById(botId);
+    if (!bot) {
+      return { success: false, error: 'Bot not found' };
+    }
+
+    // Check if milestone reached
+    let milestoneReached = false;
+    if (
+      !access.firstMilestoneComplete &&
+      access.messageCount >= bot.messageLimitForMilestone
+    ) {
+      access.firstMilestoneComplete = true;
+      access.milestoneCompletedAt = new Date();
+      milestoneReached = true;
+    }
+
+    await access.save();
+
+    return {
+      success: true,
+      data: {
+        messageCount: access.messageCount,
+        milestoneReached,
       },
-      'Message recorded successfully'
-    );
+    };
   } catch (error) {
     console.error('[ChatForeigners] Message count update error:', error);
-    return ApiError.internal('Failed to update message count', error instanceof Error ? error.message : undefined);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An error occurred',
+    };
   }
 }
 
 // ========================================================================
-// Record Downline Bot-Unlock Bonus
-// KES 10 is credited to the referrer when their downline (referee) pays
-// KES 100 to unlock a Chat Foreigners personality.
-// This function is kept for compatibility but the primary credit happens
-// in payments.ts (completeUnlockPayment) via the Transaction model.
+// Record Milestone Bonus (called when milestone reached)
 // ========================================================================
 export async function recordMilestoneBonus(botId: string) {
   try {
-    if (!botId || botId.length < 1) {
-      return ApiError.badRequest('Bot ID is required');
-    }
-
     await connectToDatabase();
     const currentUser = await getCurrentUserFromSession();
 
     if (!currentUser) {
-      return ApiError.unauthorized('Please log in');
+      return { success: false, error: 'Not authenticated' };
     }
 
     // Get bot details
-    const bot = await ChatForeignersBot.findById(botId).select('name').lean();
+    const bot = await ChatForeignersBot.findById(botId);
     if (!bot) {
-      return ApiError.notFound('Bot');
+      return { success: false, error: 'Bot not found' };
     }
 
-    // Find who referred the current user
+    // Check if user was referred
     const profile = await ChatForeignersProfile.findOne({
-      user_id: currentUser._id.toString(),
-    })
-      .select('referralCode')
-      .lean();
+      user_id: currentUser._id,
+    });
 
     if (!profile?.referralCode) {
-      return ApiError.badRequest('User profile not found or no referral code');
+      return { success: false, error: 'User profile not found' };
     }
 
+    // Find referrer
     const referrerProfile = await ChatForeignersProfile.findOne({
       referralCode: profile.referralCode,
-    })
-      .select('user_id')
-      .lean();
+    });
 
     if (!referrerProfile) {
-      return ApiError.badRequest('Referrer profile not found');
+      return { success: false, error: 'Referrer not found' };
     }
 
-    // Guard: only credit once per bot unlock per referee
+    // Check if milestone bonus already exists for this bot
     const existingBonus = await ChatForeignersReferralEarning.findOne({
       referrer_id: referrerProfile.user_id,
-      referee_id: currentUser._id.toString(),
+      referee_id: currentUser._id,
       bot_id: botId,
       earningType: 'milestone_bonus',
-    })
-      .select('_id')
-      .lean();
+    });
 
     if (existingBonus) {
-      return ApiError.badRequest('Downline bot-unlock bonus already recorded for this personality');
+      return { success: false, error: 'Milestone bonus already claimed' };
     }
 
-    // KES 10 (1000 cents) credited when downline pays KES 100 to unlock a personality
-    const BONUS_CENTS = 1000;
-
+    // Record milestone bonus earning
     const earning = await ChatForeignersReferralEarning.create({
       referrer_id: referrerProfile.user_id,
-      referee_id: currentUser._id.toString(),
+      referee_id: currentUser._id,
       bot_id: botId,
       earningType: 'milestone_bonus',
-      amount_cents: BONUS_CENTS,
+      amount_cents: bot.milestoneBonus_cents,
       status: 'completed',
     });
 
-    console.log('[ChatForeigners] Downline bot-unlock bonus recorded:', {
+    console.log('[ChatForeigners] Milestone bonus recorded:', {
       referrerId: referrerProfile.user_id,
       botId,
-      amount: BONUS_CENTS / 100,
+      amount: bot.milestoneBonus_cents / 100,
     });
 
-    return successResponse(
-      { earningId: earning._id.toString() },
-      'Downline bot-unlock bonus recorded successfully'
-    );
+    return {
+      success: true,
+      data: { earningId: earning._id.toString() },
+    };
   } catch (error) {
-    console.error('[ChatForeigners] Downline bonus error:', error);
-    return ApiError.internal('Failed to record downline bonus', error instanceof Error ? error.message : undefined);
+    console.error('[ChatForeigners] Milestone bonus error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An error occurred',
+    };
   }
 }
 

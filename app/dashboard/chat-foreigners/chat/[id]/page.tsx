@@ -135,7 +135,6 @@ export default function ChatPage() {
   const [rewardAlreadyClaimed, setRewardAlreadyClaimed] = useState(false);
   const [closeError, setCloseError] = useState('');
   const [creditAmount, setCreditAmount] = useState(0);
-  const [earningNotification, setEarningNotification] = useState<{ amount: number; totalEarnings: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -257,15 +256,6 @@ export default function ChatPage() {
           { role: 'assistant', content: data.reply, timestamp: new Date() },
         ]);
         if (hasFullAccess) setMessageCount((prev) => prev + 1);
-
-        // Handle earning notification
-        if (data.messageEarningCredited && data.totalChatEarnings !== undefined) {
-          setEarningNotification({
-            amount: (data.totalChatEarnings - ((data.totalChatEarnings || 0) - 10)) || 10,
-            totalEarnings: data.totalChatEarnings,
-          });
-          setTimeout(() => setEarningNotification(null), 3000);
-        }
       } else {
         const errMsg = data.error
           ? `Could not get a response: ${data.error}`
@@ -741,18 +731,6 @@ export default function ChatPage() {
           ) : (
             <span className="text-[10px] text-zinc-600">{MIN_MESSAGES_TO_CLOSE - messageCount} more</span>
           )}
-        </div>
-      )}
-
-      {/* Earning notification toast */}
-      {earningNotification && (
-        <div className="px-3 py-2.5 bg-[#1a3a2a] border-t border-[#00c97a]/30 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="flex items-center gap-2 bg-[#00c97a]/20 border border-[#00c97a]/40 rounded-lg px-3 py-2">
-            <Coins className="w-4 h-4 text-[#00c97a] shrink-0" />
-            <span className="flex-1 text-sm text-[#00c97a] font-semibold">
-              You earned KSh {earningNotification.amount / 100}! Total: KSh {(earningNotification.totalEarnings || 0).toFixed(0)}
-            </span>
-          </div>
         </div>
       )}
 

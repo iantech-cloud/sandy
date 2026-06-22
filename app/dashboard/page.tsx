@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 
 import SpinWheel from '@/app/ui/dashboard/spin-wheel';
-import SurveyWalletCard from '@/app/ui/dashboard/SurveyWalletCard';
 import { fetchDashboardData } from '@/app/lib/data';
 import { useDashboard } from './DashboardContext';
 
@@ -473,14 +472,6 @@ export default function DashboardPage() {
                 {referralMessage}
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Survey Wallet Card */}
-        <div className="group relative bg-white rounded-xl overflow-hidden shadow-lg border border-emerald-400 hover:shadow-xl transition-all duration-300">
-          <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-emerald-600"></div>
-          <div className="relative z-10">
-            <SurveyWalletCard />
           </div>
         </div>
       </div>

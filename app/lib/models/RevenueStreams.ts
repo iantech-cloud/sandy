@@ -385,25 +385,10 @@ const TransactionLedgerSchema = new Schema({
   transaction_type: { type: String, enum: ['credit', 'debit'], required: true },
   amount_cents: { type: Number, required: true },
   
-  source: { type: String, enum: ['freelance_payment', 'subscription_earnings', 'digital_product_sale', 'tutoring', 'ai_task', 'local_gig', 'affiliate_commission', 'referral_bonus', 'downline_commission', 'platform_fee', 'payout'], required: true, index: true },
-  
-  // Source tracking - whether direct earnings or downline commission
-  earning_source_type: { type: String, enum: ['direct', 'downline', 'system'], default: 'direct', index: true },
-  
-  // For downline commissions
-  referrer_id: { type: String, ref: 'Profile', sparse: true, index: true }, // The person who referred this user
-  downline_user_id: { type: String, ref: 'Profile', sparse: true, index: true }, // User from downline earning
-  downline_level: { type: Number, sparse: true, min: 1 }, // Level in referral tree (1 = direct, 2 = their referral, etc)
-  commission_percentage: { type: Number, sparse: true, min: 0, max: 100 }, // Percentage earned from downline activity
+  source: { type: String, enum: ['freelance_payment', 'subscription_earnings', 'digital_product_sale', 'tutoring', 'ai_task', 'local_gig', 'affiliate_commission', 'referral_bonus', 'platform_fee', 'payout'], required: true, index: true },
   
   reference_id: { type: String, sparse: true, index: true },
   reference_type: { type: String, sparse: true },
-  
-  // Payment method tracking
-  payment_method: { type: String, enum: ['coop_bank', 'mpesa', 'system_credit', 'wallet_transfer'], sparse: true },
-  coop_reference_id: { type: String, sparse: true, index: true }, // Reference from Coop Bank API
-  mpesa_reference_id: { type: String, sparse: true, index: true }, // M-Pesa transaction ID
-  coop_bank_payment_id: { type: Schema.Types.ObjectId, ref: 'CoopBankPayment', sparse: true },
   
   balance_after_cents: { type: Number, required: true },
   
@@ -420,11 +405,6 @@ const TransactionLedgerSchema = new Schema({
     { fields: { user_id: 1, created_at: -1 } },
     { fields: { source: 1, created_at: -1 } },
     { fields: { transaction_type: 1, created_at: -1 } },
-    { fields: { earning_source_type: 1, created_at: -1 } },
-    { fields: { user_id: 1, earning_source_type: 1, created_at: -1 } },
-    { fields: { coop_reference_id: 1 } },
-    { fields: { mpesa_reference_id: 1 } },
-    { fields: { referrer_id: 1, downline_level: 1 } },
   ]
 });
 

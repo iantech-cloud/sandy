@@ -21,28 +21,18 @@ export default function SignUpContent() {
   const [error, setError] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [confirmNameAccuracy, setConfirmNameAccuracy] = useState(false);
-  const [hasValidReferral, setHasValidReferral] = useState(false);
   const router = useRouter();
 
-  // Check for referral code in URL - REQUIRED to signup
+  // Check for referral code in URL (silent — not displayed to user)
   useEffect(() => {
     const refParam = searchParams.get('ref');
-    
-    if (!refParam) {
-      // No referral code provided - show error and redirect
-      setError('You must sign up via a referral link. Please check your invitation link and try again.');
-      setHasValidReferral(false);
-      // Redirect to home after a delay
-      const timer = setTimeout(() => {
-        router.push('/');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
+    const DEFAULT_REFERRAL_CODE = 'SANDY001';
+    const formattedRef = refParam
+      ? refParam.toUpperCase().replace(/[^A-Z0-9]/g, '')
+      : DEFAULT_REFERRAL_CODE;
 
-    const formattedRef = refParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
     setFormData(prev => ({ ...prev, referralId: formattedRef }));
-    setHasValidReferral(true);
-  }, [searchParams, router]);
+  }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -58,9 +48,8 @@ export default function SignUpContent() {
                          formData.confirmPassword;
     const hasAllCheckboxes = agreeToTerms && confirmNameAccuracy;
     const passwordsMatch = formData.password === formData.confirmPassword;
-    const hasReferralCode = formData.referralId && formData.referralId.length > 0;
     
-    return hasAllFields && hasAllCheckboxes && passwordsMatch && hasReferralCode && !isLoading;
+    return hasAllFields && hasAllCheckboxes && passwordsMatch && !isLoading;
   };
 
   const validateForm = () => {
