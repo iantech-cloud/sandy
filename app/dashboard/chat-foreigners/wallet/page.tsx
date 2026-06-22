@@ -100,37 +100,22 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function WalletCard({
-  label,
-  sublabel,
   amount_cents,
   icon,
   gradient,
-  note,
 }: {
-  label: string;
-  sublabel: string;
   amount_cents: number;
   icon: React.ReactNode;
   gradient: string;
-  note?: string;
 }) {
   return (
-    <div className={`rounded-2xl p-5 ${gradient} relative overflow-hidden`}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-white/70 text-xs font-semibold uppercase tracking-widest mb-0.5">{label}</p>
-          <p className="text-white/50 text-[10px]">{sublabel}</p>
-        </div>
-        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 ml-3">
-          {icon}
-        </div>
-      </div>
+    <div className={`rounded-2xl p-5 ${gradient} relative overflow-hidden flex items-center justify-between`}>
       <p className="text-3xl font-bold text-white tracking-tight">
         KES {(amount_cents / 100).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </p>
-      {note && (
-        <p className="text-white/50 text-[10px] mt-2 leading-relaxed">{note}</p>
-      )}
+      <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0 ml-3">
+        {icon}
+      </div>
     </div>
   );
 }
@@ -239,20 +224,14 @@ export default function WalletPage() {
         {/* Two wallet cards */}
         <div className="space-y-3">
           <WalletCard
-            label="Downline Earnings"
-            sublabel="From your referrals unlocking chats"
             amount_cents={wallet.downline_earnings_cents}
             icon={<Users size={20} className="text-white" />}
             gradient="bg-gradient-to-br from-amber-600 to-orange-700"
-            note="KES 70 credited (Level 1) or KES 10 (Level 2) each time your downline unlocks a Chat Foreigners personality. Transferred to your main wallet."
           />
           <WalletCard
-            label="Chat Earnings"
-            sublabel="From two-way message interactions"
             amount_cents={wallet.chat_earnings_cents}
             icon={<MessageSquare size={20} className="text-white" />}
             gradient="bg-gradient-to-br from-[#00c97a] to-emerald-700"
-            note="KSH 10 per qualifying message: you send → bot replies → you send again."
           />
         </div>
 
