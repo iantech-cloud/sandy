@@ -14,41 +14,27 @@ interface Transaction {
   amount_cents: number;
   transaction_type: 'credit' | 'debit';
   type: string;
+  type_label: string;
   source: string;
   earning_source_type: string;
   status: string;
   description: string;
   date: string;
-  target_type?: string;
-  payment_method?: string;
-  coop_reference_id?: string;
-  mpesa_reference_id?: string;
-  mpesa_receipt_number?: string;
-  phone_number?: string;
-  mpesa_transaction_id?: string;
-  coop_bank_transaction_id?: string;
-  referrer_id?: string;
-  referrer_email?: string;
-  referrer_username?: string;
-  downline_user_id?: string;
-  downline_user_email?: string;
-  downline_level?: number | string;
-  commission_percentage?: number | string;
+  /** 'User Wallet' | 'Company' — always set, never N/A */
+  target: string;
+  coop_reference_id?: string | null;
+  mpesa_reference_id?: string | null;
+  balance_after?: number | null;
   collection?: string;
-  metadata?: any;
 }
 
 interface Stats {
-  totalTransactions: number;
-  userTransactions: number;
-  companyTransactions: number;
-  userPayments: number;
-  companyRevenue: number;
-  pendingCount: number;
+  totalCount: number;
+  totalRevenue: number;
+  totalPayouts: number;
   completedCount: number;
+  pendingCount: number;
   failedCount: number;
-  cancelledCount: number;
-  timeoutCount: number;
 }
 
 interface PaginationData {
@@ -64,16 +50,12 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<{[key: string]: boolean}>({});
   const [stats, setStats] = useState<Stats>({
-    totalTransactions: 0,
-    userTransactions: 0,
-    companyTransactions: 0,
-    userPayments: 0,
-    companyRevenue: 0,
-    pendingCount: 0,
+    totalCount: 0,
+    totalRevenue: 0,
+    totalPayouts: 0,
     completedCount: 0,
+    pendingCount: 0,
     failedCount: 0,
-    cancelledCount: 0,
-    timeoutCount: 0
   });
   
   const [pagination, setPagination] = useState<PaginationData>({
@@ -139,8 +121,10 @@ export default function TransactionsPage() {
           setPagination(data.data.pagination);
         }
         setSelectedIds(new Set());
-        // Calculate stats from current page only — avoids slow 10k fetch
-        calculateStats(txns, data.data.pagination?.total || txns.length);
+        // Use server-side summary — covers ALL transactions, not just current page
+        if (data.data.summary) {
+          setStats(data.data.summary);
+        }
       } else {
         console.error('Failed to fetch transactions:', data.message);
       }
@@ -149,35 +133,6 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const calculateStats = (txns: Transaction[], totalCount?: number) => {
-    const completedTxns = txns.filter(t => t.status === 'completed');
-    
-    // Categorize transactions by type
-    const creditTxns = completedTxns.filter(t => t.transaction_type === 'credit');
-    const debitTxns = completedTxns.filter(t => t.transaction_type === 'debit');
-    
-    const directEarnings = creditTxns
-      .filter(t => t.earning_source_type === 'direct')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const downlineEarnings = creditTxns
-      .filter(t => t.earning_source_type === 'downline')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    setStats({
-      totalTransactions: totalCount ?? txns.length,
-      userTransactions: creditTxns.length,
-      companyTransactions: debitTxns.length,
-      userPayments: directEarnings,
-      companyRevenue: downlineEarnings,
-      pendingCount: txns.filter(t => t.status === 'pending').length,
-      completedCount: txns.filter(t => t.status === 'completed').length,
-      failedCount: txns.filter(t => t.status === 'failed').length,
-      cancelledCount: txns.filter(t => t.status === 'cancelled').length,
-      timeoutCount: txns.filter(t => t.status === 'timeout').length
-    });
   };
 
   const getStatusColor = (status: string) => {
@@ -311,20 +266,19 @@ export default function TransactionsPage() {
 
   const exportToCSV = () => {
     const headers = [
-      'Date', 'Transaction Code', 'Target Type', 'User', 'Type', 
-      'Amount', 'Status', 'Description', 'M-Pesa Receipt', 'Phone Number'
+      'Date', 'Coop Reference', 'M-Pesa Receipt', 'Target', 'User', 'Type',
+      'Amount (KES)', 'Status', 'Description',
     ];
     const rows = transactions.map(t => [
       new Date(t.date).toLocaleString(),
-      t.transaction_code || 'N/A',
-      t.target_type,
+      t.coop_reference_id  || 'N/A',
+      t.mpesa_reference_id || 'N/A',
+      t.target,
       `${t.user_username || 'N/A'} (${t.user_email || 'N/A'})`,
-      t.type,
+      t.type_label && t.type_label !== 'N/A' ? t.type_label : t.type,
       t.amount.toFixed(2),
       t.status,
       t.description,
-      t.mpesa_receipt_number || 'N/A',
-      t.phone_number || 'N/A'
     ]);
     
     const csvContent = [
@@ -372,38 +326,38 @@ export default function TransactionsPage() {
         </button>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards — totals come from server-side $facet aggregation, cover ALL transactions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Company Revenue</p>
-              <p className="text-2xl font-bold text-green-600">KES {stats.companyRevenue.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-1">{stats.companyTransactions} transactions</p>
+              <p className="text-2xl font-bold text-green-600">KES {stats.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</p>
+              <p className="text-xs text-gray-500 mt-1">All-time platform revenue</p>
             </div>
             <Building2 className="h-10 w-10 text-green-500" />
           </div>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">User Payments (Expenses)</p>
-              <p className="text-2xl font-bold text-red-600">KES {stats.userPayments.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 mt-1">{stats.userTransactions} transactions</p>
+              <p className="text-sm text-gray-600 mb-1">Total User Payouts</p>
+              <p className="text-2xl font-bold text-red-600">KES {stats.totalPayouts.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</p>
+              <p className="text-xs text-gray-500 mt-1">All-time paid to users</p>
             </div>
             <Users className="h-10 w-10 text-red-500" />
           </div>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Net Profit</p>
-              <p className={`text-2xl font-bold ${stats.companyRevenue - stats.userPayments >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                KES {(stats.companyRevenue - stats.userPayments).toFixed(2)}
+              <p className={`text-2xl font-bold ${stats.totalRevenue - stats.totalPayouts >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                KES {(stats.totalRevenue - stats.totalPayouts).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Revenue - Expenses</p>
+              <p className="text-xs text-gray-500 mt-1">Revenue minus payouts</p>
             </div>
             <DollarSign className="h-10 w-10 text-blue-500" />
           </div>
@@ -412,27 +366,23 @@ export default function TransactionsPage() {
 
       {/* Status Summary */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-lg font-semibold mb-4">Transaction Status Summary</h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <h3 className="text-lg font-semibold mb-4">Transaction Status Summary <span className="text-sm font-normal text-gray-500">(all-time)</span></h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center p-3 bg-gray-50 rounded-lg">
-            <p className="text-2xl font-bold text-gray-900">{stats.totalTransactions}</p>
+            <p className="text-2xl font-bold text-gray-900">{stats.totalCount.toLocaleString()}</p>
             <p className="text-sm text-gray-600">Total</p>
           </div>
           <div className="text-center p-3 bg-green-50 rounded-lg">
-            <p className="text-2xl font-bold text-green-600">{stats.completedCount}</p>
+            <p className="text-2xl font-bold text-green-600">{stats.completedCount.toLocaleString()}</p>
             <p className="text-sm text-gray-600">Completed</p>
           </div>
           <div className="text-center p-3 bg-yellow-50 rounded-lg">
-            <p className="text-2xl font-bold text-yellow-600">{stats.pendingCount}</p>
+            <p className="text-2xl font-bold text-yellow-600">{stats.pendingCount.toLocaleString()}</p>
             <p className="text-sm text-gray-600">Pending</p>
           </div>
           <div className="text-center p-3 bg-red-50 rounded-lg">
-            <p className="text-2xl font-bold text-red-600">{stats.failedCount}</p>
+            <p className="text-2xl font-bold text-red-600">{stats.failedCount.toLocaleString()}</p>
             <p className="text-sm text-gray-600">Failed</p>
-          </div>
-          <div className="text-center p-3 bg-orange-50 rounded-lg">
-            <p className="text-2xl font-bold text-orange-600">{stats.timeoutCount}</p>
-            <p className="text-sm text-gray-600">Timeout</p>
           </div>
         </div>
       </div>
@@ -596,7 +546,17 @@ export default function TransactionsPage() {
                       {new Date(txn.date).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      {getTargetBadge(txn.target_type)}
+                      {txn.target === 'Company' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                          <Building2 className="w-3 h-3" />
+                          Company
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                          <Users className="w-3 h-3" />
+                          User Wallet
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <div className="font-medium text-gray-900">{txn.user_username || 'N/A'}</div>
@@ -622,17 +582,15 @@ export default function TransactionsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
                       <div>
-                        <span className={txn.description === 'N/A' ? 'text-gray-400 italic' : ''}>
-                          {txn.description && txn.description !== 'N/A' ? txn.description : '—'}
-                        </span>
-                        {txn.mpesa_reference_id && txn.mpesa_reference_id !== 'N/A' && (
-                          <span className="block text-xs text-blue-600 mt-1">
+                        <span>{txn.description || '—'}</span>
+                        {txn.mpesa_reference_id && (
+                          <span className="block text-xs text-blue-600 mt-1 font-mono">
                             M-Pesa: {txn.mpesa_reference_id}
                           </span>
                         )}
-                        {txn.coop_reference_id && txn.coop_reference_id !== 'N/A' && (
-                          <span className="block text-xs text-gray-500 mt-1">
-                            Ref: {txn.coop_reference_id}
+                        {txn.coop_reference_id && (
+                          <span className="block text-xs text-gray-500 mt-1 font-mono">
+                            Coop: {txn.coop_reference_id}
                           </span>
                         )}
                       </div>

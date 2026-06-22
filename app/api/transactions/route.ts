@@ -1,26 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Profile, connectToDatabase, ChatForeignersTransaction, ChatForeignersWallet } from '@/app/lib/models';
-import { TransactionLedger } from '@/app/lib/models/RevenueStreams';
 import { auth } from '@/auth';
+
+const TYPE_LABELS: Record<string, string> = {
+  REFERRAL:            'Referral Bonus',
+  ACTIVATION_FEE:      'Account Activation Fee',
+  ACCOUNT_ACTIVATION:  'Account Activated',
+  DEPOSIT:             'Wallet Deposit',
+  WITHDRAWAL:          'Withdrawal',
+  BONUS:               'Bonus',
+  TASK_PAYMENT:        'Task Payment',
+  SPIN_WIN:            'Spin Win',
+  SPIN_PRIZE:          'Spin Prize',
+  SPIN_COST:           'Spin Entry Cost',
+  SPIN_WALLET_DEPOSIT: 'Spin Wallet Deposit',
+  SURVEY:              'Survey Reward',
+  SURVEY_REVOKE:       'Survey Reward Revoked',
+  ADMIN_CREDIT:        'Admin Credit',
+  ADMIN_DEBIT:         'Admin Debit',
+  COMPANY_REVENUE:     'Platform Fee',
+  UNCLAIMED_REFERRAL:  'Unclaimed Referral',
+};
+
+const CF_TYPE_LABELS: Record<string, string> = {
+  CHAT_DEPOSIT:          'Chat Wallet Deposit',
+  CHAT_MESSAGE_EARNING:  'Chat Message Earning',
+  CHAT_WITHDRAWAL:       'Chat Wallet Withdrawal',
+  CHAT_REFERRAL_EARNING: 'Chat Foreigners Referral Earnings',
+  CHAT_EARNINGS:         'Chat Foreigners Platform Fee',
+};
+
+// Debit types — money leaving user wallet
+const DEBIT_TYPES = new Set([
+  'WITHDRAWAL', 'ACTIVATION_FEE', 'SPIN_COST', 'ADMIN_DEBIT',
+  'COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SURVEY_REVOKE',
+]);
 
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.email) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
     await connectToDatabase();
 
     const currentUser = await Profile.findOne({ email: session.user.email }).select('_id').lean();
     if (!currentUser) {
-      return NextResponse.json(
-        { success: false, message: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -28,194 +55,193 @@ export async function GET(request: NextRequest) {
     const status     = searchParams.get('status') || '';
     const limit      = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
     const page       = Math.max(parseInt(searchParams.get('page') || '1'), 1);
+    const skip       = (page - 1) * limit;
 
     const userId = (currentUser as any)._id.toString();
 
-    // ─────────────────────────────────────────────────────────────
-    // 1. Legacy Transaction collection (DEPOSIT, WITHDRAWAL, BONUS,
-    //    REFERRAL, ACTIVATION_FEE, ADMIN_CREDIT, SPIN_WIN, etc.)
-    // ─────────────────────────────────────────────────────────────
     const mongoose = (await import('mongoose')).default;
     const LegacyTransaction = mongoose.models['Transaction'] || null;
+    const MpesaTransaction  = mongoose.models['MpesaTransaction'] || null;
 
-    // ─────────────────────────────────────────────────────────────
-    // 2. ChatForeigners wallet transactions
-    // ─────────────────────────────────────────────────────────────
-    const cfFilter: any = { user_id: userId };
-    if (status) cfFilter.status = status;
+    // ─── Build filters ────────────────────────────────────────────
+    let legacyMatch: any = { user_id: userId };
+    if (status) legacyMatch.status = status;
+    if (sourceType === 'downline') legacyMatch.type = 'REFERRAL';
+    else if (sourceType === 'direct') legacyMatch.type = { $nin: ['REFERRAL'] };
 
-    // ─────────────────────────────────────────────────────────────
-    // 3. Build legacy filter
-    // ─────────────────────────────────────────────────────────────
-    let legacyFilter: any = {};
-    if (sourceType === 'downline') {
-      // Downline = referral bonuses earned because someone in downline activated / unlocked
-      legacyFilter = {
-        user_id: (currentUser as any)._id,
-        type: { $in: ['REFERRAL'] },
-        target_type: 'user',
-      };
-    } else if (sourceType === 'direct') {
-      legacyFilter = {
-        user_id: (currentUser as any)._id,
-        type: { $in: ['DEPOSIT', 'BONUS', 'TASK_PAYMENT', 'SPIN_WIN', 'SURVEY', 'ACTIVATION_FEE', 'ADMIN_CREDIT', 'SPIN_PRIZE', 'SPIN_WALLET_DEPOSIT'] },
-        target_type: 'user',
-      };
-    } else {
-      legacyFilter = {
-        user_id: (currentUser as any)._id,
-        target_type: 'user',
-      };
-    }
-    if (status) legacyFilter.status = status;
+    const cfMatch: any = { user_id: userId };
+    if (status) cfMatch.status = status;
+    if (sourceType === 'downline') cfMatch.type = 'CHAT_REFERRAL_EARNING';
+    else if (sourceType === 'direct') cfMatch.type = { $ne: 'CHAT_REFERRAL_EARNING' };
 
-    // ─────────────────────────────────────────────────────────────
-    // Fetch all three sources in parallel
-    // ─────────────────────────────────────────────────────────────
-    const [legacyTxns, cfTxns, wallet] = await Promise.all([
+    // ─── Run aggregations in parallel ─────────────────────────────
+    // Each uses $facet to get BOTH paginated rows AND all-time totals in ONE query
+    const [legacyResult, cfResult, wallet] = await Promise.all([
       LegacyTransaction
-        ? LegacyTransaction.find(legacyFilter)
-            .sort({ created_at: -1 })
-            .lean()
-        : Promise.resolve([]),
-      (ChatForeignersTransaction as any).find(cfFilter)
-        .sort({ created_at: -1 })
+        ? LegacyTransaction.aggregate([
+            { $match: legacyMatch },
+            {
+              $facet: {
+                data: [
+                  { $sort: { created_at: -1 } },
+                  { $skip: skip },
+                  { $limit: limit },
+                  // Populate mpesa_transaction_id for real receipt number
+                  {
+                    $lookup: {
+                      from: 'mpesatransactions',
+                      localField: 'mpesa_transaction_id',
+                      foreignField: '_id',
+                      as: '_mpesa',
+                    },
+                  },
+                  // Populate user_id for username/email
+                  {
+                    $lookup: {
+                      from: 'profiles',
+                      localField: 'user_id',
+                      foreignField: '_id',
+                      as: '_profile',
+                    },
+                  },
+                ],
+                totalCount: [{ $count: 'n' }],
+                // All-time totals via aggregation — not in-memory
+                creditSum: [
+                  { $match: { target_type: { $in: ['user', null] }, $expr: { $not: { $in: ['$type', Array.from(DEBIT_TYPES)] } } } },
+                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+                ],
+                debitSum: [
+                  { $match: { $expr: { $in: ['$type', Array.from(DEBIT_TYPES)] } } },
+                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+                ],
+                downlineSum: [
+                  { $match: { type: 'REFERRAL' } },
+                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+                ],
+              },
+            },
+          ])
+        : Promise.resolve([{ data: [], totalCount: [], creditSum: [], debitSum: [], downlineSum: [] }]),
+
+      (ChatForeignersTransaction as any).aggregate([
+        { $match: cfMatch },
+        {
+          $facet: {
+            data: [
+              { $sort: { created_at: -1 } },
+              { $skip: skip },
+              { $limit: limit },
+            ],
+            totalCount: [{ $count: 'n' }],
+            creditSum: [
+              { $match: { target_type: 'user' } },
+              { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+            ],
+            debitSum: [
+              { $match: { target_type: 'company' } },
+              { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+            ],
+            downlineSum: [
+              { $match: { type: 'CHAT_REFERRAL_EARNING' } },
+              { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+            ],
+          },
+        },
+      ]),
+
+      ChatForeignersWallet.findOne({ user_id: userId })
+        .select('balance_cents')
         .lean(),
-      ChatForeignersWallet.findOne({ user_id: userId }).select('balance_cents total_earned_cents downline_earnings_cents chat_earnings_cents').lean(),
     ]);
 
-    // ─────────────────────────────────────────────────────────────
-    // Normalise legacy transactions → unified shape
-    // ─────────────────────────────────────────────────────────────
-    const normaliseLegacy = (txn: any) => {
-      const typeMap: Record<string, string> = {
-        REFERRAL: 'Referral Bonus',
-        ACTIVATION_FEE: 'Account Activation Fee',
-        DEPOSIT: 'Wallet Deposit',
-        WITHDRAWAL: 'Withdrawal',
-        BONUS: 'Bonus',
-        TASK_PAYMENT: 'Task Payment',
-        SPIN_WIN: 'Spin Win',
-        SPIN_PRIZE: 'Spin Prize',
-        SPIN_COST: 'Spin Entry Cost',
-        SPIN_WALLET_DEPOSIT: 'Spin Wallet Deposit',
-        SURVEY: 'Survey Reward',
-        SURVEY_REVOKE: 'Survey Reward Revoked',
-        ADMIN_CREDIT: 'Admin Credit',
-        ADMIN_DEBIT: 'Admin Debit',
-        ACCOUNT_ACTIVATION: 'Account Activation',
-        COMPANY_REVENUE: 'Platform Fee',
-        UNCLAIMED_REFERRAL: 'Unclaimed Referral',
-      };
+    const lr = legacyResult[0];
+    const cr = cfResult[0];
 
-      const isDebit = ['WITHDRAWAL', 'ACTIVATION_FEE', 'SPIN_COST', 'ADMIN_DEBIT', 'COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SURVEY_REVOKE'].includes(txn.type);
+    // ─── Normalise rows ────────────────────────────────────────────
+    const normLegacy = (txn: any) => {
+      const isDebit = DEBIT_TYPES.has(txn.type);
+      const meta    = txn.metadata || {};
+      const mpesa   = txn._mpesa?.[0];
+      const profile = txn._profile?.[0];
 
-      // Fix description grammar based on type
-      let description = txn.description || typeMap[txn.type] || txn.type || 'Transaction';
+      let description = txn.description || TYPE_LABELS[txn.type] || txn.type;
       if (txn.type === 'REFERRAL') {
-        const meta = txn.metadata || {};
         const level = meta.level === 2 ? 'Level 2 (KES 10)' : 'Level 1 (KES 65)';
-        const source = meta.source === 'chat_foreigners_unlock'
+        const src   = meta.source === 'chat_foreigners_unlock'
           ? `downline unlocked a Chat Foreigners personality — ${level}`
           : description;
-        description = description.includes('Chat Foreigners')
-          ? description
-          : `Referral commission: ${source}`;
+        description = description.toLowerCase().includes('chat foreigners') ? description : `Referral commission: ${src}`;
       } else if (txn.type === 'ACTIVATION_FEE') {
         description = 'Account activation fee paid';
-      } else if (txn.type === 'ACCOUNT_ACTIVATION') {
-        description = 'Account activated';
       }
 
       return {
-        id: txn._id?.toString(),
-        amount: (txn.amount_cents || 0) / 100,
-        amount_cents: txn.amount_cents || 0,
+        id:               txn._id?.toString(),
+        amount:           (txn.amount_cents || 0) / 100,
+        amount_cents:     txn.amount_cents || 0,
         transaction_type: isDebit ? 'debit' : 'credit',
-        source: txn.source || txn.type || 'N/A',
+        type:             txn.type || 'N/A',
+        type_label:       TYPE_LABELS[txn.type] || txn.type || 'N/A',
+        source:           txn.source || txn.type || 'N/A',
+        target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
         earning_source_type: txn.type === 'REFERRAL' ? 'downline' : 'direct',
         description,
-        status: txn.status || 'completed',
-        date: txn.created_at,
-        payment_method: txn.metadata?.payment_method || 'N/A',
-        coop_reference_id: txn.transaction_code || txn.metadata?.receipt || 'N/A',
-        mpesa_reference_id: txn.metadata?.mpesaReceiptNumber || txn.metadata?.receipt || 'N/A',
-        downline_level: txn.metadata?.level || 'N/A',
-        metadata: txn.metadata || {},
-        _collection: 'legacy',
+        status:           txn.status || 'completed',
+        date:             txn.created_at,
+        // Real Coop bank reference from transaction_code field
+        coop_reference_id:  txn.transaction_code || null,
+        // Real M-Pesa receipt number from populated MpesaTransaction document
+        mpesa_reference_id: mpesa?.mpesa_receipt_number || null,
+        downline_level:   meta.level ?? null,
+        collection:       'legacy',
       };
     };
 
-    // Normalise ChatForeigners transactions
-    const normaliseCF = (txn: any) => {
-      const cfTypeMap: Record<string, string> = {
-        CHAT_DEPOSIT: 'Chat Wallet Deposit',
-        CHAT_MESSAGE_EARNING: 'Chat Message Earning',
-        CHAT_WITHDRAWAL: 'Chat Wallet Withdrawal',
-        CHAT_REFERRAL_EARNING: 'Chat Foreigners Referral Earnings',
-        CHAT_EARNINGS: 'Chat Foreigners Platform Fee',
-      };
+    const normCF = (txn: any) => ({
+      id:               txn._id?.toString(),
+      amount:           (txn.amount_cents || 0) / 100,
+      amount_cents:     txn.amount_cents || 0,
+      transaction_type: txn.target_type === 'company' ? 'debit' : 'credit',
+      type:             txn.type || 'N/A',
+      type_label:       CF_TYPE_LABELS[txn.type] || txn.type || 'N/A',
+      source:           txn.type || 'chat_foreigners',
+      target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
+      earning_source_type: txn.type === 'CHAT_REFERRAL_EARNING' ? 'downline' : 'direct',
+      description:      txn.description || CF_TYPE_LABELS[txn.type] || 'Chat Foreigners Transaction',
+      status:           txn.status || 'completed',
+      date:             txn.created_at,
+      coop_reference_id:  null,
+      mpesa_reference_id: null,
+      downline_level:   null,
+      collection:       'chat_foreigners',
+    });
 
-      const isDebit = ['CHAT_WITHDRAWAL', 'CHAT_DEPOSIT'].includes(txn.type) && txn.target_type === 'company';
+    // Merge paginated rows and re-sort
+    const rows = [
+      ...(lr.data || []).map(normLegacy),
+      ...(cr.data || []).map(normCF),
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+     .slice(0, limit);
 
-      return {
-        id: txn._id?.toString(),
-        amount: (txn.amount_cents || 0) / 100,
-        amount_cents: txn.amount_cents || 0,
-        transaction_type: isDebit ? 'debit' : 'credit',
-        source: txn.type || 'chat_foreigners',
-        earning_source_type: txn.type === 'CHAT_REFERRAL_EARNING' ? 'downline' : 'direct',
-        description: txn.description || cfTypeMap[txn.type] || 'Chat Foreigners Transaction',
-        status: txn.status || 'completed',
-        date: txn.created_at,
-        payment_method: 'N/A',
-        coop_reference_id: 'N/A',
-        mpesa_reference_id: 'N/A',
-        downline_level: 'N/A',
-        metadata: txn.metadata || {},
-        _collection: 'chat_foreigners',
-      };
-    };
+    // ─── Totals from aggregation (all-time, not just current page) ─
+    const legacyTotal    = (lr.totalCount[0]?.n    || 0);
+    const cfTotal        = (cr.totalCount[0]?.n    || 0);
+    const totalCount     = legacyTotal + cfTotal;
+    const totalPages     = Math.max(Math.ceil(totalCount / limit), 1);
 
-    // Combine all, deduplicate by id, sort by date
-    const normalised = [
-      ...(legacyTxns as any[]).map(normaliseLegacy),
-      ...(cfTxns as any[]).map(normaliseCF),
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-    // Filter by sourceType after normalisation
-    const filtered = sourceType === 'all'
-      ? normalised
-      : normalised.filter(t => t.earning_source_type === sourceType);
-
-    const totalCount  = filtered.length;
-    const totalPages  = Math.max(Math.ceil(totalCount / limit), 1);
-    const skip        = (page - 1) * limit;
-    const paginated   = filtered.slice(skip, skip + limit);
-
-    // ─────────────────────────────────────────────────────────────
-    // All-time stats from wallet + full transaction set (not paged)
-    // ─────────────────────────────────────────────────────────────
-    const allTimeEarnings = normalised
-      .filter(t => t.transaction_type === 'credit')
-      .reduce((s, t) => s + t.amount_cents, 0);
-
-    const allTimeWithdrawals = normalised
-      .filter(t => t.transaction_type === 'debit')
-      .reduce((s, t) => s + t.amount_cents, 0);
-
-    const downlineEarnings = normalised
-      .filter(t => t.earning_source_type === 'downline' && t.transaction_type === 'credit')
-      .reduce((s, t) => s + t.amount_cents, 0);
+    const totalEarnings    = ((lr.creditSum[0]?.total   || 0) + (cr.creditSum[0]?.total   || 0)) / 100;
+    const totalWithdrawals = ((lr.debitSum[0]?.total    || 0) + (cr.debitSum[0]?.total    || 0)) / 100;
+    const downlineEarnings = ((lr.downlineSum[0]?.total || 0) + (cr.downlineSum[0]?.total || 0)) / 100;
 
     return NextResponse.json({
       success: true,
       data: {
-        transactions: paginated,
+        transactions: rows,
         stats: {
-          totalEarnings: allTimeEarnings / 100,
-          totalWithdrawals: allTimeWithdrawals / 100,
-          downlineEarnings: downlineEarnings / 100,
+          totalEarnings,
+          totalWithdrawals,
+          downlineEarnings,
           walletBalance: wallet ? (wallet as any).balance_cents / 100 : 0,
         },
         pagination: {
@@ -227,7 +253,6 @@ export async function GET(request: NextRequest) {
           limit,
         },
       },
-      message: 'Transactions fetched successfully',
     });
 
   } catch (error) {

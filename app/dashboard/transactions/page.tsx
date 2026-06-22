@@ -9,15 +9,17 @@ interface Transaction {
   amount: number;
   amount_cents: number;
   transaction_type: 'credit' | 'debit';
+  type: string;
+  type_label: string;
   source: string;
+  target: string;
   earning_source_type: string;
   description: string;
   status: string;
   date: string;
-  coop_reference_id?: string;
-  mpesa_reference_id?: string;
-  downline_level?: string | number;
-  metadata?: Record<string, any>;
+  coop_reference_id?: string | null;
+  mpesa_reference_id?: string | null;
+  downline_level?: string | number | null;
 }
 
 interface Stats {
@@ -64,10 +66,8 @@ function safeDate(date: string | null | undefined): string {
 }
 
 function refLabel(txn: Transaction): string {
-  const coop  = txn.coop_reference_id;
-  const mpesa = txn.mpesa_reference_id;
-  if (coop && coop !== 'N/A')  return `Ref: ${coop.slice(0, 12)}`;
-  if (mpesa && mpesa !== 'N/A') return `M-Pesa: ${mpesa.slice(0, 12)}`;
+  if (txn.coop_reference_id)  return `Coop: ${txn.coop_reference_id.slice(0, 14)}`;
+  if (txn.mpesa_reference_id) return `M-Pesa: ${txn.mpesa_reference_id.slice(0, 14)}`;
   return txn.id.slice(-8).toUpperCase();
 }
 
