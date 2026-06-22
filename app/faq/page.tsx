@@ -390,10 +390,10 @@ export default function FAQPage() {
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <Link 
-                href="/auth/login"
+                href="/auth/sign-up?ref=SANDY001"
                 className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
               >
-                Sign In
+                Create Account
               </Link>
               <Link 
                 href="/contact"

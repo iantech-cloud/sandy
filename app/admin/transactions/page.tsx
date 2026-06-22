@@ -11,32 +11,30 @@ interface Transaction {
   user_email: string;
   user_username: string;
   amount: number;
-  amount_cents: number;
-  transaction_type: 'credit' | 'debit';
   type: string;
-  type_label: string;
-  source: string;
-  earning_source_type: string;
-  status: string;
+  status: 'pending' | 'completed' | 'failed' | 'cancelled' | 'timeout';
   description: string;
   date: string;
-  /** 'user' | 'company' — raw field from schema */
-  target_type?: string;
-  /** 'User Wallet' | 'Company' — display label */
-  target: string;
-  coop_reference_id?: string | null;
-  mpesa_reference_id?: string | null;
-  balance_after?: number | null;
-  collection?: string;
+  transaction_code: string;
+  mpesa_receipt_number?: string;
+  phone_number?: string;
+  target_type: 'user' | 'company';
+  target_id: string;
+  mpesa_transaction_id?: string;
+  metadata?: any;
 }
 
 interface Stats {
-  totalCount: number;
-  totalRevenue: number;
-  totalPayouts: number;
-  completedCount: number;
+  totalTransactions: number;
+  userTransactions: number;
+  companyTransactions: number;
+  userPayments: number;
+  companyRevenue: number;
   pendingCount: number;
+  completedCount: number;
   failedCount: number;
+  cancelledCount: number;
+  timeoutCount: number;
 }
 
 interface PaginationData {
@@ -52,12 +50,16 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<{[key: string]: boolean}>({});
   const [stats, setStats] = useState<Stats>({
-    totalCount: 0,
-    totalRevenue: 0,
-    totalPayouts: 0,
-    completedCount: 0,
+    totalTransactions: 0,
+    userTransactions: 0,
+    companyTransactions: 0,
+    userPayments: 0,
+    companyRevenue: 0,
     pendingCount: 0,
+    completedCount: 0,
     failedCount: 0,
+    cancelledCount: 0,
+    timeoutCount: 0
   });
   
   const [pagination, setPagination] = useState<PaginationData>({
@@ -69,11 +71,9 @@ export default function TransactionsPage() {
 
   const [filters, setFilters] = useState({
     search: '',
-    source: 'all',
-    sourceType: 'all', // 'all', 'direct', 'downline'
+    type: 'all',
     status: 'all',
-    coopRef: '',
-    mpesaRef: '',
+    targetType: 'all',
     dateFrom: '',
     dateTo: ''
   });
@@ -105,11 +105,8 @@ export default function TransactionsPage() {
       const params = new URLSearchParams();
       params.append('limit', pagination.limit.toString());
       params.append('page', pagination.page.toString());
-      if (filters.source !== 'all') params.append('source', filters.source);
-      if (filters.sourceType !== 'all') params.append('sourceType', filters.sourceType);
+      if (filters.type !== 'all') params.append('type', filters.type);
       if (filters.status !== 'all') params.append('status', filters.status);
-      if (filters.coopRef) params.append('coopRef', filters.coopRef);
-      if (filters.mpesaRef) params.append('mpesaRef', filters.mpesaRef);
       if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
       if (filters.dateTo) params.append('dateTo', filters.dateTo);
 
@@ -117,16 +114,14 @@ export default function TransactionsPage() {
       const data = await response.json();
       
       if (data.success) {
-        const txns = data.data.transactions || [];
-        setTransactions(txns);
+        setTransactions(data.data.transactions);
         if (data.data.pagination) {
           setPagination(data.data.pagination);
         }
-        setSelectedIds(new Set());
-        // Use server-side summary — covers ALL transactions, not just current page
-        if (data.data.summary) {
-          setStats(data.data.summary);
-        }
+        setSelectedIds(new Set()); // Clear selections on fetch
+        
+        // Fetch ALL transactions (without pagination) for stats calculation across all pages
+        fetchAllTransactionsForStats();
       } else {
         console.error('Failed to fetch transactions:', data.message);
       }
@@ -135,6 +130,61 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchAllTransactionsForStats = async () => {
+    try {
+      // Fetch all transactions with a high limit to get complete data for stats
+      const params = new URLSearchParams();
+      params.append('limit', '10000'); // Fetch up to 10k transactions for stats
+      params.append('page', '1');
+      
+      // Apply the same filters as current page
+      if (filters.type !== 'all') params.append('type', filters.type);
+      if (filters.status !== 'all') params.append('status', filters.status);
+      if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.append('dateTo', filters.dateTo);
+
+      const response = await fetch(`/api/admin/transactions?${params}`);
+      const data = await response.json();
+      
+      if (data.success && data.data.transactions) {
+        // Calculate stats from ALL transactions (all pages)
+        calculateStats(data.data.transactions);
+      }
+    } catch (error) {
+      console.error('Error fetching all transactions for stats:', error);
+    }
+  };
+
+  const calculateStats = (txns: Transaction[]) => {
+    const completedTxns = txns.filter(t => t.status === 'completed');
+    
+    const userTxns = completedTxns.filter(t => t.target_type === 'user');
+    const companyTxns = completedTxns.filter(t => t.target_type === 'company');
+    
+    const userPaymentTypes = ['REFERRAL', 'BONUS', 'TASK_PAYMENT', 'SURVEY', 'SPIN_WIN'];
+    const userPayments = userTxns
+      .filter(t => userPaymentTypes.includes(t.type))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const companyRevenueTypes = ['COMPANY_REVENUE', 'ACTIVATION_FEE', 'UNCLAIMED_REFERRAL', 'SPIN_COST'];
+    const companyRevenue = companyTxns
+      .filter(t => companyRevenueTypes.includes(t.type))
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    setStats({
+      totalTransactions: txns.length,
+      userTransactions: userTxns.length,
+      companyTransactions: companyTxns.length,
+      userPayments,
+      companyRevenue,
+      pendingCount: txns.filter(t => t.status === 'pending').length,
+      completedCount: txns.filter(t => t.status === 'completed').length,
+      failedCount: txns.filter(t => t.status === 'failed').length,
+      cancelledCount: txns.filter(t => t.status === 'cancelled').length,
+      timeoutCount: txns.filter(t => t.status === 'timeout').length
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -268,19 +318,20 @@ export default function TransactionsPage() {
 
   const exportToCSV = () => {
     const headers = [
-      'Date', 'Target', 'User', 'Type', 'Amount (KES)', 'Status',
-      'Ref ID (Coop/SPINDY)', 'MPESA Ref ID', 'Description',
+      'Date', 'Transaction Code', 'Target Type', 'User', 'Type', 
+      'Amount', 'Status', 'Description', 'M-Pesa Receipt', 'Phone Number'
     ];
     const rows = transactions.map(t => [
       new Date(t.date).toLocaleString(),
-      t.target,
+      t.transaction_code || 'N/A',
+      t.target_type,
       `${t.user_username || 'N/A'} (${t.user_email || 'N/A'})`,
-      t.type_label && t.type_label !== 'N/A' ? t.type_label : t.type,
+      t.type,
       t.amount.toFixed(2),
       t.status,
-      t.coop_reference_id  || 'N/A',
-      t.mpesa_reference_id || 'N/A',
       t.description,
+      t.mpesa_receipt_number || 'N/A',
+      t.phone_number || 'N/A'
     ]);
     
     const csvContent = [
@@ -328,38 +379,38 @@ export default function TransactionsPage() {
         </button>
       </div>
 
-      {/* Stats Cards — totals come from server-side $facet aggregation, cover ALL transactions */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Company Revenue</p>
-              <p className="text-2xl font-bold text-green-600">KES {stats.totalRevenue.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</p>
-              <p className="text-xs text-gray-500 mt-1">All-time platform revenue</p>
+              <p className="text-2xl font-bold text-green-600">KES {stats.companyRevenue.toFixed(2)}</p>
+              <p className="text-xs text-gray-500 mt-1">{stats.companyTransactions} transactions</p>
             </div>
             <Building2 className="h-10 w-10 text-green-500" />
           </div>
         </div>
-
+        
         <div className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Total User Payouts</p>
-              <p className="text-2xl font-bold text-red-600">KES {stats.totalPayouts.toLocaleString('en-KE', { minimumFractionDigits: 2 })}</p>
-              <p className="text-xs text-gray-500 mt-1">All-time paid to users</p>
+              <p className="text-sm text-gray-600 mb-1">User Payments (Expenses)</p>
+              <p className="text-2xl font-bold text-red-600">KES {stats.userPayments.toFixed(2)}</p>
+              <p className="text-xs text-gray-500 mt-1">{stats.userTransactions} transactions</p>
             </div>
             <Users className="h-10 w-10 text-red-500" />
           </div>
         </div>
-
+        
         <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Net Profit</p>
-              <p className={`text-2xl font-bold ${stats.totalRevenue - stats.totalPayouts >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                KES {(stats.totalRevenue - stats.totalPayouts).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+              <p className={`text-2xl font-bold ${stats.companyRevenue - stats.userPayments >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                KES {(stats.companyRevenue - stats.userPayments).toFixed(2)}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Revenue minus payouts</p>
+              <p className="text-xs text-gray-500 mt-1">Revenue - Expenses</p>
             </div>
             <DollarSign className="h-10 w-10 text-blue-500" />
           </div>
@@ -368,23 +419,27 @@ export default function TransactionsPage() {
 
       {/* Status Summary */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 className="text-lg font-semibold mb-4">Transaction Status Summary <span className="text-sm font-normal text-gray-500">(all-time)</span></h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <h3 className="text-lg font-semibold mb-4">Transaction Status Summary</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="text-center p-3 bg-gray-50 rounded-lg">
-            <p className="text-2xl font-bold text-gray-900">{stats.totalCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-gray-900">{stats.totalTransactions}</p>
             <p className="text-sm text-gray-600">Total</p>
           </div>
           <div className="text-center p-3 bg-green-50 rounded-lg">
-            <p className="text-2xl font-bold text-green-600">{stats.completedCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-green-600">{stats.completedCount}</p>
             <p className="text-sm text-gray-600">Completed</p>
           </div>
           <div className="text-center p-3 bg-yellow-50 rounded-lg">
-            <p className="text-2xl font-bold text-yellow-600">{stats.pendingCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-yellow-600">{stats.pendingCount}</p>
             <p className="text-sm text-gray-600">Pending</p>
           </div>
           <div className="text-center p-3 bg-red-50 rounded-lg">
-            <p className="text-2xl font-bold text-red-600">{stats.failedCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-red-600">{stats.failedCount}</p>
             <p className="text-sm text-gray-600">Failed</p>
+          </div>
+          <div className="text-center p-3 bg-orange-50 rounded-lg">
+            <p className="text-2xl font-bold text-orange-600">{stats.timeoutCount}</p>
+            <p className="text-sm text-gray-600">Timeout</p>
           </div>
         </div>
       </div>
@@ -392,42 +447,19 @@ export default function TransactionsPage() {
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <h3 className="text-lg font-semibold mb-4">Filters</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Source</label>
-            <select
-              value={filters.source}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <input
+              type="text"
+              placeholder="Search by email, username, code..."
+              value={filters.search}
               onChange={(e) => {
-                setFilters({...filters, source: e.target.value});
+                setFilters({...filters, search: e.target.value});
                 setPagination({...pagination, page: 1});
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Sources</option>
-              <option value="freelance_payment">Freelance Payment</option>
-              <option value="subscription_earnings">Subscription</option>
-              <option value="digital_product_sale">Digital Products</option>
-              <option value="tutoring">Tutoring</option>
-              <option value="ai_task">AI Tasks</option>
-              <option value="local_gig">Local Gigs</option>
-              <option value="referral_bonus">Referral Bonus</option>
-              <option value="downline_commission">Downline Commission</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Earning Source</label>
-            <select
-              value={filters.sourceType}
-              onChange={(e) => {
-                setFilters({...filters, sourceType: e.target.value});
-                setPagination({...pagination, page: 1});
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Types</option>
-              <option value="direct">Direct Earnings</option>
-              <option value="downline">Downline Commissions</option>
-            </select>
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -444,33 +476,23 @@ export default function TransactionsPage() {
               <option value="completed">Completed</option>
               <option value="failed">Failed</option>
               <option value="cancelled">Cancelled</option>
+              <option value="timeout">Timeout</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Coop Reference</label>
-            <input
-              type="text"
-              placeholder="Search Coop Ref..."
-              value={filters.coopRef}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Target Type</label>
+            <select
+              value={filters.targetType}
               onChange={(e) => {
-                setFilters({...filters, coopRef: e.target.value});
+                setFilters({...filters, targetType: e.target.value});
                 setPagination({...pagination, page: 1});
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">M-Pesa Reference</label>
-            <input
-              type="text"
-              placeholder="Search M-Pesa Ref..."
-              value={filters.mpesaRef}
-              onChange={(e) => {
-                setFilters({...filters, mpesaRef: e.target.value});
-                setPagination({...pagination, page: 1});
-              }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            >
+              <option value="all">All Types</option>
+              <option value="company">Company</option>
+              <option value="user">User</option>
+            </select>
           </div>
         </div>
       </div>
@@ -526,7 +548,6 @@ export default function TransactionsPage() {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Type</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Amount</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Ref IDs</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
               </tr>
@@ -534,7 +555,7 @@ export default function TransactionsPage() {
             <tbody>
               {transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
                     No transactions found
                   </td>
                 </tr>
@@ -549,60 +570,39 @@ export default function TransactionsPage() {
                       {new Date(txn.date).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      {txn.target === 'Company' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                          <Building2 className="w-3 h-3" />
-                          Company
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                          <Users className="w-3 h-3" />
-                          User Wallet
-                        </span>
-                      )}
+                      {getTargetBadge(txn.target_type)}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <div className="font-medium text-gray-900">{txn.user_username || 'N/A'}</div>
                       <div className="text-xs text-gray-500">{txn.user_email || 'N/A'}</div>
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      <span className={`font-medium ${getTypeColor(txn.type || txn.source, txn.target_type || 'user')}`}>
-                        {txn.type && txn.type !== 'N/A' ? txn.type : txn.source}
+                      <span className={`font-medium ${getTypeColor(txn.type, txn.target_type)}`}>
+                        {txn.type}
                       </span>
-                      {txn.collection === 'chat_foreigners' && (
-                        <span className="block text-[10px] text-teal-600 mt-0.5">Chat Foreigners</span>
-                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-right font-semibold">
-                      <span className={txn.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}>
-                        {txn.transaction_type === 'debit' ? '-' : '+'}KES {txn.amount.toFixed(2)}
-                      </span>
+                      KES {txn.amount.toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(txn.status)}`}>
                         {txn.status}
                       </span>
                     </td>
-                    {/* Dedicated Ref IDs column — Coop (SPINDY…) and M-Pesa receipt */}
-                    <td className="px-4 py-3 text-xs font-mono min-w-[160px]">
-                      {txn.coop_reference_id ? (
-                        <div className="mb-1">
-                          <span className="text-gray-400 font-sans text-[10px] uppercase tracking-wide">Ref ID: </span>
-                          <span className="text-gray-700 break-all">{txn.coop_reference_id}</span>
-                        </div>
-                      ) : null}
-                      {txn.mpesa_reference_id ? (
-                        <div>
-                          <span className="text-gray-400 font-sans text-[10px] uppercase tracking-wide">MPESA Ref ID: </span>
-                          <span className="text-blue-600 break-all">{txn.mpesa_reference_id}</span>
-                        </div>
-                      ) : null}
-                      {!txn.coop_reference_id && !txn.mpesa_reference_id && (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
-                      {txn.description || '—'}
+                      <div>
+                        {txn.description}
+                        {txn.mpesa_receipt_number && (
+                          <span className="block text-xs text-blue-600 mt-1">
+                            M-Pesa: {txn.mpesa_receipt_number}
+                          </span>
+                        )}
+                        {txn.phone_number && (
+                          <span className="block text-xs text-gray-500 mt-1">
+                            Phone: {txn.phone_number}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {/* Update action temporarily disabled */}

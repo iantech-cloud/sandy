@@ -1,8 +1,7 @@
 'use client';
 
-import React from 'react';
 import { useState } from 'react';
-import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle, ClipboardList, LogOut, History, TrendingUp, Briefcase, BookOpen, FileText, Zap, MapPin, Gift } from 'lucide-react';
+import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle, ClipboardList, LogOut } from 'lucide-react';
 // (UserIcon used for Profile entry; Settings icon used for Settings entry)
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -16,24 +15,17 @@ export default function HamburgerMenu({ userName, onLogout }: HamburgerMenuProps
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
-  const tabs: { id: string; label: string; icon: React.ElementType; path: string; external?: boolean }[] = [
-    { id: 'dashboard',        label: 'Dashboard',         icon: BarChart,      path: '/dashboard' },
-    { id: 'wallet',           label: 'Wallet & Escrow',   icon: Wallet,        path: '/dashboard/wallet' },
-    { id: 'transactions',     label: 'Transaction History', icon: History,     path: '/dashboard/transactions' },
-    { id: 'earning-ways',     label: '💰 All Earning Ways', icon: TrendingUp,  path: '/dashboard/earnings-overview' },
-    { id: 'freelance',        label: 'Freelance Jobs',    icon: Briefcase,     path: 'https://www.upwork.com', external: true },
-    { id: 'tutoring',         label: 'Online Tutoring',   icon: BookOpen,      path: '/dashboard/tutoring' },
-    { id: 'digital-products', label: 'Digital Products',  icon: FileText,      path: '/dashboard/digital-products' },
-    { id: 'ai-tasks',         label: 'AI Tasks',          icon: Zap,           path: '/dashboard/ai-tasks' },
-    { id: 'local-gigs',       label: 'Local Gigs',        icon: MapPin,        path: '/dashboard/local-gigs' },
-    { id: 'surveys',          label: 'Surveys',           icon: Award,         path: '/dashboard/surveys' },
-    { id: 'tasks',            label: 'Content Tasks',     icon: ClipboardList, path: '/dashboard/content' },
-    { id: 'chat-foreigners',  label: 'Chat Foreigners',   icon: MessageCircle, path: '/dashboard/chat-foreigners' },
-    { id: 'affiliate',        label: 'Affiliate Marketing', icon: ShoppingBag, path: '/dashboard/soko' },
-    { id: 'referrals',        label: 'Referral Program',  icon: Gift,          path: '/dashboard/referrals' },
-    { id: 'profile',          label: 'Profile',           icon: UserIcon,      path: '/dashboard/profile' },
-    { id: 'support',          label: 'Help & Support',    icon: HelpCircle,    path: '/dashboard/support' },
-    { id: 'settings',         label: 'Settings',          icon: Settings,      path: '/dashboard/settings' },
+  const tabs = [
+    { id: 'dashboard', label: 'Home', icon: BarChart, path: '/dashboard' },
+    { id: 'wallet', label: 'Wallet', icon: Wallet, path: '/dashboard/wallet' },
+    { id: 'surveys', label: 'Earn', icon: Award, path: '/dashboard/surveys' },
+    { id: 'tasks', label: 'Tasks', icon: ClipboardList, path: '/dashboard/content' },
+    { id: 'chat-foreigners', label: 'Chat Foreigners', icon: MessageCircle, path: '/dashboard/chat-foreigners' },
+    { id: 'affiliate', label: 'Soko', icon: ShoppingBag, path: '/dashboard/soko' },
+    { id: 'referrals', label: 'Refs', icon: Users, path: '/dashboard/referrals' },
+    { id: 'profile', label: 'Profile', icon: UserIcon, path: '/dashboard/profile' },
+    { id: 'support', label: 'Support', icon: HelpCircle, path: '/dashboard/support' },
+    { id: 'settings', label: 'Settings', icon: Settings, path: '/dashboard/settings' },
   ];
 
   const isActive = (path: string) => {

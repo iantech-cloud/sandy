@@ -1,8 +1,7 @@
 // app/ui/dashboard/sidenav.tsx
 'use client';
 
-import React from 'react';
-import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle, ClipboardList, BookOpen, Briefcase, MapPin, Zap, FileText, Gift, TrendingUp, History } from 'lucide-react';
+import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle, ClipboardList, BookOpen, Briefcase, MapPin, Zap, FileText, Gift, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -41,14 +40,13 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
     }
   };
 
-  const links: { path: string; label: string; icon: React.ElementType; external?: boolean }[] = [
+  const links = [
     { path: '/dashboard', label: 'Dashboard', icon: BarChart },
     { path: '/dashboard/wallet', label: 'Wallet & Escrow', icon: Wallet },
-    { path: '/dashboard/transactions', label: 'Transaction History', icon: History },
     
     // Earning Opportunities
     { path: '/dashboard/earnings-overview', label: '💰 All Earning Ways', icon: TrendingUp },
-    { path: 'https://www.upwork.com', label: 'Freelance Jobs', icon: Briefcase, external: true },
+    { path: '/dashboard/freelance', label: 'Freelance Jobs', icon: Briefcase },
     { path: '/dashboard/tutoring', label: 'Online Tutoring', icon: BookOpen },
     { path: '/dashboard/digital-products', label: 'Digital Products', icon: FileText },
     { path: '/dashboard/ai-tasks', label: 'AI Tasks', icon: Zap },
@@ -102,48 +100,44 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
 
         {/* Navigation Links */}
         <div className="flex flex-col space-y-1.5 flex-grow">
-          {links.map(({ path, label, icon: Icon, external }) => {
-            const isActive = !external && pathname === path;
-            const sharedClass = `
-              relative flex items-center p-3.5 rounded-xl font-medium transition-all duration-250 ease-in-out group
-              ${isActive 
-                ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/30' 
-                : 'text-slate-300 hover:bg-white/5 hover:text-white'
-              }
-            `;
-            const inner = (
-              <>
+          {links.map(({ path, label, icon: Icon }) => {
+            const isActive = pathname === path;
+            
+            return (
+              <Link
+                key={path}
+                href={path}
+                className={`
+                  relative flex items-center p-3.5 rounded-xl font-medium transition-all duration-250 ease-in-out group
+                  ${isActive 
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/30' 
+                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                  }
+                `}
+              >
+                {/* Active indicator bar */}
                 {isActive && (
                   <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-cyan-400 to-blue-400 rounded-r-full shadow-lg shadow-cyan-400/50"></div>
                 )}
-                <div className={`mr-3 transition-all duration-250 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-cyan-400'}`}>
+                
+                <div className={`
+                  mr-3 transition-all duration-250
+                  ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-cyan-400'}
+                `}>
                   <Icon size={20} />
                 </div>
+                
                 <span className="relative">
                   {label}
                   {isActive && (
                     <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-300 to-transparent"></div>
                   )}
                 </span>
+
+                {/* Hover glow effect */}
                 {!isActive && (
                   <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/0 via-cyan-500/0 to-blue-500/0 group-hover:from-blue-500/10 group-hover:via-cyan-500/10 group-hover:to-blue-500/10 transition-all duration-300"></div>
                 )}
-              </>
-            );
-
-            return external ? (
-              <a
-                key={path}
-                href={path}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={sharedClass}
-              >
-                {inner}
-              </a>
-            ) : (
-              <Link key={path} href={path} className={sharedClass}>
-                {inner}
               </Link>
             );
           })}
