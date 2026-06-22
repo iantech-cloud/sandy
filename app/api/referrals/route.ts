@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     await connectToDatabase();
@@ -17,88 +17,103 @@ export async function GET(request: NextRequest) {
     const limit = Math.max(1, Math.min(50, parseInt(searchParams.get('limit') || '20')));
     const skip  = (page - 1) * limit;
 
-    // Get current user — only need _id and role
+    // Always scope to the requesting user — this is the user dashboard route.
     const currentUser = await Profile.findOne(
       { email: session.user.email },
-      { _id: 1, role: 1 }
+      { _id: 1 }
     ).lean();
 
     if (!currentUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    const userId   = currentUser._id;
-    const userRole = (currentUser as any).role || 'user';
+    // referrer_id in the Referral schema is stored as String (not ObjectId)
+    const userIdStr = (currentUser as any)._id.toString();
 
-    // For non-admin/support: always scope to the current user's own referrals
-    const matchStage = userRole === 'admin'
-      ? {}
-      : { referrer_id: userId.toString() };
+    // The match filter — always scoped to this user. Uses the referrer_id index.
+    const userMatch = { referrer_id: userIdStr };
 
-    // ── 1. Count (fast — uses the referrer_id index) ─────────────────────────
-    const LegacyTransaction = mongoose.models['Transaction'] || null;
+    const LegacyTransaction = mongoose.models['Transaction'] as mongoose.Model<any> | undefined;
 
-    const [totalCount, summaryAgg, referralDocs, earningsAgg] = await Promise.all([
-      // Total count for pagination
-      Referral.countDocuments(matchStage),
+    // ── Run 4 fast queries in parallel ─────────────────────────────────────────
+    // 1. countDocuments  — hits referrer_id index directly, returns in <5 ms
+    // 2. summaryAgg      — $group on already-filtered docs then $lookup profiles
+    // 3. pageFacet       — paginated rows with profile join
+    // 4. earningsAgg     — per-referred-user earnings from Transaction collection
+    //
+    // The $lookup uses $addFields + $toObjectId so the profiles._id index is used
+    // instead of a full collection scan with $toString on every document.
 
-      // Summary: total/active/activated counts via aggregation (no populate)
+    const [totalCount, summaryResult, pageResult, earningsResult] = await Promise.all([
+
+      // 1. Fast count via index
+      Referral.countDocuments(userMatch),
+
+      // 2. Summary stats — group after lookup
       Referral.aggregate([
-        { $match: matchStage },
+        { $match: userMatch },
+        {
+          // Convert the referred_id string field to ObjectId so the _id index is hit
+          $addFields: {
+            referred_oid: {
+              $convert: { input: '$referred_id', to: 'objectId', onError: null, onNull: null },
+            },
+          },
+        },
         {
           $lookup: {
             from: 'profiles',
-            let: { rid: '$referred_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: { $eq: [{ $toString: '$_id' }, '$$rid'] },
-                },
-              },
-              { $project: { status: 1, is_verified: 1, activation_paid_at: 1 } },
-            ],
+            localField: 'referred_oid',
+            foreignField: '_id',
             as: '_p',
+            pipeline: [{ $project: { status: 1, is_verified: 1, activation_paid_at: 1 } }],
           },
         },
         {
           $group: {
             _id: null,
-            total:     { $sum: 1 },
-            active:    { $sum: { $cond: [{ $eq: [{ $arrayElemAt: ['$_p.status', 0] }, 'active']  }, 1, 0] } },
-            pending:   { $sum: { $cond: [{ $eq: [{ $arrayElemAt: ['$_p.status', 0] }, 'pending'] }, 1, 0] } },
+            total: { $sum: 1 },
+            active: {
+              $sum: { $cond: [{ $eq: [{ $arrayElemAt: ['$_p.status', 0] }, 'active'] }, 1, 0] },
+            },
             activated: {
               $sum: {
                 $cond: [
                   {
                     $or: [
                       { $eq:  [{ $arrayElemAt: ['$_p.is_verified', 0] }, true] },
-                      { $gt:  [{ $arrayElemAt: ['$_p.activation_paid_at', 0] }, null] },
+                      { $ifNull: [{ $arrayElemAt: ['$_p.activation_paid_at', 0] }, false] },
                     ],
                   },
-                  1, 0,
+                  1,
+                  0,
                 ],
               },
             },
           },
         },
-      ]),
+      ]).exec(),
 
-      // Paginated referral rows with profile join — project only needed fields
+      // 3. Paginated rows — sort then lookup
       Referral.aggregate([
-        { $match: matchStage },
+        { $match: userMatch },
         { $sort: { created_at: -1 } },
         { $skip: skip },
         { $limit: limit },
         {
+          $addFields: {
+            referred_oid: {
+              $convert: { input: '$referred_id', to: 'objectId', onError: null, onNull: null },
+            },
+          },
+        },
+        {
           $lookup: {
             from: 'profiles',
-            let: { rid: '$referred_id' },
+            localField: 'referred_oid',
+            foreignField: '_id',
+            as: '_p',
             pipeline: [
-              {
-                $match: {
-                  $expr: { $eq: [{ $toString: '$_id' }, '$$rid'] },
-                },
-              },
               {
                 $project: {
                   username: 1,
@@ -107,31 +122,28 @@ export async function GET(request: NextRequest) {
                   created_at: 1,
                   is_verified: 1,
                   activation_paid_at: 1,
-                  referral_bonus_amount_cents: 1,
                 },
               },
             ],
-            as: '_p',
           },
         },
         {
           $project: {
             _id: 1,
-            referrer_id: 1,
             referred_id: 1,
             referral_bonus_amount_cents: 1,
             created_at: 1,
-            _p: { $arrayElemAt: ['$_p', 0] },
+            profile: { $arrayElemAt: ['$_p', 0] },
           },
         },
-      ]),
+      ]).exec(),
 
-      // Per-referred-user earnings: aggregate from Transaction collection
+      // 4. Earnings per referred user from the Transaction collection
       LegacyTransaction
         ? LegacyTransaction.aggregate([
             {
               $match: {
-                user_id: userId.toString(),
+                user_id: userIdStr,
                 type: 'REFERRAL',
                 status: 'completed',
               },
@@ -139,46 +151,43 @@ export async function GET(request: NextRequest) {
             {
               $group: {
                 _id: {
-                  $ifNull: [
-                    '$metadata.referred_user_id',
-                    '$metadata.referredUser',
-                  ],
+                  $ifNull: ['$metadata.referred_user_id', '$metadata.referredUser'],
                 },
                 total: { $sum: '$amount_cents' },
               },
             },
-          ])
+          ]).exec()
         : Promise.resolve([]),
     ]);
 
-    // Build earnings lookup map { referred_user_id_str => amount_cents }
+    // Build earnings map  { referred_user_id_string => total_cents }
     const earningsMap = new Map<string, number>();
-    for (const e of (earningsAgg as any[])) {
+    for (const e of (earningsResult as { _id: any; total: number }[])) {
       if (e._id) earningsMap.set(e._id.toString(), e.total);
     }
 
-    // Total earnings for summary card
     const totalEarningsCents = Array.from(earningsMap.values()).reduce((a, b) => a + b, 0);
 
-    // Shape referral rows
-    const referrals = referralDocs.map((ref: any) => {
-      const p            = ref._p || {};
+    // Shape rows
+    const referrals = pageResult.map((ref: any) => {
+      const p             = ref.profile || {};
       const referredIdStr = ref.referred_id?.toString() || '';
       const txEarnings    = earningsMap.get(referredIdStr) || 0;
-      const earnings      = txEarnings > 0 ? txEarnings : (ref.referral_bonus_amount_cents || 0);
+      // Prefer real transaction earnings; fall back to the bonus recorded on the referral doc
+      const earningsCents = txEarnings > 0 ? txEarnings : (ref.referral_bonus_amount_cents || 0);
 
       return {
         id:               ref._id.toString(),
-        name:             p.username || 'Unknown User',
-        email:            p.email    || '',
+        name:             p.username  || null,
+        email:            p.email     || '',
         joinDate:         p.created_at || null,
-        status:           p.status   || 'active',
+        status:           p.status    || 'active',
         activationStatus: (p.is_verified || p.activation_paid_at) ? 'activated' : 'not_activated',
-        earnings:         earnings / 100,
+        earnings:         earningsCents / 100,
       };
     });
 
-    const s = summaryAgg[0] || { total: 0, active: 0, pending: 0, activated: 0 };
+    const s = (summaryResult as any[])[0] || { total: 0, active: 0, activated: 0 };
 
     return NextResponse.json({
       success: true,
@@ -187,12 +196,11 @@ export async function GET(request: NextRequest) {
         page,
         limit,
         total: totalCount,
-        pages: Math.ceil(totalCount / limit),
+        pages: Math.max(1, Math.ceil(totalCount / limit)),
       },
       summary: {
         total:         s.total,
         active:        s.active,
-        pending:       s.pending,
         activated:     s.activated,
         totalEarnings: totalEarningsCents / 100,
       },
