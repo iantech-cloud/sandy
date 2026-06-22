@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersReferralEarning, ChatForeignersWallet, ChatForeignersTransaction, Profile, Referral } from '@/app/lib/models';
+import { connectToDatabase, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersWallet, ChatForeignersTransaction, Profile } from '@/app/lib/models';
 import { auth } from '@/auth';
+import { getCurrentUserFromSession } from '@/app/lib/auth';
+import { successResponse, errorResponse, ApiError } from '@/app/lib/responses';
 import OpenAI from 'openai';
-import { generateText } from 'ai';
 import { rateLimit } from '@/app/lib/rate-limit';
 import mongoose from 'mongoose';
 

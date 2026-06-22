@@ -60,6 +60,16 @@ import {
   CoopBankPayment,
   TransactionLedger
 } from './RevenueStreams';
+import {
+  ChatForeignersBot,
+  ChatForeignersBotAccess,
+  ChatForeignersMpesaTransaction,
+  ChatForeignersPayment,
+  ChatForeignersReferralEarning,
+  ChatForeignersWallet,
+  ChatForeignersTransaction,
+  ChatForeignersProfile
+} from './ChatForeigners';
 
 export { 
   Profile, 
@@ -73,5 +83,13 @@ export {
   LocalGig,
   EmployerAccount,
   CoopBankPayment,
-  TransactionLedger
+  TransactionLedger,
+  ChatForeignersBot,
+  ChatForeignersBotAccess,
+  ChatForeignersMpesaTransaction,
+  ChatForeignersPayment,
+  ChatForeignersReferralEarning,
+  ChatForeignersWallet,
+  ChatForeignersTransaction,
+  ChatForeignersProfile
 };
