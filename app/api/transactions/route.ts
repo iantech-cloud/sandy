@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Profile, connectToDatabase } from '@/app/lib/models';
+import { Profile, connectToDatabase, ChatForeignersTransaction } from '@/app/lib/models';
 import { TransactionLedger } from '@/app/lib/models/RevenueStreams';
 import { auth } from '@/auth';
 
@@ -74,44 +74,62 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit;
 
-    const transactions = await TransactionLedger.find(filter)
-      .populate('referrer_id', 'username email')
-      .populate('downline_user_id', 'username email')
-      .sort({ created_at: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    // Query both old and new transaction collections
+    const [newTransactions, oldTransactions] = await Promise.all([
+      TransactionLedger.find(filter)
+        .populate('referrer_id', 'username email')
+        .populate('downline_user_id', 'username email')
+        .sort({ created_at: -1 })
+        .lean(),
+      // For old transactions, search by user_id
+      (ChatForeignersTransaction as any).find({
+        user_id: currentUser._id.toString(),
+        ...(status && { status })
+      })
+        .sort({ created_at: -1 })
+        .lean()
+    ]);
 
-    const totalCount = await TransactionLedger.countDocuments(filter);
+    // Combine and deduplicate transactions
+    const allTransactions = [
+      ...newTransactions,
+      ...oldTransactions
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const totalCount = allTransactions.length;
     const totalPages = Math.ceil(totalCount / limit);
+    
+    // Apply pagination after combining
+    const paginatedTransactions = allTransactions.slice(skip, skip + limit);
 
-    const formattedTransactions = transactions.map((transaction: any) => ({
-      id: transaction._id?.toString(),
-      amount: transaction.amount_cents / 100,
-      amount_cents: transaction.amount_cents,
-      transaction_type: transaction.transaction_type,
-      source: transaction.source,
-      earning_source_type: transaction.earning_source_type || 'direct',
-      description: transaction.description,
-      status: transaction.status,
-      date: transaction.created_at,
+    // Format transactions with N/A for missing fields
+    const formattedTransactions = paginatedTransactions.map((transaction: any) => ({
+      id: transaction._id?.toString() || 'N/A',
+      amount: (transaction.amount_cents || transaction.amount) ? (transaction.amount_cents || transaction.amount * 100) / 100 : 0,
+      amount_cents: transaction.amount_cents || (transaction.amount ? transaction.amount * 100 : 0),
+      transaction_type: transaction.transaction_type || transaction.type || 'N/A',
+      source: transaction.source || transaction.type || 'N/A',
+      earning_source_type: transaction.earning_source_type || transaction.target_type || 'N/A',
+      description: transaction.description || 'N/A',
+      status: transaction.status || 'N/A',
+      date: transaction.created_at || transaction.created_at || 'N/A',
       
       // Payment method details
-      payment_method: transaction.payment_method,
-      coop_reference_id: transaction.coop_reference_id,
-      mpesa_reference_id: transaction.mpesa_reference_id,
+      payment_method: transaction.payment_method || 'N/A',
+      coop_reference_id: transaction.coop_reference_id || 'N/A',
+      mpesa_reference_id: transaction.mpesa_reference_id || 'N/A',
       
       // Downline commission details (if applicable)
-      referrer_id: transaction.referrer_id?._id?.toString() || null,
-      referrer_username: transaction.referrer_id?.username || null,
-      downline_user_id: transaction.downline_user_id?._id?.toString() || null,
-      downline_username: transaction.downline_user_id?.username || null,
-      downline_level: transaction.downline_level || null,
-      commission_percentage: transaction.commission_percentage || null,
+      referrer_id: transaction.referrer_id?._id?.toString() || transaction.referrer_id?.toString() || 'N/A',
+      referrer_username: transaction.referrer_id?.username || 'N/A',
+      downline_user_id: transaction.downline_user_id?._id?.toString() || 'N/A',
+      downline_username: transaction.downline_user_id?.username || 'N/A',
+      downline_level: transaction.downline_level || 'N/A',
+      commission_percentage: transaction.commission_percentage || 'N/A',
       
-      reference_id: transaction.reference_id,
-      reference_type: transaction.reference_type,
-      balance_after: transaction.balance_after_cents / 100,
+      reference_id: transaction.reference_id || 'N/A',
+      reference_type: transaction.reference_type || transaction.type || 'N/A',
+      balance_after: transaction.balance_after_cents ? transaction.balance_after_cents / 100 : 'N/A',
       
       metadata: transaction.metadata || {}
     }));
