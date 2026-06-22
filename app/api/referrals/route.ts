@@ -116,6 +116,14 @@ export async function GET(request: NextRequest) {
             as: '_p',
           },
         },
+        // Extract the first (and only) matched profile as a sub-document.
+        // $addFields is required here — $let inside $project cannot reference
+        // fields produced by a prior $lookup stage on some MongoDB versions.
+        {
+          $addFields: {
+            profile: { $arrayElemAt: ['$_p', 0] },
+          },
+        },
         {
           $project: {
             _id: 1,
@@ -123,17 +131,12 @@ export async function GET(request: NextRequest) {
             referral_bonus_amount_cents: 1,
             created_at: 1,
             profile: {
-              $let: {
-                vars: { p: { $arrayElemAt: ['$_p', 0] } },
-                in: {
-                  username:           '$$p.username',
-                  email:              '$$p.email',
-                  status:             '$$p.status',
-                  created_at:         '$$p.created_at',
-                  is_verified:        '$$p.is_verified',
-                  activation_paid_at: '$$p.activation_paid_at',
-                },
-              },
+              username:           1,
+              email:              1,
+              status:             1,
+              created_at:         1,
+              is_verified:        1,
+              activation_paid_at: 1,
             },
           },
         },
