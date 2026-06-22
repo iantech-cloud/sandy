@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
 
       case 'user':
       default:
-        // Regular user: Get their own referrals
+        // Regular user: Get their own referrals with pagination
         const userReferrals = await Referral.find({ referrer_id: currentUser._id })
           .populate('referred_id', 'username email status created_at level rank total_earnings_cents balance_cents tasks_completed activation_status')
           .sort({ created_at: -1 })
@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
 
         totalCount = await Referral.countDocuments({ referrer_id: currentUser._id });
 
-        // Get referral earnings from transactions for this user
+        // Get ALL referral transactions for earnings map (not paginated - we need total earnings)
         const referralTransactions = await Transaction.find({
           user_id: currentUser._id,
           type: 'REFERRAL'
@@ -183,23 +183,34 @@ export async function GET(request: NextRequest) {
 
         // Create a map of referred user ID to total earnings
         const earningsMap = new Map();
-        referralTransactions.forEach(transaction => {
-          const referredId = transaction.metadata?.referred_user_id;
+        referralTransactions.forEach((transaction: any) => {
+          const referredId = transaction.metadata?.referred_user_id || transaction.metadata?.referredUser;
           if (referredId) {
             const current = earningsMap.get(referredId.toString()) || 0;
             earningsMap.set(referredId.toString(), current + transaction.amount_cents);
           }
         });
 
-        referrals = await Promise.all(userReferrals.map(async (ref) => {
+        // Fetch referral counts for all referred users in this page
+        const referredIds = userReferrals
+          .map((ref: any) => ref.referred_id?._id)
+          .filter(Boolean);
+
+        const referralCountsMap = new Map();
+        if (referredIds.length > 0) {
+          const referralCounts = await Referral.aggregate([
+            { $match: { referrer_id: { $in: referredIds } } },
+            { $group: { _id: '$referrer_id', count: { $sum: 1 } } }
+          ]);
+          referralCounts.forEach((item: any) => {
+            referralCountsMap.set(item._id.toString(), item.count);
+          });
+        }
+
+        referrals = userReferrals.map((ref: any) => {
           const referredUserId = ref.referred_id?._id.toString();
           const transactionEarnings = earningsMap.get(referredUserId) || 0;
           const totalEarnings = transactionEarnings > 0 ? transactionEarnings : (ref.referral_bonus_amount_cents || 0);
-
-          // Count how many people this referred user has referred
-          const referralCount = await Referral.countDocuments({
-            referrer_id: ref.referred_id?._id
-          });
 
           return {
             id: ref._id.toString(),
@@ -213,19 +224,19 @@ export async function GET(request: NextRequest) {
             tasksCompleted: ref.referred_id?.tasks_completed || 0,
             totalEarnings: (ref.referred_id?.total_earnings_cents || 0) / 100,
             activationStatus: ref.referred_id?.activation_status || 'pending',
-            referralCount: referralCount
+            referralCount: referralCountsMap.get(referredUserId) || 0
           };
-        }));
+        });
 
-        // User summary
+        // User summary - Get stats from ALL referrals, not just current page
         const allUserReferrals = await Referral.find({ referrer_id: currentUser._id })
           .populate('referred_id', 'status activation_status');
         
-        const activeReferrals = allUserReferrals.filter(ref => ref.referred_id?.status === 'active').length;
-        const pendingReferrals = allUserReferrals.filter(ref => ref.referred_id?.status === 'pending').length;
-        const activatedReferrals = allUserReferrals.filter(ref => ref.referred_id?.activation_status === 'activated').length;
+        const activeReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.status === 'active').length;
+        const pendingReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.status === 'pending').length;
+        const activatedReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.activation_status === 'activated').length;
         
-        const totalUserEarnings = referralTransactions.reduce((sum, transaction) => sum + transaction.amount_cents, 0);
+        const totalUserEarnings = referralTransactions.reduce((sum: number, transaction: any) => sum + transaction.amount_cents, 0);
 
         summary = {
           total: allUserReferrals.length,
