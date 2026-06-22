@@ -32,7 +32,6 @@ interface Pagination {
 interface Summary {
   total: number;
   active: number;
-  pending: number;
   activated: number;
   totalEarnings: number;
 }
@@ -307,7 +306,6 @@ export default function ReferralsPage() {
                       <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Joined</th>
                       <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
                       <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Activated</th>
-                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Their Referrals</th>
                       <th className="px-5 py-4 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Your Earning</th>
                     </tr>
                   </thead>
@@ -315,8 +313,12 @@ export default function ReferralsPage() {
                     {referrals.map(ref => (
                       <tr key={ref.id} className="hover:bg-slate-700/30 transition-colors">
                         <td className="px-5 py-4">
-                          <p className="text-slate-200 text-sm font-medium">{ref.name || 'Unknown User'}</p>
-                          <p className="text-slate-500 text-xs mt-0.5">{maskEmail(ref.email, 2)}</p>
+                          <p className="text-slate-200 text-sm font-medium">
+                            {ref.name || <span className="text-slate-500 italic">No username</span>}
+                          </p>
+                          {ref.email && (
+                            <p className="text-slate-500 text-xs mt-0.5">{maskEmail(ref.email, 2)}</p>
+                          )}
                         </td>
                         <td className="px-5 py-4 text-sm text-slate-400 whitespace-nowrap">
                           {safeDate(ref.joinDate)}
@@ -334,9 +336,6 @@ export default function ReferralsPage() {
                           }`}>
                             {ref.activationStatus === 'activated' ? 'Yes' : 'No'}
                           </span>
-                        </td>
-                        <td className="px-5 py-4 text-sm text-slate-400 text-center">
-                          {ref.referralCount}
                         </td>
                         <td className="px-5 py-4 text-sm font-semibold text-right">
                           <span className="text-green-400">
