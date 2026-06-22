@@ -9,15 +9,18 @@ interface Transaction {
   amount: number;
   amount_cents: number;
   transaction_type: 'credit' | 'debit';
+  type_label: string;
   source: string;
   earning_source_type: string;
   description: string;
   status: string;
   date: string;
+  target_user: string;
   coop_reference_id?: string;
   mpesa_reference_id?: string;
   downline_level?: string | number;
-  metadata?: Record<string, any>;
+  balance_after?: number | string;
+  collection?: string;
 }
 
 interface Stats {
@@ -35,25 +38,6 @@ interface PaginationInfo {
   hasPrev: boolean;
 }
 
-function friendlyType(txn: Transaction): { label: string; color: string } {
-  const s = txn.source?.toUpperCase() || '';
-  const e = txn.earning_source_type?.toLowerCase() || '';
-
-  if (e === 'downline')               return { label: 'Downline Bonus',     color: 'bg-purple-900/30 text-purple-300' };
-  if (s === 'REFERRAL')               return { label: 'Referral Bonus',     color: 'bg-purple-900/30 text-purple-300' };
-  if (s === 'ACTIVATION_FEE')         return { label: 'Activation Fee',     color: 'bg-yellow-900/30 text-yellow-300' };
-  if (s === 'ACCOUNT_ACTIVATION')     return { label: 'Activation',         color: 'bg-yellow-900/30 text-yellow-300' };
-  if (s === 'DEPOSIT' || s === 'CHAT_DEPOSIT') return { label: 'Deposit', color: 'bg-blue-900/30 text-blue-300' };
-  if (s === 'WITHDRAWAL' || s === 'CHAT_WITHDRAWAL') return { label: 'Withdrawal', color: 'bg-red-900/30 text-red-300' };
-  if (s.includes('SPIN'))             return { label: 'Spin',               color: 'bg-pink-900/30 text-pink-300' };
-  if (s === 'SURVEY')                 return { label: 'Survey Reward',      color: 'bg-indigo-900/30 text-indigo-300' };
-  if (s === 'BONUS' || s === 'ADMIN_CREDIT') return { label: 'Bonus/Credit', color: 'bg-green-900/30 text-green-300' };
-  if (s === 'CHAT_MESSAGE_EARNING')   return { label: 'Chat Earning',       color: 'bg-teal-900/30 text-teal-300' };
-  if (s === 'CHAT_REFERRAL_EARNING')  return { label: 'Chat Referral',      color: 'bg-purple-900/30 text-purple-300' };
-  if (txn.transaction_type === 'credit') return { label: 'Earnings',        color: 'bg-green-900/30 text-green-300' };
-  return { label: 'Debit',              color: 'bg-red-900/30 text-red-300' };
-}
-
 function safeDate(date: string | null | undefined): string {
   if (!date) return 'N/A';
   try {
@@ -61,14 +45,6 @@ function safeDate(date: string | null | undefined): string {
   } catch {
     return 'Invalid date';
   }
-}
-
-function refLabel(txn: Transaction): string {
-  const coop  = txn.coop_reference_id;
-  const mpesa = txn.mpesa_reference_id;
-  if (coop && coop !== 'N/A')  return `Ref: ${coop.slice(0, 12)}`;
-  if (mpesa && mpesa !== 'N/A') return `M-Pesa: ${mpesa.slice(0, 12)}`;
-  return txn.id.slice(-8).toUpperCase();
 }
 
 export default function TransactionsPage() {
@@ -119,7 +95,7 @@ export default function TransactionsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 md:p-6">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
 
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
@@ -219,33 +195,31 @@ export default function TransactionsPage() {
                   <thead>
                     <tr className="border-b border-slate-700 bg-slate-900/50">
                       <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Date</th>
-                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Description</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Target User</th>
                       <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Type</th>
                       <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Amount</th>
                       <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Reference</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Description</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Action/Ref</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">References</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50">
                     {transactions.map(txn => {
-                      const { label, color } = friendlyType(txn);
                       const isCredit = txn.transaction_type === 'credit';
+                      const hasCoop  = txn.coop_reference_id  && txn.coop_reference_id  !== 'N/A';
+                      const hasMpesa = txn.mpesa_reference_id && txn.mpesa_reference_id !== 'N/A';
                       return (
                         <tr key={txn.id} className="hover:bg-slate-700/30 transition-colors">
                           <td className="px-5 py-4 text-sm text-slate-400 whitespace-nowrap">
                             {safeDate(txn.date)}
                           </td>
-                          <td className="px-5 py-4 text-sm max-w-xs">
-                            <p className="text-slate-200 font-medium leading-snug">{txn.description || 'Transaction'}</p>
-                            {txn.earning_source_type === 'downline' && txn.downline_level !== 'N/A' && (
-                              <p className="text-xs text-purple-400 mt-0.5">
-                                Level {txn.downline_level} downline commission
-                              </p>
-                            )}
+                          <td className="px-5 py-4 text-sm text-slate-300">
+                            {txn.target_user}
                           </td>
                           <td className="px-5 py-4">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${color}`}>
-                              {label}
+                            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-900/30 text-blue-300">
+                              {txn.type_label}
                             </span>
                           </td>
                           <td className="px-5 py-4 text-sm font-semibold whitespace-nowrap">
@@ -264,8 +238,29 @@ export default function TransactionsPage() {
                               {txn.status ? txn.status.charAt(0).toUpperCase() + txn.status.slice(1) : 'Unknown'}
                             </span>
                           </td>
+                          <td className="px-5 py-4 text-sm max-w-xs">
+                            <p className="text-slate-200 font-medium leading-snug">{txn.description}</p>
+                            {txn.earning_source_type === 'downline' && txn.downline_level !== 'N/A' && (
+                              <p className="text-xs text-purple-400 mt-0.5">
+                                Level {txn.downline_level} commission
+                              </p>
+                            )}
+                          </td>
                           <td className="px-5 py-4 text-xs text-slate-500 font-mono whitespace-nowrap">
-                            {refLabel(txn)}
+                            {txn.id.slice(-8).toUpperCase()}
+                          </td>
+                          <td className="px-5 py-4 text-xs text-slate-400 font-mono">
+                            {hasCoop ? (
+                              <div className="text-green-400">
+                                <span className="text-slate-500">Coop:</span> {txn.coop_reference_id?.slice(0, 12)}
+                              </div>
+                            ) : hasMpesa ? (
+                              <div className="text-blue-400">
+                                <span className="text-slate-500">M-Pesa:</span> {txn.mpesa_reference_id?.slice(0, 12)}
+                              </div>
+                            ) : (
+                              <span className="text-slate-600 italic">N/A</span>
+                            )}
                           </td>
                         </tr>
                       );

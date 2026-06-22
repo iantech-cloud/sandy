@@ -311,20 +311,19 @@ export default function TransactionsPage() {
 
   const exportToCSV = () => {
     const headers = [
-      'Date', 'Transaction Code', 'Target Type', 'User', 'Type', 
-      'Amount', 'Status', 'Description', 'M-Pesa Receipt', 'Phone Number'
+      'Date', 'Target User', 'Type', 'Amount (KES)', 'Status',
+      'Description', 'Action ID', 'Coop Reference', 'M-Pesa Reference'
     ];
     const rows = transactions.map(t => [
-      new Date(t.date).toLocaleString(),
-      t.transaction_code || 'N/A',
-      t.target_type,
+      t.date ? new Date(t.date).toLocaleString('en-KE') : 'N/A',
       `${t.user_username || 'N/A'} (${t.user_email || 'N/A'})`,
-      t.type,
-      t.amount.toFixed(2),
+      t.type && t.type !== 'N/A' ? t.type : t.source,
+      `${t.transaction_type === 'debit' ? '-' : '+'}${t.amount.toFixed(2)}`,
       t.status,
-      t.description,
-      t.mpesa_receipt_number || 'N/A',
-      t.phone_number || 'N/A'
+      t.description || 'N/A',
+      t.id ? t.id.slice(-8).toUpperCase() : 'N/A',
+      t.coop_reference_id  || 'N/A',
+      t.mpesa_reference_id || 'N/A',
     ]);
     
     const csvContent = [
@@ -564,39 +563,31 @@ export default function TransactionsPage() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                  {/* Checkboxes disabled temporarily - bulk operations disabled */}
-                  <div className="w-5"></div>
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Target</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">User</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Type</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Amount</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 whitespace-nowrap">Date</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 whitespace-nowrap">Target User</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 whitespace-nowrap">Type</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700 whitespace-nowrap">Amount</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 whitespace-nowrap">Status</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 whitespace-nowrap">Action</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 whitespace-nowrap">References</th>
               </tr>
             </thead>
             <tbody>
               {transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                     No transactions found
                   </td>
                 </tr>
               ) : (
-                transactions.map((txn) => (
-                  <tr key={txn.id} className={`border-b hover:bg-gray-50 ${!isEligible(txn) ? 'bg-gray-50' : ''}`}>
-                    <td className="px-4 py-3">
-                      {/* Checkboxes disabled temporarily */}
-                      <div className="w-5"></div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {new Date(txn.date).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      {getTargetBadge(txn.target_type)}
+                transactions.map((txn) => {
+                  const hasCoop  = txn.coop_reference_id  && txn.coop_reference_id  !== 'N/A';
+                  const hasMpesa = txn.mpesa_reference_id && txn.mpesa_reference_id !== 'N/A';
+                  return (
+                  <tr key={txn.id} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {txn.date ? new Date(txn.date).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <div className="font-medium text-gray-900">{txn.user_username || 'N/A'}</div>
@@ -610,7 +601,7 @@ export default function TransactionsPage() {
                         <span className="block text-[10px] text-teal-600 mt-0.5">Chat Foreigners</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-right font-semibold">
+                    <td className="px-4 py-3 text-sm text-right font-semibold whitespace-nowrap">
                       <span className={txn.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'}>
                         {txn.transaction_type === 'debit' ? '-' : '+'}KES {txn.amount.toFixed(2)}
                       </span>
@@ -621,30 +612,31 @@ export default function TransactionsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 max-w-xs">
-                      <div>
-                        <span className={txn.description === 'N/A' ? 'text-gray-400 italic' : ''}>
-                          {txn.description && txn.description !== 'N/A' ? txn.description : '—'}
-                        </span>
-                        {txn.mpesa_reference_id && txn.mpesa_reference_id !== 'N/A' && (
-                          <span className="block text-xs text-blue-600 mt-1">
-                            M-Pesa: {txn.mpesa_reference_id}
-                          </span>
-                        )}
-                        {txn.coop_reference_id && txn.coop_reference_id !== 'N/A' && (
-                          <span className="block text-xs text-gray-500 mt-1">
-                            Ref: {txn.coop_reference_id}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      {/* Update action temporarily disabled */}
-                      <span className="text-xs text-gray-400">
-                        —
+                      <span className={(!txn.description || txn.description === 'N/A') ? 'text-gray-400 italic' : ''}>
+                        {txn.description && txn.description !== 'N/A' ? txn.description : '—'}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-xs text-gray-400 font-mono whitespace-nowrap">
+                      {txn.id ? txn.id.slice(-8).toUpperCase() : 'N/A'}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-mono">
+                      {hasCoop ? (
+                        <div className="text-green-700">
+                          <span className="text-gray-500 font-sans not-italic">Coop:</span><br />
+                          {txn.coop_reference_id}
+                        </div>
+                      ) : hasMpesa ? (
+                        <div className="text-blue-700">
+                          <span className="text-gray-500 font-sans not-italic">M-Pesa:</span><br />
+                          {txn.mpesa_reference_id}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic font-sans">N/A</span>
+                      )}
+                    </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

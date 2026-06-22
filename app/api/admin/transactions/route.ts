@@ -77,11 +77,13 @@ export async function GET(request: NextRequest) {
       fetchLegacy
         ? LegacyTransaction.find(legacyFilter)
             .populate('user_id', 'username email')
+            .select('_id amount_cents type description status transaction_code metadata created_at balance_after_cents source target_type user_id')
             .sort({ created_at: -1 })
             .lean()
         : Promise.resolve([]),
       fetchCF
         ? (ChatForeignersTransaction as any).find(cfFilter)
+            .select('_id amount_cents type description status metadata created_at target_type user_id')
             .sort({ created_at: -1 })
             .lean()
         : Promise.resolve([]),
