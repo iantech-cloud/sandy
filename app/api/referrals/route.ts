@@ -61,12 +61,12 @@ export async function GET(request: NextRequest) {
           },
         },
         {
+          // No nested pipeline — localField/foreignField only, for broad MongoDB compatibility
           $lookup: {
             from: 'profiles',
             localField: 'referred_oid',
             foreignField: '_id',
             as: '_p',
-            pipeline: [{ $project: { status: 1, is_verified: 1, activation_paid_at: 1 } }],
           },
         },
         {
@@ -108,23 +108,12 @@ export async function GET(request: NextRequest) {
           },
         },
         {
+          // localField/foreignField without a nested pipeline — supported on all MongoDB versions
           $lookup: {
             from: 'profiles',
             localField: 'referred_oid',
             foreignField: '_id',
             as: '_p',
-            pipeline: [
-              {
-                $project: {
-                  username: 1,
-                  email: 1,
-                  status: 1,
-                  created_at: 1,
-                  is_verified: 1,
-                  activation_paid_at: 1,
-                },
-              },
-            ],
           },
         },
         {
@@ -133,7 +122,19 @@ export async function GET(request: NextRequest) {
             referred_id: 1,
             referral_bonus_amount_cents: 1,
             created_at: 1,
-            profile: { $arrayElemAt: ['$_p', 0] },
+            profile: {
+              $let: {
+                vars: { p: { $arrayElemAt: ['$_p', 0] } },
+                in: {
+                  username:           '$$p.username',
+                  email:              '$$p.email',
+                  status:             '$$p.status',
+                  created_at:         '$$p.created_at',
+                  is_verified:        '$$p.is_verified',
+                  activation_paid_at: '$$p.activation_paid_at',
+                },
+              },
+            },
           },
         },
       ]).exec(),
