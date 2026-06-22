@@ -313,11 +313,13 @@ export default function ReferralsPage() {
                     {referrals.map(ref => (
                       <tr key={ref.id} className="hover:bg-slate-700/30 transition-colors">
                         <td className="px-5 py-4">
-                          <p className="text-slate-200 text-sm font-medium">
-                            {ref.name || <span className="text-slate-500 italic">No username</span>}
+                          {/* Primary: masked email */}
+                          <p className="text-slate-200 text-sm font-medium font-mono">
+                            {ref.email ? maskEmail(ref.email, 2) : <span className="text-slate-500 italic not-italic font-sans">No email</span>}
                           </p>
-                          {ref.email && (
-                            <p className="text-slate-500 text-xs mt-0.5">{maskEmail(ref.email, 2)}</p>
+                          {/* Secondary: username if available */}
+                          {ref.name && (
+                            <p className="text-slate-500 text-xs mt-0.5">{ref.name}</p>
                           )}
                         </td>
                         <td className="px-5 py-4 text-sm text-slate-400 whitespace-nowrap">
