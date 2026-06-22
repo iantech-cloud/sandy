@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth'; 
-import { connectToDatabase, Profile, CoopBankPayment } from '@/app/lib/models';
+import { connectToDatabase, Profile, CoopBankPayment, ChatForeignersTransaction } from '@/app/lib/models';
 import { TransactionLedger } from '@/app/lib/models/RevenueStreams';
 
 export async function GET(request: NextRequest) {
@@ -69,52 +69,62 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get total count for pagination
-    const total = await TransactionLedger.countDocuments(query);
+    // Query both new and old transaction collections
+    const [newTransactions, oldTransactions] = await Promise.all([
+      TransactionLedger.find(query)
+        .populate('user_id', 'username email')
+        .populate('referrer_id', 'username email')
+        .populate('downline_user_id', 'username email')
+        .populate('coop_bank_payment_id', 'coop_transaction_id')
+        .lean(),
+      (ChatForeignersTransaction as any).find({})
+        .lean()
+    ]);
+
+    // Combine and sort all transactions
+    const allTransactions = [
+      ...newTransactions,
+      ...oldTransactions
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const total = allTransactions.length;
     const pages = Math.ceil(total / limit);
+    
+    // Apply pagination
+    const paginatedTransactions = allTransactions.slice(skip, skip + limit);
 
-    const transactions = await TransactionLedger.find(query)
-      .populate('user_id', 'username email')
-      .populate('referrer_id', 'username email')
-      .populate('downline_user_id', 'username email')
-      .populate('coop_bank_payment_id', 'coop_transaction_id')
-      .sort({ created_at: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    const transformedTransactions = transactions.map((txn: any) => ({
-      id: txn._id.toString(),
-      user_id: txn.user_id?._id?.toString() || null,
+    const transformedTransactions = paginatedTransactions.map((txn: any) => ({
+      id: txn._id?.toString() || 'N/A',
+      user_id: txn.user_id?._id?.toString() || txn.user_id?.toString() || 'N/A',
       user_email: txn.user_id?.email || 'System',
       user_username: txn.user_id?.username || 'System',
-      amount: txn.amount_cents / 100,
-      amount_cents: txn.amount_cents,
-      transaction_type: txn.transaction_type,
-      source: txn.source,
-      earning_source_type: txn.earning_source_type || 'direct',
-      status: txn.status,
-      description: txn.description,
-      date: txn.created_at,
+      amount: (txn.amount_cents || txn.amount) ? (txn.amount_cents || txn.amount * 100) / 100 : 0,
+      amount_cents: txn.amount_cents || (txn.amount ? txn.amount * 100 : 0),
+      transaction_type: txn.transaction_type || txn.type || 'N/A',
+      source: txn.source || txn.type || 'N/A',
+      earning_source_type: txn.earning_source_type || txn.target_type || 'N/A',
+      status: txn.status || 'N/A',
+      description: txn.description || 'N/A',
+      date: txn.created_at || 'N/A',
       
       // Downline commission details
-      referrer_id: txn.referrer_id?._id?.toString() || null,
-      referrer_email: txn.referrer_id?.email || null,
-      referrer_username: txn.referrer_id?.username || null,
-      downline_user_id: txn.downline_user_id?._id?.toString() || null,
-      downline_user_email: txn.downline_user_id?.email || null,
-      downline_level: txn.downline_level || null,
-      commission_percentage: txn.commission_percentage || null,
+      referrer_id: txn.referrer_id?._id?.toString() || txn.referrer_id?.toString() || 'N/A',
+      referrer_email: txn.referrer_id?.email || 'N/A',
+      referrer_username: txn.referrer_id?.username || 'N/A',
+      downline_user_id: txn.downline_user_id?._id?.toString() || 'N/A',
+      downline_user_email: txn.downline_user_id?.email || 'N/A',
+      downline_level: txn.downline_level || 'N/A',
+      commission_percentage: txn.commission_percentage || 'N/A',
       
       // Payment method tracking
-      payment_method: txn.payment_method || null,
-      coop_reference_id: txn.coop_reference_id || null,
-      mpesa_reference_id: txn.mpesa_reference_id || null,
-      coop_bank_transaction_id: txn.coop_bank_payment_id?.coop_transaction_id || null,
+      payment_method: txn.payment_method || 'N/A',
+      coop_reference_id: txn.coop_reference_id || 'N/A',
+      mpesa_reference_id: txn.mpesa_reference_id || 'N/A',
+      coop_bank_transaction_id: txn.coop_bank_payment_id?.coop_transaction_id || 'N/A',
       
-      reference_id: txn.reference_id || null,
-      reference_type: txn.reference_type || null,
-      balance_after: txn.balance_after_cents / 100,
+      reference_id: txn.reference_id || 'N/A',
+      reference_type: txn.reference_type || txn.type || 'N/A',
+      balance_after: txn.balance_after_cents ? txn.balance_after_cents / 100 : 'N/A',
       
       metadata: txn.metadata || {}
     }));

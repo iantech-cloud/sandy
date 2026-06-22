@@ -1,6 +1,6 @@
 'use server';
 
-import { connectToDatabase, Profile, Referral, Transaction } from '../lib/models';
+import { connectToDatabase, Profile, Referral, ChatForeignersTransaction } from '../lib/models';
 import { auth } from '@/auth'; 
 import { Session } from '@auth/core/types';
 
@@ -143,7 +143,7 @@ export async function getReferrals(filters?: {
     const totalCount = await (Referral as any).countDocuments(query);
 
     // Get referral earnings from REFERRAL transactions for this user
-    const referralTransactions = await (Transaction as any)
+    const referralTransactions = await (ChatForeignersTransaction as any)
       .find({
         user_id: currentUser._id,
         type: 'REFERRAL',
@@ -235,7 +235,7 @@ export async function getReferralCommissionStats(): Promise<CommissionStatsRespo
     }
 
     // Get all completed REFERRAL transactions earned by this user, split by level
-    const allReferralTransactions = await (Transaction as any).find({
+    const allReferralTransactions = await (ChatForeignersTransaction as any).find({
       user_id: currentUser._id,
       type: 'REFERRAL',
       status: 'completed'
@@ -315,7 +315,7 @@ export async function getReferralSummary(): Promise<{
     });
 
     // Get total referral earnings
-    const earningsResult = await (Transaction as any).aggregate([
+    const earningsResult = await (ChatForeignersTransaction as any).aggregate([
       {
         $match: {
           user_id: currentUser._id,
@@ -332,7 +332,7 @@ export async function getReferralSummary(): Promise<{
     ]);
 
     // Get pending referral earnings
-    const pendingEarningsResult = await (Transaction as any).aggregate([
+    const pendingEarningsResult = await (ChatForeignersTransaction as any).aggregate([
       {
         $match: {
           user_id: currentUser._id,
