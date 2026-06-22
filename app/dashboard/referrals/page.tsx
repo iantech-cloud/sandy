@@ -2,10 +2,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import Alert from '@/app/ui/Alert';
 import { useDashboard } from '../DashboardContext';
-import { getReferrals, getReferralCommissionStats, getReferralInfo } from '@/app/actions/referrals';
+import { getReferralCommissionStats, getReferralInfo } from '@/app/actions/referrals';
 import { maskEmail } from '@/app/lib/email-utils';
 
 interface Referral {
@@ -35,10 +35,21 @@ interface CommissionStats {
   total: number;
 }
 
+interface ReferralsResponse {
+  success: boolean;
+  data?: Referral[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+  message: string;
+}
+
 export default function ReferralsPage() {
   const { user } = useDashboard();
   const [referrals, setReferrals] = useState<Referral[]>([]);
-  const [allReferrals, setAllReferrals] = useState<Referral[]>([]);
   const [commissionStats, setCommissionStats] = useState<CommissionStats | null>(null);
   const [referralLink, setReferralLink] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
@@ -46,34 +57,51 @@ export default function ReferralsPage() {
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalReferrals, setTotalReferrals] = useState(0);
+  const ITEMS_PER_PAGE = 20;
+
+  const fetchReferrals = async (page: number) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/referrals?page=${page}&limit=${ITEMS_PER_PAGE}`);
+      const result: ReferralsResponse = await response.json();
+
+      if (result.success && result.data) {
+        const transformedReferrals = result.data.map(ref => ({
+          ...ref,
+          earnings: ref.earnings || ref.earning || 0,
+          referredUser: ref.name || ref.email || 'Unknown User'
+        }));
+        setReferrals(transformedReferrals);
+        
+        if (result.pagination) {
+          setTotalPages(result.pagination.pages);
+          setTotalReferrals(result.pagination.total);
+        }
+      } else {
+        setMessage(result.message || 'Failed to load referrals.');
+        setMessageType('error');
+      }
+    } catch (error) {
+      console.error('[v0] Error fetching referrals:', error);
+      setMessage('An error occurred while loading referrals.');
+      setMessageType('error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true);
         setStatsLoading(true);
 
-        // Fetch referrals, commission stats, and referral info in parallel
-        const [referralsResult, statsResult, infoResult] = await Promise.all([
-          getReferrals(),
+        // Fetch commission stats and referral info in parallel
+        const [statsResult, infoResult] = await Promise.all([
           getReferralCommissionStats(),
           getReferralInfo()
         ]);
-
-        if (referralsResult.success && referralsResult.data) {
-          const transformedReferrals = referralsResult.data.map(ref => ({
-            ...ref,
-            earnings: ref.earnings || ref.earning || 0,
-            referredUser: ref.name || ref.email || 'Unknown User'
-          }));
-          setAllReferrals(transformedReferrals);
-          // Set first page
-          setCurrentPage(1);
-        } else {
-          setMessage(referralsResult.message || 'Failed to load referrals.');
-          setMessageType('error');
-        }
 
         if (statsResult.success && statsResult.data) {
           setCommissionStats(statsResult.data);
@@ -82,8 +110,6 @@ export default function ReferralsPage() {
         }
 
         if (infoResult.success && infoResult.data) {
-          // Build the link using the browser's own origin so it always
-          // reflects the correct domain instead of the server-side NEXTAUTH_URL.
           const code = infoResult.data.referralCode;
           const origin = typeof window !== 'undefined' ? window.location.origin : '';
           setReferralLink(`${origin}/auth/sign-up?ref=${code}`);
@@ -94,7 +120,6 @@ export default function ReferralsPage() {
         setMessage('An error occurred while loading data.');
         setMessageType('error');
       } finally {
-        setLoading(false);
         setStatsLoading(false);
       }
     };
@@ -102,12 +127,10 @@ export default function ReferralsPage() {
     fetchData();
   }, []);
 
-  // Pagination effect
+  // Fetch referrals when page changes or on mount
   useEffect(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    setReferrals(allReferrals.slice(startIndex, endIndex));
-  }, [currentPage, allReferrals]);
+    fetchReferrals(currentPage);
+  }, [currentPage]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -362,16 +385,19 @@ export default function ReferralsPage() {
         )}
 
         {/* Pagination Controls - Mobile Responsive */}
-        {allReferrals.length > ITEMS_PER_PAGE && (
+        {totalReferrals > ITEMS_PER_PAGE && (
           <div className="border-t bg-gray-50 px-4 md:px-6 py-4">
-            <div className="text-xs md:text-sm text-gray-600 mb-3">
-              Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, allReferrals.length)} of {allReferrals.length} referrals
+            <div className="text-xs md:text-sm text-gray-600 mb-3 flex items-center justify-between">
+              <span>
+                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, totalReferrals)} of {totalReferrals} referrals
+              </span>
+              {loading && <Loader2 size={16} className="animate-spin" />}
             </div>
             <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 md:justify-between">
               <div className="flex items-center gap-1 md:gap-2 flex-wrap justify-center md:justify-start">
                 <button
                   onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
+                  disabled={currentPage === 1 || loading}
                   className="flex items-center gap-1 px-2 md:px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs md:text-sm"
                 >
                   <ChevronLeft size={14} className="md:w-4 md:h-4" />
@@ -379,24 +405,31 @@ export default function ReferralsPage() {
                 </button>
                 
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.ceil(allReferrals.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`px-2 md:px-3 py-2 rounded-lg transition-colors text-xs md:text-sm ${
-                        currentPage === page
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                    // Show only current page and nearby pages on mobile
+                    if (totalPages > 5 && Math.abs(page - currentPage) > 1 && page !== 1 && page !== totalPages) {
+                      return null;
+                    }
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        disabled={loading}
+                        className={`px-2 md:px-3 py-2 rounded-lg transition-colors text-xs md:text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                          currentPage === page
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <button
-                  onClick={() => setCurrentPage(Math.min(Math.ceil(allReferrals.length / ITEMS_PER_PAGE), currentPage + 1))}
-                  disabled={currentPage === Math.ceil(allReferrals.length / ITEMS_PER_PAGE)}
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages || loading}
                   className="flex items-center gap-1 px-2 md:px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs md:text-sm"
                 >
                   <span className="hidden sm:inline">Next</span>
@@ -408,27 +441,27 @@ export default function ReferralsPage() {
         )}
       </div>
 
-      {/* Stats Summary - Based on ALL referrals, not current page */}
-      {allReferrals.length > 0 && (
+      {/* Stats Summary - Shows totals from database */}
+      {totalReferrals > 0 && (
         <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
             <div className="text-sm text-gray-500 mb-1">Total Referrals</div>
-            <div className="text-3xl font-bold text-gray-800">{allReferrals.length}</div>
+            <div className="text-3xl font-bold text-gray-800">{totalReferrals}</div>
             <div className="text-xs text-gray-400 mt-1">All time</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border border-green-200">
-            <div className="text-sm text-gray-500 mb-1">Active Referrals</div>
+            <div className="text-sm text-gray-500 mb-1">Activated Users</div>
             <div className="text-3xl font-bold text-green-600">
-              {allReferrals.filter(ref => ref.status === 'active').length}
+              {referrals.filter(ref => ref.activationStatus === 'activated').length}/{referrals.length}
             </div>
-            <div className="text-xs text-gray-400 mt-1">Currently active</div>
+            <div className="text-xs text-gray-400 mt-1">On this page</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border border-blue-200">
-            <div className="text-sm text-gray-500 mb-1">Activated Users</div>
+            <div className="text-sm text-gray-500 mb-1">Active Referrals</div>
             <div className="text-3xl font-bold text-blue-600">
-              {allReferrals.filter(ref => ref.activationStatus === 'activated').length}
+              {referrals.filter(ref => ref.status === 'active').length}/{referrals.length}
             </div>
-            <div className="text-xs text-gray-400 mt-1">Account verified</div>
+            <div className="text-xs text-gray-400 mt-1">On this page</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow border border-purple-200">
             <div className="text-sm text-gray-500 mb-1">Total Referral Earnings</div>

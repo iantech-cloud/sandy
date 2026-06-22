@@ -102,13 +102,35 @@ export async function GET(request: NextRequest) {
                   {
                     $lookup: {
                       from: 'profiles',
-                      let: { uid: '$user_id' },
-                      pipeline: [
-                        { $match: { $expr: { $eq: ['$_id', { $toObjectId: '$$uid' }] } } },
-                        { $project: { username: 1, email: 1 } },
-                      ],
+                      localField: 'user_id',
+                      foreignField: '_id',
                       as: '_profile',
                     },
+                  },
+                  {
+                    $addFields: {
+                      '_profile': {
+                        $cond: [
+                          { $eq: [{ $size: '$_profile' }, 0] },
+                          [
+                            {
+                              $cond: [
+                                {
+                                  $regexMatch: {
+                                    input: '$user_id',
+                                    regex: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+                                    options: 'i'
+                                  }
+                                },
+                                { username: 'Unknown (UUID)', email: 'N/A' },
+                                { username: 'Unknown', email: 'N/A' }
+                              ]
+                            }
+                          ],
+                          '$_profile'
+                        ]
+                      }
+                    }
                   },
                   {
                     $lookup: {
@@ -151,13 +173,35 @@ export async function GET(request: NextRequest) {
                   {
                     $lookup: {
                       from: 'profiles',
-                      let: { uid: '$user_id' },
-                      pipeline: [
-                        { $match: { $expr: { $eq: ['$_id', { $toObjectId: '$$uid' }] } } },
-                        { $project: { username: 1, email: 1 } },
-                      ],
+                      localField: 'user_id',
+                      foreignField: '_id',
                       as: '_profile',
                     },
+                  },
+                  {
+                    $addFields: {
+                      '_profile': {
+                        $cond: [
+                          { $eq: [{ $size: '$_profile' }, 0] },
+                          [
+                            {
+                              $cond: [
+                                {
+                                  $regexMatch: {
+                                    input: '$user_id',
+                                    regex: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+                                    options: 'i'
+                                  }
+                                },
+                                { username: 'Unknown (UUID)', email: 'N/A' },
+                                { username: 'Unknown', email: 'N/A' }
+                              ]
+                            }
+                          ],
+                          '$_profile'
+                        ]
+                      }
+                    }
                   },
                 ],
                 totalCount:    [{ $count: 'n' }],
