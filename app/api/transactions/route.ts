@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { TransactionLedger, Profile, connectToDatabase } from '@/app/lib/models';
+import { Profile, connectToDatabase } from '@/app/lib/models';
+import { TransactionLedger } from '@/app/lib/models/RevenueStreams';
 import { auth } from '@/auth';
 
 export async function GET(request: NextRequest) {
