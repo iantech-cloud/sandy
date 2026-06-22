@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         // Admin: Get all referrals with detailed information
         const adminReferrals = await Referral.find({})
           .populate('referrer_id', 'username email referral_id status')
-          .populate('referred_id', 'username email referral_id status created_at level rank activation_status')
+          .populate('referred_id', 'username email referral_id status created_at level rank is_verified activation_paid_at')
           .sort({ created_at: -1 })
           .skip(startIndex)
           .limit(limit)
@@ -80,17 +80,19 @@ export async function GET(request: NextRequest) {
             referredJoinDate: ref.referred_id?.created_at,
             level: ref.referred_id?.level,
             rank: ref.referred_id?.rank,
-            activationStatus: ref.referred_id?.activation_status || 'pending',
+            activationStatus: (ref.referred_id?.is_verified || ref.referred_id?.activation_paid_at)
+              ? 'activated'
+              : 'not_activated',
             referralCount: referralCount
           };
         }));
 
         // Admin summary
-        const allReferrals = await Referral.find({}).populate('referred_id', 'status activation_status').lean();
+        const allReferrals = await Referral.find({}).populate('referred_id', 'status is_verified activation_paid_at').lean();
         
-        const activeCount = allReferrals.filter(ref => ref.referred_id?.status === 'active').length;
-        const pendingCount = allReferrals.filter(ref => ref.referred_id?.status === 'pending').length;
-        const activatedCount = allReferrals.filter(ref => ref.referred_id?.activation_status === 'activated').length;
+        const activeCount = allReferrals.filter((ref: any) => ref.referred_id?.status === 'active').length;
+        const pendingCount = allReferrals.filter((ref: any) => ref.referred_id?.status === 'pending').length;
+        const activatedCount = allReferrals.filter((ref: any) => ref.referred_id?.is_verified || ref.referred_id?.activation_paid_at).length;
 
         const totalEarningsResult = await Referral.aggregate([
           {
@@ -166,8 +168,9 @@ export async function GET(request: NextRequest) {
       case 'user':
       default:
         // Regular user: Get their own referrals with pagination
+        // Profile schema uses is_verified/activation_paid_at — NOT activation_status
         const userReferrals = await Referral.find({ referrer_id: currentUser._id })
-          .populate('referred_id', 'username email status created_at level rank total_earnings_cents balance_cents tasks_completed activation_status')
+          .populate('referred_id', 'username email status created_at level rank total_earnings_cents balance_cents tasks_completed is_verified activation_paid_at')
           .sort({ created_at: -1 })
           .skip(startIndex)
           .limit(limit)
@@ -223,18 +226,21 @@ export async function GET(request: NextRequest) {
             rank: ref.referred_id?.rank || 'Bronze',
             tasksCompleted: ref.referred_id?.tasks_completed || 0,
             totalEarnings: (ref.referred_id?.total_earnings_cents || 0) / 100,
-            activationStatus: ref.referred_id?.activation_status || 'pending',
+            // Profile schema: is_verified=true means activation fee was paid
+            activationStatus: (ref.referred_id?.is_verified || ref.referred_id?.activation_paid_at)
+              ? 'activated'
+              : 'not_activated',
             referralCount: referralCountsMap.get(referredUserId) || 0
           };
         });
 
         // User summary - Get stats from ALL referrals, not just current page
         const allUserReferrals = await Referral.find({ referrer_id: currentUser._id })
-          .populate('referred_id', 'status activation_status');
+          .populate('referred_id', 'status is_verified activation_paid_at');
         
         const activeReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.status === 'active').length;
         const pendingReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.status === 'pending').length;
-        const activatedReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.activation_status === 'activated').length;
+        const activatedReferrals = allUserReferrals.filter((ref: any) => ref.referred_id?.is_verified || ref.referred_id?.activation_paid_at).length;
         
         const totalUserEarnings = referralTransactions.reduce((sum: number, transaction: any) => sum + transaction.amount_cents, 0);
 

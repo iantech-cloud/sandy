@@ -363,11 +363,11 @@ export default function ReferralsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        ref.activationStatus === 'activated' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-gray-100 text-gray-800'
+                        ref.activationStatus === 'activated'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-gray-100 text-gray-500'
                       }`}>
-                        {ref.activationStatus === 'activated' ? '✓ Yes' : 'No'}
+                        {ref.activationStatus === 'activated' ? 'Yes' : 'No'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
