@@ -125,22 +125,28 @@ export async function getReferrals(filters?: {
     const limit = filters?.limit || 10; // Database-level pagination
     const skip = (page - 1) * limit;
 
-    const query: any = { referrer_id: currentUser._id };
+    const query: any = { referrer_id: currentUser._id.toString() };
     if (filters?.status && filters.status !== 'all') {
       query['referred_id.status'] = filters.status;
     }
 
-    // Optimized query: only select needed fields and use database-level pagination
-    // Note: Profile schema uses is_verified (boolean) and activation_paid_at (Date),
-    // NOT activation_status — populate both to determine activation state.
+    // Fetch referrals without populate (referred_id is String, not ObjectId)
     const userReferrals = await (Referral as any)
       .find(query)
-      .populate('referred_id', 'username email status created_at is_verified activation_paid_at')
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limit)
       .lean()
       .exec();
+
+    // Manual Profile lookup for referred users
+    const referredIds = userReferrals.map((r: any) => r.referred_id);
+    const profiles = await (Profile as any)
+      .find({ _id: { $in: referredIds } })
+      .select('username email status created_at is_verified activation_paid_at')
+      .lean();
+    
+    const profileMap = new Map(profiles.map((p: any) => [p._id.toString(), p]));
 
     const totalCount = await (Referral as any).countDocuments(query);
 
@@ -168,8 +174,7 @@ export async function getReferrals(filters?: {
 
     // Build referral counts for all referred users in a single aggregation
     const referralCountsMap = new Map<string, number>();
-    if (userReferrals.length > 0) {
-      const referredIds = userReferrals.map((ref: any) => ref.referred_id?._id).filter(Boolean);
+    if (referredIds.length > 0) {
       const referralCounts = await (Referral as any).aggregate([
         { $match: { referrer_id: { $in: referredIds } } },
         { $group: { _id: '$referrer_id', count: { $sum: 1 } } }
@@ -179,10 +184,10 @@ export async function getReferrals(filters?: {
       });
     }
 
-    // Transform — derive activationStatus directly from the populated user record
+    // Transform — use profileMap to get user data
     const transformedReferrals: ReferralItem[] = (userReferrals as ReferralDocument[]).map((ref) => {
-      const referredUser = ref.referred_id;
-      const userId = referredUser?._id?.toString() || '';
+      const userId = ref.referred_id;
+      const referredUser = profileMap.get(userId);
       const earnings = earningsMap.get(userId) || 0;
       // is_verified is set to true when the user pays the activation fee
       const activationStatus = referredUser?.is_verified || referredUser?.activation_paid_at
@@ -313,17 +318,24 @@ export async function getReferralSummary(): Promise<{
 
     // Get total referrals count
     const totalReferrals = await (Referral as any).countDocuments({ 
-      referrer_id: currentUser._id 
+      referrer_id: currentUser._id.toString()
     });
 
-    // Get active referrals count
-    const activeReferrals = await (Referral as any).countDocuments({
-      referrer_id: currentUser._id,
-      'referred_id.status': 'active'
-    });
+    // Get active referrals count - need to fetch and check manually since referred_id is String
+    const allReferrals = await (Referral as any)
+      .find({ referrer_id: currentUser._id.toString() })
+      .select('referred_id')
+      .lean();
+    
+    const referredIds = allReferrals.map((r: any) => r.referred_id);
+    const activeProfiles = await (Profile as any)
+      .find({ _id: { $in: referredIds }, status: 'active' })
+      .countDocuments();
+    
+    const activeReferrals = activeProfiles;
 
-    // Get total referral earnings
-    const earningsResult = await (ChatForeignersTransaction as any).aggregate([
+    // Get total referral earnings from Transaction collection (not ChatForeignersTransaction)
+    const earningsResult = await (Transaction as any).aggregate([
       {
         $match: {
           user_id: currentUser._id,
@@ -339,8 +351,8 @@ export async function getReferralSummary(): Promise<{
       }
     ]);
 
-    // Get pending referral earnings
-    const pendingEarningsResult = await (ChatForeignersTransaction as any).aggregate([
+    // Get pending referral earnings from Transaction collection
+    const pendingEarningsResult = await (Transaction as any).aggregate([
       {
         $match: {
           user_id: currentUser._id,

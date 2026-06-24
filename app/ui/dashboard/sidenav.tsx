@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import { Wallet, LogOut, Users, Award, HelpCircle, Settings, BarChart, User as UserIcon, ShoppingBag, Moon, Sun, MessageCircle, ClipboardList, BookOpen, Briefcase, MapPin, Zap, FileText, Gift, TrendingUp, History } from 'lucide-react';
+import { Wallet, LogOut, Award, HelpCircle, Settings, BarChart, User as UserIcon, Moon, Sun, MessageCircle, ClipboardList, Gift, History } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -47,18 +47,11 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
     { path: '/dashboard/transactions', label: 'Transaction History', icon: History },
     
     // Earning Opportunities
-    { path: '/dashboard/earnings-overview', label: '💰 All Earning Ways', icon: TrendingUp },
-    { path: 'https://www.upwork.com', label: 'Freelance Jobs', icon: Briefcase, external: true },
-    { path: '/dashboard/tutoring', label: 'Online Tutoring', icon: BookOpen },
-    { path: '/dashboard/digital-products', label: 'Digital Products', icon: FileText },
-    { path: '/dashboard/ai-tasks', label: 'AI Tasks', icon: Zap },
-    { path: '/dashboard/local-gigs', label: 'Local Gigs', icon: MapPin },
     { path: '/dashboard/surveys', label: 'Surveys', icon: Award },
     { path: '/dashboard/content', label: 'Content Tasks', icon: ClipboardList },
     { path: '/dashboard/chat-foreigners', label: 'Chat Foreigners', icon: MessageCircle },
     
     // Monetization
-    { path: '/dashboard/soko', label: 'Affiliate Marketing', icon: ShoppingBag },
     { path: '/dashboard/referrals', label: 'Referral Program', icon: Gift },
     
     // Account
