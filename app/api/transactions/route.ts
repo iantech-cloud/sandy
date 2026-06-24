@@ -73,52 +73,50 @@ export async function GET(request: NextRequest) {
     // ─── Run aggregations in parallel ─────────────────────────────
     // Each uses $facet to get BOTH paginated rows AND all-time totals in ONE query
     const [legacyResult, cfResult, profileDoc] = await Promise.all([
-      (Transaction as any)
-        ? LegacyTransaction.aggregate([
-            { $match: legacyMatch },
-            {
-              $facet: {
-                data: [
-                  { $sort: { created_at: -1 } },
-                  { $skip: skip },
-                  { $limit: limit },
-                  // Populate mpesa_transaction_id for real receipt number
-                  {
-                    $lookup: {
-                      from: 'mpesatransactions',
-                      localField: 'mpesa_transaction_id',
-                      foreignField: '_id',
-                      as: '_mpesa',
-                    },
-                  },
-                  // Populate user_id for username/email
-                  {
-                    $lookup: {
-                      from: 'profiles',
-                      localField: 'user_id',
-                      foreignField: '_id',
-                      as: '_profile',
-                    },
-                  },
-                ],
-                totalCount: [{ $count: 'n' }],
-                // All-time totals via aggregation — not in-memory
-                creditSum: [
-                  { $match: { target_type: { $in: ['user', null] }, $expr: { $not: { $in: ['$type', Array.from(DEBIT_TYPES)] } } } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
-                debitSum: [
-                  { $match: { $expr: { $in: ['$type', Array.from(DEBIT_TYPES)] } } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
-                downlineSum: [
-                  { $match: { type: 'REFERRAL' } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
+      (Transaction as any).aggregate([
+        { $match: legacyMatch },
+        {
+          $facet: {
+            data: [
+              { $sort: { created_at: -1 } },
+              { $skip: skip },
+              { $limit: limit },
+              // Populate mpesa_transaction_id for real receipt number
+              {
+                $lookup: {
+                  from: 'mpesatransactions',
+                  localField: 'mpesa_transaction_id',
+                  foreignField: '_id',
+                  as: '_mpesa',
+                },
               },
-            },
-          ])
-        : Promise.resolve([{ data: [], totalCount: [], creditSum: [], debitSum: [], downlineSum: [] }]),
+              // Populate user_id for username/email
+              {
+                $lookup: {
+                  from: 'profiles',
+                  localField: 'user_id',
+                  foreignField: '_id',
+                  as: '_profile',
+                },
+              },
+            ],
+            totalCount: [{ $count: 'n' }],
+            // All-time totals via aggregation — not in-memory
+            creditSum: [
+              { $match: { target_type: { $in: ['user', null] }, $expr: { $not: { $in: ['$type', Array.from(DEBIT_TYPES)] } } } },
+              { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+            ],
+            debitSum: [
+              { $match: { $expr: { $in: ['$type', Array.from(DEBIT_TYPES)] } } },
+              { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+            ],
+            downlineSum: [
+              { $match: { type: 'REFERRAL' } },
+              { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+            ],
+          },
+        },
+      ]),
 
       (ChatForeignersTransaction as any).aggregate([
         { $match: cfMatch },
