@@ -294,14 +294,16 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
       // If completed via poll (callback missed), run activation logic
       if (mappedStatus === 'completed') {
         console.log('[Activation] Activation triggered from status poll');
-        const activationPayment = await (ActivationPayment as any).findOne({
-          checkout_request_id: messageReference,
-        });
-        if (activationPayment && activationPayment.status !== 'completed') {
-          activationPayment.status = 'completed';
-          activationPayment.paid_at = new Date();
-          await activationPayment.save();
-          await completeActivationAfterPayment(activationPayment._id.toString());
+        // Use atomic findOneAndUpdate to prevent race condition
+        // Only one instance can transition from pending to completed
+        const updated = await (ActivationPayment as any).findOneAndUpdate(
+          { checkout_request_id: messageReference, status: { $ne: 'completed' } },
+          { $set: { status: 'completed', paid_at: new Date() } },
+          { new: false }  // return old doc to check if we won the race
+        );
+        if (updated) {
+          // Only the instance that actually changed the status calls completeActivation
+          await completeActivationAfterPayment(updated._id.toString());
         }
       }
 

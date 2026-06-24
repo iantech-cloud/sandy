@@ -2427,7 +2427,9 @@ const NotificationSchema = new Schema({
     { fields: { user_id: 1, created_at: -1 } },
     { fields: { user_id: 1, read: 1 } },
     { fields: { type: 1, created_at: -1 } },
-    { fields: { referral_user_id: 1 } }
+    { fields: { referral_user_id: 1 } },
+    // Prevents duplicate notifications for the same referral event
+    { fields: { user_id: 1, type: 1, referral_user_id: 1 }, unique: true, sparse: true }
   ]
 });
 

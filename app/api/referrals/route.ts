@@ -158,8 +158,8 @@ export async function GET(request: NextRequest) {
       const p             = ref.profile || {};
       const referredIdStr = ref.referred_id?.toString() || '';
       const txEarnings    = earningsMap.get(referredIdStr) || 0;
-      // Prefer real transaction earnings; fall back to the bonus recorded on the referral doc
-      const earningsCents = txEarnings > 0 ? txEarnings : (ref.referral_bonus_amount_cents || 0);
+      // Only show real, completed transaction earnings; pending users show 0
+      const earningsCents = txEarnings;
 
       return {
         id:               ref._id.toString(),
