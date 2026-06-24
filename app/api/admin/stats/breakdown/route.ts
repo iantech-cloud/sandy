@@ -16,59 +16,65 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Admin access required' }, { status: 403 });
     }
 
-    // Fetch revenue and expense breakdowns with LIMITS to prevent full table scans
-    const [companyRevenueTransactions, companyExpenseTransactions] = await Promise.all([
-      // Company Revenue: Get recent completed transactions to company (limit to recent 1000)
-      (Transaction as any)
-        .find({
-          target_type: 'company',
-          status: 'completed'
-        })
-        .select('type amount_cents metadata description')
-        .sort({ created_at: -1 })
-        .limit(1000)
-        .lean(),
-      
-      // Company Expenses: Get recent completed payouts (limit to recent 1000)
-      (Transaction as any)
-        .find({
-          target_type: 'user',
-          status: 'completed',
-          type: { 
-            $in: [
-              'BONUS', 
-              'TASK_PAYMENT', 
-              'SPIN_WIN', 
-              'REFERRAL', 
-              'SURVEY',
-              'WITHDRAWAL'
-            ] 
+    // Use aggregation pipelines for unlimited record processing (no hard limit)
+    const [revenueAgg, expenseAgg] = await Promise.all([
+      // Company Revenue: All completed transactions to company grouped by type
+      (Transaction as any).aggregate([
+        { $match: { target_type: 'company', status: 'completed' } },
+        {
+          $group: {
+            _id: '$type',
+            total: { $sum: '$amount_cents' },
+            docs: { $push: { type: '$type', metadata: '$metadata', description: '$description', amount: '$amount_cents' } }
           }
-        })
-        .select('type amount_cents')
-        .sort({ created_at: -1 })
-        .limit(1000)
-        .lean()
+        }
+      ]),
+      
+      // Company Expenses: All completed payouts grouped by type
+      (Transaction as any).aggregate([
+        {
+          $match: {
+            target_type: 'user',
+            status: 'completed',
+            type: { 
+              $in: [
+                'BONUS', 
+                'TASK_PAYMENT', 
+                'SPIN_WIN', 
+                'REFERRAL', 
+                'SURVEY',
+                'WITHDRAWAL'
+              ] 
+            }
+          }
+        },
+        {
+          $group: {
+            _id: '$type',
+            total: { $sum: '$amount_cents' }
+          }
+        }
+      ])
     ]);
 
-    // Calculate Revenue Breakdown
+    // Calculate Revenue Breakdown from aggregation results
     let activationFees = 0;
     let unclaimedReferrals = 0;
     let spinCosts = 0;
     let contentPayments = 0;
     let otherRevenue = 0;
 
-    for (const txn of companyRevenueTransactions) {
-      const amount = txn.amount_cents;
+    for (const group of revenueAgg) {
+      const amount = group.total;
       
-      switch (txn.type) {
+      switch (group._id) {
         case 'ACTIVATION_FEE':
         case 'ACCOUNT_ACTIVATION':
         case 'COMPANY_REVENUE':
-          if (txn.metadata?.source === 'unclaimed_referral') {
+          // Check first document in group for metadata
+          const firstDoc = group.docs?.[0];
+          if (firstDoc?.metadata?.source === 'unclaimed_referral') {
             unclaimedReferrals += amount;
-          } else if (txn.metadata?.source === 'activation') {
-            activationFees += amount;
           } else {
             activationFees += amount;
           }
@@ -79,7 +85,8 @@ export async function GET(req: NextRequest) {
           break;
         
         default:
-          if (txn.description?.toLowerCase().includes('content')) {
+          // Check if any document mentions content
+          if (group.docs?.some((d: any) => d.description?.toLowerCase().includes('content'))) {
             contentPayments += amount;
           } else {
             otherRevenue += amount;
@@ -89,7 +96,7 @@ export async function GET(req: NextRequest) {
 
     const totalCompanyRevenue = activationFees + unclaimedReferrals + spinCosts + contentPayments + otherRevenue;
 
-    // Calculate Expense Breakdown
+    // Calculate Expense Breakdown from aggregation results
     let userPayouts = 0;
     let bonuses = 0;
     let referralCommissions = 0;
@@ -98,10 +105,10 @@ export async function GET(req: NextRequest) {
     let surveyPayments = 0;
     let otherExpenses = 0;
 
-    for (const txn of companyExpenseTransactions) {
-      const amount = txn.amount_cents;
+    for (const group of expenseAgg) {
+      const amount = group.total;
       
-      switch (txn.type) {
+      switch (group._id) {
         case 'WITHDRAWAL':
           userPayouts += amount;
           break;

@@ -332,13 +332,19 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center py-2 border-b">
               <span className="text-gray-600">Total Obligations</span>
               <span className="font-semibold text-red-600">
-                {formatCurrency((stats?.totalUserBalances || 0) + (stats?.pendingWithdrawalsAmount || 0))}
+                {formatCurrency(stats?.totalUserBalances || 0)}
               </span>
             </div>
-            <div className="flex justify-between items-center py-2 pt-3 border-t-2">
+            <div className="flex justify-between items-center py-2">
+              <span className="text-gray-500 text-sm">Of which pending withdrawal</span>
+              <span className="font-semibold text-orange-600 text-sm">
+                {formatCurrency(stats?.pendingWithdrawalsAmount || 0)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-3 pt-3 border-t-2">
               <span className="font-semibold text-gray-700">Net Position</span>
-              <span className={`font-bold text-lg ${(stats?.companyWalletBalance || 0) - (stats?.totalUserBalances || 0) - (stats?.pendingWithdrawalsAmount || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency((stats?.companyWalletBalance || 0) - (stats?.totalUserBalances || 0) - (stats?.pendingWithdrawalsAmount || 0))}
+              <span className={`font-bold text-lg ${(stats?.companyWalletBalance || 0) - (stats?.totalUserBalances || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {formatCurrency((stats?.companyWalletBalance || 0) - (stats?.totalUserBalances || 0))}
               </span>
             </div>
           </div>

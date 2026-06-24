@@ -2,7 +2,7 @@
 'use client';
 
 import React from 'react';
-import { Wallet, LogOut, Award, HelpCircle, Settings, BarChart, User as UserIcon, Moon, Sun, MessageCircle, ClipboardList, Gift, History } from 'lucide-react';
+import { Wallet, LogOut, Award, HelpCircle, Settings, BarChart, User as UserIcon, Moon, Sun, MessageCircle, ClipboardList, Gift, History, Briefcase } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -50,6 +50,7 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
     { path: '/dashboard/surveys', label: 'Surveys', icon: Award },
     { path: '/dashboard/content', label: 'Content Tasks', icon: ClipboardList },
     { path: '/dashboard/chat-foreigners', label: 'Chat Foreigners', icon: MessageCircle },
+    { path: 'https://www.upwork.com', label: 'Freelance Jobs', icon: Briefcase, external: true },
     
     // Monetization
     { path: '/dashboard/referrals', label: 'Referral Program', icon: Gift },
