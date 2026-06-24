@@ -806,3 +806,42 @@ export async function completeWalletDeposit(
 // Users now earn KSH 10 per message after bot reply (unlimited)
 // After paying KSH 100 once, they have permanent lifetime access
 // ========================================================================
+
+// ========================================================================
+// Close Chat Session
+// Marks the bot access session as isClosed=true and clears the message
+// history so the next session starts fresh.
+// ========================================================================
+export async function closeChat(botId: string): Promise<{ success: boolean; message?: string }> {
+  try {
+    await connectToDatabase();
+
+    const currentUser = await getCurrentUserFromSession();
+    if (!currentUser) {
+      return { success: false, message: 'Not authenticated' };
+    }
+
+    const userId = (currentUser as any)._id.toString();
+
+    const result = await ChatForeignersBotAccess.findOneAndUpdate(
+      { user_id: userId, bot_id: botId },
+      {
+        $set: {
+          isClosed: true,
+          messages: [],          // clear session history so next chat starts fresh
+          messagesEarnedToday: 0,
+        },
+      },
+      { new: true }
+    );
+
+    if (!result) {
+      return { success: false, message: 'Chat session not found' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[ChatForeigners] closeChat error:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Failed to close chat' };
+  }
+}

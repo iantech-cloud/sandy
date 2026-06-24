@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectToDatabase, Profile, ChatForeignersTransaction } from '@/app/lib/models';
+import mongoose from 'mongoose';
 
 const TYPE_LABELS: Record<string, string> = {
   REFERRAL:            'Referral Bonus',
@@ -35,6 +36,7 @@ const DEBIT_TYPES = new Set([
   'COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SURVEY_REVOKE',
 ]);
 
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -61,8 +63,8 @@ export async function GET(request: NextRequest) {
     const collection = searchParams.get('collection') || 'all';
     const skip       = (page - 1) * limit;
 
-    const mongoose = (await import('mongoose')).default;
     const LegacyTransaction = mongoose.models['Transaction'] || null;
+    const WithdrawalModel   = mongoose.models['Withdrawal']  || null;
 
     // ─── Date range ──────────────────────────────────────────────
     const dateRange: any = {};
@@ -88,6 +90,35 @@ export async function GET(request: NextRequest) {
     const fetchLegacy = collection !== 'cf'     && !!LegacyTransaction;
     const fetchCF     = collection !== 'legacy';
 
+    // If mpesaRef filter is set, join MpesaTransaction first to find eligible IDs
+    // This avoids a $toObjectId conversion error and works with both ObjectId and UUID user_id values
+    let legacyMpesaIds: any[] | null = null;
+    if (mpesaRef && fetchLegacy && LegacyTransaction) {
+      const MpesaTxn = mongoose.models['MpesaTransaction'] || null;
+      if (MpesaTxn) {
+        const matched = await MpesaTxn.find(
+          { mpesa_receipt_number: new RegExp(mpesaRef, 'i') },
+          { _id: 1 }
+        ).lean();
+        legacyMpesaIds = matched.map((m: any) => m._id);
+      }
+    }
+    if (legacyMpesaIds !== null) {
+      legacyMatch.mpesa_transaction_id = { $in: legacyMpesaIds };
+    }
+
+    // ─── Total User Payouts: sourced from the Withdrawal collection ──────────────
+    // This matches exactly what the admin/withdrawals page shows.
+    // Sum all completed + approved withdrawals (approved = queued for disbursement).
+    let totalPayoutsFromWithdrawals = 0;
+    if (WithdrawalModel) {
+      const wResult = await WithdrawalModel.aggregate([
+        { $match: { status: { $in: ['completed', 'approved'] } } },
+        { $group: { _id: null, total: { $sum: '$amount_cents' } } },
+      ]);
+      totalPayoutsFromWithdrawals = (wResult[0]?.total || 0) / 100;
+    }
+
     // ─── $facet: paginated data + all-time totals in one query ───
     const [legacyResult, cfResult] = await Promise.all([
       fetchLegacy
@@ -99,15 +130,24 @@ export async function GET(request: NextRequest) {
                   { $sort: { created_at: -1 } },
                   { $skip: skip },
                   { $limit: limit },
+                  // Safe lookup — no $toObjectId needed; user_id stored as ObjectId in legacy
                   {
                     $lookup: {
                       from: 'profiles',
-                      let: { uid: '$user_id' },
-                      pipeline: [
-                        { $match: { $expr: { $eq: ['$_id', { $toObjectId: '$$uid' }] } } },
-                        { $project: { username: 1, email: 1 } },
-                      ],
+                      localField: 'user_id',
+                      foreignField: '_id',
                       as: '_profile',
+                    },
+                  },
+                  {
+                    $addFields: {
+                      _profile: {
+                        $cond: [
+                          { $eq: [{ $size: '$_profile' }, 0] },
+                          [{ username: 'Unknown', email: 'N/A' }],
+                          '$_profile',
+                        ],
+                      },
                     },
                   },
                   {
@@ -120,12 +160,9 @@ export async function GET(request: NextRequest) {
                   },
                 ],
                 totalCount:    [{ $count: 'n' }],
+                // Revenue = money into the company
                 totalRevenue:  [
                   { $match: { target_type: 'company' } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
-                totalPayouts:  [
-                  { $match: { target_type: 'user' } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
                 completedCount: [{ $match: { status: 'completed' } }, { $count: 'n' }],
@@ -135,7 +172,7 @@ export async function GET(request: NextRequest) {
             },
           ])
         : Promise.resolve([{
-            data: [], totalCount: [], totalRevenue: [], totalPayouts: [],
+            data: [], totalCount: [], totalRevenue: [],
             completedCount: [], pendingCount: [], failedCount: [],
           }]),
 
@@ -151,22 +188,26 @@ export async function GET(request: NextRequest) {
                   {
                     $lookup: {
                       from: 'profiles',
-                      let: { uid: '$user_id' },
-                      pipeline: [
-                        { $match: { $expr: { $eq: ['$_id', { $toObjectId: '$$uid' }] } } },
-                        { $project: { username: 1, email: 1 } },
-                      ],
+                      localField: 'user_id',
+                      foreignField: '_id',
                       as: '_profile',
+                    },
+                  },
+                  {
+                    $addFields: {
+                      _profile: {
+                        $cond: [
+                          { $eq: [{ $size: '$_profile' }, 0] },
+                          [{ username: 'Unknown', email: 'N/A' }],
+                          '$_profile',
+                        ],
+                      },
                     },
                   },
                 ],
                 totalCount:    [{ $count: 'n' }],
                 totalRevenue:  [
                   { $match: { target_type: 'company' } },
-                  { $group: { _id: null, total: { $sum: '$amount_cents' } } },
-                ],
-                totalPayouts:  [
-                  { $match: { target_type: 'user' } },
                   { $group: { _id: null, total: { $sum: '$amount_cents' } } },
                 ],
                 completedCount: [{ $match: { status: 'completed' } }, { $count: 'n' }],
@@ -176,7 +217,7 @@ export async function GET(request: NextRequest) {
             },
           ])
         : Promise.resolve([{
-            data: [], totalCount: [], totalRevenue: [], totalPayouts: [],
+            data: [], totalCount: [], totalRevenue: [],
             completedCount: [], pendingCount: [], failedCount: [],
           }]),
     ]);
@@ -210,15 +251,15 @@ export async function GET(request: NextRequest) {
         type:             txn.type     || 'N/A',
         type_label:       TYPE_LABELS[txn.type] || txn.type || 'N/A',
         source:           txn.source   || txn.type || 'N/A',
-        // target_type from schema is always 'user' or 'company' — never N/A
+        target_type:      txn.target_type || 'user',
         target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
         earning_source_type: txn.type === 'REFERRAL' ? 'downline' : 'direct',
         status:           txn.status   || 'N/A',
         description,
         date:             txn.created_at,
-        // Coop: real bank reference from transaction_code (set by Coop callback)
+        // Coop bank reference stored in transaction_code (e.g. SPINDY17821278547008CYHDH)
         coop_reference_id:  txn.transaction_code || null,
-        // M-Pesa: real receipt from populated MpesaTransaction document
+        // M-Pesa receipt number from the linked MpesaTransaction document (e.g. UFM248OFZF)
         mpesa_reference_id: mpesa?.mpesa_receipt_number || null,
         balance_after:    txn.balance_after_cents != null ? txn.balance_after_cents / 100 : null,
         collection:       'legacy',
@@ -238,6 +279,7 @@ export async function GET(request: NextRequest) {
         type:             txn.type     || 'N/A',
         type_label:       CF_TYPE_LABELS[txn.type] || txn.type || 'N/A',
         source:           txn.type     || 'chat_foreigners',
+        target_type:      txn.target_type || 'user',
         target:           txn.target_type === 'company' ? 'Company' : 'User Wallet',
         earning_source_type: txn.type === 'CHAT_REFERRAL_EARNING' ? 'downline' : 'direct',
         status:           txn.status   || 'N/A',
@@ -262,13 +304,12 @@ export async function GET(request: NextRequest) {
 
     const summary = {
       totalCount,
-      // Revenue = money that went to the company
-      totalRevenue:    ((lr.totalRevenue[0]?.total  || 0) + (cr.totalRevenue[0]?.total  || 0)) / 100,
-      // Payouts = money that went to users
-      totalPayouts:    ((lr.totalPayouts[0]?.total  || 0) + (cr.totalPayouts[0]?.total  || 0)) / 100,
-      completedCount:  (lr.completedCount[0]?.n || 0) + (cr.completedCount[0]?.n || 0),
-      pendingCount:    (lr.pendingCount[0]?.n   || 0) + (cr.pendingCount[0]?.n   || 0),
-      failedCount:     (lr.failedCount[0]?.n    || 0) + (cr.failedCount[0]?.n    || 0),
+      totalRevenue:   ((lr.totalRevenue[0]?.total  || 0) + (cr.totalRevenue[0]?.total  || 0)) / 100,
+      // totalPayouts is sourced from the Withdrawal model (same source as admin/withdrawals page)
+      totalPayouts:   totalPayoutsFromWithdrawals,
+      completedCount: (lr.completedCount[0]?.n || 0) + (cr.completedCount[0]?.n || 0),
+      pendingCount:   (lr.pendingCount[0]?.n   || 0) + (cr.pendingCount[0]?.n   || 0),
+      failedCount:    (lr.failedCount[0]?.n    || 0) + (cr.failedCount[0]?.n    || 0),
     };
 
     return NextResponse.json({
