@@ -329,9 +329,11 @@ export async function completeBotUnlockPayment(
 
     if (existingAccess) {
       // Already unlocked (should not happen due to payment guard, but be safe)
-      // Just ensure it's not closed
+      // Just ensure it's not closed and mark lifetime access
       existingAccess.isClosed = false;
       existingAccess.closedAt = undefined;
+      existingAccess.lifetimeAccessUnlocked = true;
+      existingAccess.lifetimeAccessUnlockedAt = new Date();
       await existingAccess.save({ session });
     } else {
       await ChatForeignersBotAccess.create(
@@ -341,6 +343,8 @@ export async function completeBotUnlockPayment(
             bot_id: payment.bot_id,
             unlockedAt: new Date(),
             isClosed: false,
+            lifetimeAccessUnlocked: true,
+            lifetimeAccessUnlockedAt: new Date(),
           },
         ],
         { session }
@@ -798,108 +802,46 @@ export async function completeWalletDeposit(
 }
 
 // ========================================================================
-// Claim Chat Completion Reward — Credit User KSH 100 (non-withdrawable)
-// Called when a user reaches the 20-message milestone and claims their reward.
-// Requirements:
-//   - At least 20 messages must have been exchanged
-//   - Credits KSH 100 (10000 cents) to the user's Chat Foreigners wallet (once)
-// LIFETIME UNLOCK: access is NEVER closed or reset. After claiming, the user
-//   keeps full access and message history forever — no re-payment required.
+// Lifetime Chat Access - REMOVED milestone-based reward system
+// Users now earn KSH 10 per message after bot reply (unlimited)
+// After paying KSH 100 once, they have permanent lifetime access
 // ========================================================================
-export async function closeChat(botId: string) {
+
+// ========================================================================
+// Close Chat Session
+// Marks the bot access session as isClosed=true and clears the message
+// history so the next session starts fresh.
+// ========================================================================
+export async function closeChat(botId: string): Promise<{ success: boolean; message?: string }> {
   try {
     await connectToDatabase();
+
     const currentUser = await getCurrentUserFromSession();
-
     if (!currentUser) {
-      return { success: false, error: 'Not authenticated' };
+      return { success: false, message: 'Not authenticated' };
     }
 
-    const userId = (currentUser as any)._id;
+    const userId = (currentUser as any)._id.toString();
 
-    // LIFETIME UNLOCK: find access regardless of isClosed. Claiming the
-    // completion reward must never depend on (or create) a "closed" state.
-    const access = await ChatForeignersBotAccess.findOne({
-      user_id: userId,
-      bot_id: botId,
-    });
-
-    if (!access) {
-      return { success: false, error: 'No active chat session found' };
-    }
-
-    // Require at least 20 messages exchanged
-    const MIN_MESSAGES = 20;
-    if ((access.messageCount || 0) < MIN_MESSAGES) {
-      return {
-        success: false,
-        error: `You need at least ${MIN_MESSAGES} messages to claim your reward. You have sent ${access.messageCount || 0} so far.`,
-        messageCount: access.messageCount || 0,
-        required: MIN_MESSAGES,
-      };
-    }
-
-    // Guard: the completion reward is ONE-TIME per unlock. Use an atomic
-    // conditional update to claim the reward — only the request that flips
-    // chatCreditPaid from false→true is allowed to credit the wallet. This
-    // prevents a double credit when two claim requests arrive concurrently.
-    const claim = await ChatForeignersBotAccess.findOneAndUpdate(
-      { _id: access._id, chatCreditPaid: { $ne: true } },
-      { $set: { chatCreditPaid: true } },
+    const result = await ChatForeignersBotAccess.findOneAndUpdate(
+      { user_id: userId, bot_id: botId },
+      {
+        $set: {
+          isClosed: true,
+          messages: [],          // clear session history so next chat starts fresh
+          messagesEarnedToday: 0,
+        },
+      },
       { new: true }
     );
 
-    if (!claim) {
-      // Another request already claimed it (or it was claimed previously).
-      // Do NOT credit again and do NOT re-lock — access is lifetime.
-      return { success: true, alreadyCredited: true };
+    if (!result) {
+      return { success: false, message: 'Chat session not found' };
     }
 
-    const CHAT_CREDIT_CENTS = 10000; // KSH 100
-
-    // Credit user's Chat Foreigners wallet (chat_earnings sub-wallet)
-    let wallet = await ChatForeignersWallet.findOne({ user_id: userId });
-    if (!wallet) {
-      wallet = new ChatForeignersWallet({ user_id: userId, balance_cents: 0, total_earned_cents: 0, total_deposited_cents: 0, downline_earnings_cents: 0, chat_earnings_cents: 0 });
-    }
-    wallet.balance_cents += CHAT_CREDIT_CENTS;
-    wallet.total_earned_cents += CHAT_CREDIT_CENTS;
-    (wallet as any).chat_earnings_cents = ((wallet as any).chat_earnings_cents || 0) + CHAT_CREDIT_CENTS;
-    await wallet.save();
-
-    // Record the transaction
-    await ChatForeignersTransaction.create({
-      user_id: userId,
-      amount_cents: CHAT_CREDIT_CENTS,
-      type: 'CHAT_EARNINGS',
-      description: 'Chat session completed reward',
-      status: 'completed',
-      target_type: 'user',
-      target_id: userId.toString(),
-    });
-
-    // chatCreditPaid was already set atomically above. Access stays OPEN and the
-    // conversation history is preserved — the user keeps chatting forever after
-    // claiming and is never re-locked or reset.
-    console.log('[ChatForeigners] Chat completion reward credited (access stays open):', {
-      userId,
-      botId,
-      credit: CHAT_CREDIT_CENTS / 100,
-      messageCount: claim.messageCount,
-    });
-
-    return {
-      success: true,
-      data: {
-        creditAmount: CHAT_CREDIT_CENTS / 100,
-        walletBalance: wallet.balance_cents / 100,
-      },
-    };
+    return { success: true };
   } catch (error) {
-    console.error('[ChatForeigners] Close chat error:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'An error occurred',
-    };
+    console.error('[ChatForeigners] closeChat error:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Failed to close chat' };
   }
 }

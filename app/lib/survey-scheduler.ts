@@ -2,163 +2,84 @@ import { connectToDatabase, Survey, SurveyAssignment, Profile, Referral } from '
 import { Types } from 'mongoose';
 
 /**
- * Assign surveys to eligible users with priority to new users and top referrers
+ * Assign surveys to ALL eligible users
+ * Handles both new surveys and new users joining after survey activation
  */
 export async function assignSurveys() {
   try {
     await connectToDatabase();
     
-    // Get active or manually enabled surveys that need assignment
+    // Get ALL active surveys that haven't expired
     const now = new Date();
-    const surveys = await Survey.find({
-      $or: [
-        {
-          status: 'active',
-          scheduled_for: { $lte: now },
-          expires_at: { $gt: now }
-        },
-        {
-          is_manually_enabled: true,
-          status: { $in: ['active', 'scheduled'] }
-        }
-      ]
-    });
+    const activeSurveys: any[] = await (Survey.find({
+      status: 'active',
+      expires_at: { $gt: now }
+    }).select('_id title') as any).lean();
 
-    if (surveys.length === 0) {
-      console.log('No active surveys to assign');
+    if (activeSurveys.length === 0) {
+      console.log('[SurveyAssignment] No active surveys to assign');
       return;
     }
 
-    for (const survey of surveys) {
-      // Get total active users
-      const totalActiveUsers = await Profile.countDocuments({
-        is_active: true,
-        is_approved: true,
-        approval_status: 'approved',
-        status: 'active'
-      });
+    console.log(`[SurveyAssignment] Found ${activeSurveys.length} active surveys`);
 
-      const targetPercentage = survey.target_percentage || 15; // Default to 15%
-      const targetUserCount = Math.ceil(totalActiveUsers * (targetPercentage / 100));
+    // Get all users in the system
+    const allUsers: any[] = await (Profile.find({}).select('_id') as any).lean();
+    console.log(`[SurveyAssignment] Total users in system: ${allUsers.length}`);
 
-      // Get users who haven't been assigned this survey
-      const assignedUserIds = await SurveyAssignment.distinct('user_id', {
-        survey_id: survey._id
-      });
+    let totalAssignmentsCreated = 0;
 
-      const eligibleQuery = {
-        _id: { $nin: assignedUserIds.map(id => new Types.ObjectId(id)) },
-        is_active: true,
-        is_approved: true,
-        approval_status: 'approved',
-        status: 'active'
-      };
+    for (const survey of activeSurveys) {
+      try {
+        // Get users who haven't been assigned this survey yet
+        const assignedUserIds = await SurveyAssignment.distinct('user_id', {
+          survey_id: survey._id
+        });
 
-      // Priority 1: New users (joined in last 7 days)
-      if (survey.priority_new_users !== false) {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        
-        const newUsers = await Profile.find({
-          ...eligibleQuery,
-          created_at: { $gte: oneWeekAgo }
-        }).limit(targetUserCount).select('_id');
+        const usersToAssign = allUsers.filter(
+          user => !assignedUserIds.includes(user._id.toString())
+        );
 
-        for (const user of newUsers) {
-          const assignment = new SurveyAssignment({
-            survey_id: survey._id,
-            user_id: user._id,
-            assigned_reason: 'new_user'
-          });
-          await assignment.save();
-          assignedUserIds.push(user._id.toString());
+        if (usersToAssign.length === 0) {
+          console.log(`[SurveyAssignment] All users assigned to survey: ${survey.title}`);
+          continue;
         }
-      }
 
-      // Priority 2: Top referrers
-      if (survey.priority_top_referrers !== false && assignedUserIds.length < targetUserCount) {
-        const remainingSlots = targetUserCount - assignedUserIds.length;
-        
-        const topReferrers = await Referral.aggregate([
-          {
-            $group: {
-              _id: '$referrer_id',
-              referralCount: { $sum: 1 }
+        // Create batch assignments for all new users
+        const assignments = usersToAssign.map(user => ({
+          survey_id: survey._id,
+          user_id: user._id.toString(),
+          assigned_reason: 'auto_assigned',
+          assigned_at: new Date(),
+        }));
+
+        // Insert assignments with error handling for duplicates
+        await SurveyAssignment.insertMany(assignments, { ordered: false }).catch(
+          (error: any) => {
+            // Ignore duplicate key errors - they're expected
+            if (error.code === 11000) {
+              console.log(`[SurveyAssignment] Handled duplicate assignments for survey: ${survey.title}`);
+            } else {
+              throw error;
             }
-          },
-          {
-            $match: {
-              _id: { $nin: assignedUserIds.map(id => new Types.ObjectId(id)) }
-            }
-          },
-          {
-            $sort: { referralCount: -1 }
-          },
-          {
-            $limit: remainingSlots
           }
-        ]);
+        );
 
-        for (const referrer of topReferrers) {
-          const assignment = new SurveyAssignment({
-            survey_id: survey._id,
-            user_id: referrer._id,
-            assigned_reason: 'top_referrer'
-          });
-          await assignment.save();
-          assignedUserIds.push(referrer._id.toString());
-        }
+        totalAssignmentsCreated += usersToAssign.length;
+        console.log(
+          `[SurveyAssignment] Assigned survey "${survey.title}" to ${usersToAssign.length} new users`
+        );
+      } catch (surveyError: any) {
+        console.error(
+          `[SurveyAssignment] Error assigning survey ${survey._id}:`,
+          surveyError.message
+        );
       }
-
-      // Priority 3: High accuracy users (users with good survey completion rate)
-      if (assignedUserIds.length < targetUserCount) {
-        const remainingSlots = targetUserCount - assignedUserIds.length;
-        
-        const highAccuracyUsers = await Profile.find({
-          ...eligibleQuery,
-          survey_accuracy_rate: { $gte: 70 } // Users with 70%+ accuracy
-        })
-        .sort({ survey_accuracy_rate: -1 })
-        .limit(remainingSlots)
-        .select('_id');
-
-        for (const user of highAccuracyUsers) {
-          const assignment = new SurveyAssignment({
-            survey_id: survey._id,
-            user_id: user._id,
-            assigned_reason: 'high_accuracy'
-          });
-          await assignment.save();
-          assignedUserIds.push(user._id.toString());
-        }
-      }
-
-      // Priority 4: Random selection for remaining slots
-      if (assignedUserIds.length < targetUserCount) {
-        const remainingSlots = targetUserCount - assignedUserIds.length;
-        
-        const randomUsers = await Profile.aggregate([
-          {
-            $match: eligibleQuery
-          },
-          { $sample: { size: remainingSlots } },
-          { $project: { _id: 1 } }
-        ]);
-
-        for (const user of randomUsers) {
-          const assignment = new SurveyAssignment({
-            survey_id: survey._id,
-            user_id: user._id,
-            assigned_reason: 'random'
-          });
-          await assignment.save();
-        }
-      }
-
-      console.log(`Assigned survey "${survey.title}" to ${assignedUserIds.length} users`);
     }
-  } catch (error) {
-    console.error('Error assigning surveys:', error);
+
+    console.log(`[SurveyAssignment] Total new assignments created: ${totalAssignmentsCreated}`);
+  } catch (error: any) {
+    console.error('[SurveyAssignment] Error in assignSurveys:', error);
   }
 }
 
@@ -172,16 +93,8 @@ export async function activateScheduledSurveys() {
     
     const now = new Date();
     
-    // Convert to EAT (UTC+3)
-    const eatTime = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));
-    const dayOfWeek = eatTime.getDay(); // 0 = Sunday, 2 = Tuesday
-    const hour = eatTime.getHours();
-    
-    // Check if it's Tuesday 21:00 EAT
-    const isTuesdaySchedule = dayOfWeek === 2 && hour === 21;
-    
     // Find surveys to activate (either scheduled for now OR manually enabled)
-    const surveysToActivate = await Survey.find({
+    const surveysToActivate: any[] = await (Survey.find({
       $or: [
         {
           status: 'scheduled',
@@ -193,53 +106,53 @@ export async function activateScheduledSurveys() {
           is_manually_enabled: true
         }
       ]
-    });
+    }).select('_id title is_manually_enabled scheduled_for') as any).lean();
+
+    if (surveysToActivate.length === 0) {
+      console.log('[SurveyActivation] No surveys to activate');
+      return;
+    }
+
+    console.log(`[SurveyActivation] Activating ${surveysToActivate.length} surveys`);
 
     for (const survey of surveysToActivate) {
-      // Calculate expiration based on activation time
-      const expiresAt = new Date(now);
-      
-      // If manually enabled, give 24 hours. If Tuesday schedule, give 2 hours
-      if (survey.is_manually_enabled) {
-        expiresAt.setHours(expiresAt.getHours() + 24);
-      } else {
-        expiresAt.setHours(expiresAt.getHours() + 2); // 2 hours for Tuesday schedule
-      }
-
-      await Survey.updateOne(
-        { _id: survey._id },
-        {
-          status: 'active',
-          activated_at: now,
-          expires_at: expiresAt
+      try {
+        // Calculate expiration based on activation time
+        const expiresAt = new Date(now);
+        
+        // If manually enabled, give 24 hours. Otherwise give 2 hours (Tuesday window)
+        if (survey.is_manually_enabled) {
+          expiresAt.setHours(expiresAt.getHours() + 24);
+        } else {
+          expiresAt.setHours(expiresAt.getHours() + 2); // 2-hour window for Tuesday surveys
         }
-      );
 
-      console.log(`Activated survey: ${survey.title} (Manual: ${survey.is_manually_enabled})`);
-      
-      // Assign surveys to users
-      await assignSurveys();
-    }
+        const result = await Survey.updateOne(
+          { _id: survey._id },
+          {
+            status: 'active',
+            activated_at: now,
+            expires_at: expiresAt
+          }
+        );
 
-    // Also check if we should activate based on Tuesday schedule
-    if (isTuesdaySchedule) {
-      const scheduledSurveys = await Survey.find({
-        status: 'scheduled',
-        scheduled_for: { $lte: now },
-        is_manually_enabled: false
-      });
-
-      if (scheduledSurveys.length > 0) {
-        console.log(`Tuesday 21:00 EAT - Activating ${scheduledSurveys.length} scheduled surveys`);
+        if (result.modifiedCount > 0) {
+          console.log(
+            `[SurveyActivation] Activated: ${survey.title} (Expires: ${expiresAt.toISOString()})`
+          );
+        }
+      } catch (surveyError: any) {
+        console.error(`[SurveyActivation] Error activating survey ${survey._id}:`, surveyError.message);
       }
     }
-  } catch (error) {
-    console.error('Error activating surveys:', error);
+  } catch (error: any) {
+    console.error('[SurveyActivation] Error in activateScheduledSurveys:', error);
   }
 }
 
 /**
  * Expire surveys that have passed their expiration time
+ * Prevent new completions and mark as expired
  */
 export async function expireSurveys() {
   try {
@@ -247,21 +160,39 @@ export async function expireSurveys() {
     
     const now = new Date();
     
+    const expiredSurveys: any[] = await (Survey.find({
+      status: 'active',
+      expires_at: { $lte: now }
+    }).select('_id title expires_at') as any).lean();
+
+    if (expiredSurveys.length === 0) {
+      console.log('[SurveyExpiration] No surveys to expire');
+      return;
+    }
+
+    console.log(`[SurveyExpiration] Found ${expiredSurveys.length} surveys to expire`);
+
     const result = await Survey.updateMany(
       {
         status: 'active',
         expires_at: { $lte: now }
       },
       {
-        status: 'completed'
+        status: 'completed',
+        expired_at: now
       }
     );
 
     if (result.modifiedCount > 0) {
-      console.log(`Expired ${result.modifiedCount} surveys`);
+      console.log(`[SurveyExpiration] Successfully expired ${result.modifiedCount} surveys`);
+      expiredSurveys.forEach(survey => {
+        console.log(
+          `[SurveyExpiration] - ${survey.title} (expired at ${new Date(survey.expires_at).toISOString()})`
+        );
+      });
     }
-  } catch (error) {
-    console.error('Error expiring surveys:', error);
+  } catch (error: any) {
+    console.error('[SurveyExpiration] Error expiring surveys:', error);
   }
 }
 
