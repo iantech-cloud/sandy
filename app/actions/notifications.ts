@@ -191,25 +191,36 @@ export async function createReferralActivationNotification(
       return { success: false, message: 'Referee not found' }
     }
 
-    // Create notification for referrer
-    const notification = await (Notification as any).create({
-      user_id: referrer_id,
-      type: 'referral_activated',
-      title: 'Referral Activated',
-      message: `${referee.username || 'Unknown user'} has activated their account from your referral link.`,
-      referral_user_id: referee_id,
-      referral_user_name: referee.username || 'Unknown user',
-      referral_user_phone: referee.phoneNumber,
-      related_resource_type: 'referral',
-      related_resource_id: referee_id,
-      action_url: `/dashboard/referrals`,
-      metadata: {
-        referee_email: referee.email,
-        referee_phone: referee.phoneNumber,
-        activation_time: new Date().toISOString()
+    // Use findOneAndUpdate with upsert to prevent duplicates
+    // Only creates if one doesn't already exist for this referral event
+    const notification = await (Notification as any).findOneAndUpdate(
+      {
+        user_id: referrer_id,
+        type: 'referral_activated',
+        referral_user_id: referee_id
       },
-      created_at: new Date()
-    })
+      {
+        $setOnInsert: {
+          user_id: referrer_id,
+          type: 'referral_activated',
+          title: 'Referral Activated',
+          message: `${referee.username || 'Unknown user'} has activated their account from your referral link.`,
+          referral_user_id: referee_id,
+          referral_user_name: referee.username || 'Unknown user',
+          referral_user_phone: referee.phoneNumber,
+          related_resource_type: 'referral',
+          related_resource_id: referee_id,
+          action_url: `/dashboard/referrals`,
+          metadata: {
+            referee_email: referee.email,
+            referee_phone: referee.phoneNumber,
+            activation_time: new Date().toISOString()
+          },
+          created_at: new Date()
+        }
+      },
+      { upsert: true, new: true }
+    )
 
     // Invalidate unread count cache for this user
     const { appCache, cacheKeys } = await import('@/app/lib/cache')
