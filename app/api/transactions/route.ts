@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Profile, connectToDatabase, ChatForeignersTransaction } from '@/app/lib/models';
+import { Profile, connectToDatabase, ChatForeignersTransaction, Transaction, MpesaTransaction } from '@/app/lib/models';
 import { auth } from '@/auth';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -59,10 +59,6 @@ export async function GET(request: NextRequest) {
 
     const userId = (currentUser as any)._id.toString();
 
-    const mongoose = (await import('mongoose')).default;
-    const LegacyTransaction = mongoose.models['Transaction'] || null;
-    const MpesaTransaction  = mongoose.models['MpesaTransaction'] || null;
-
     // ─── Build filters ────────────────────────────────────────────
     let legacyMatch: any = { user_id: userId };
     if (status) legacyMatch.status = status;
@@ -77,7 +73,7 @@ export async function GET(request: NextRequest) {
     // ─── Run aggregations in parallel ─────────────────────────────
     // Each uses $facet to get BOTH paginated rows AND all-time totals in ONE query
     const [legacyResult, cfResult, profileDoc] = await Promise.all([
-      LegacyTransaction
+      (Transaction as any)
         ? LegacyTransaction.aggregate([
             { $match: legacyMatch },
             {

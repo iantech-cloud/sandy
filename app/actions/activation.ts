@@ -689,6 +689,13 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     });
     await activationFeeTransaction.save();
 
+    // Backfill mpesa_receipt_number and transaction_code from the activation payment
+    if (activationPayment.mpesa_receipt_number) {
+      activationFeeTransaction.transaction_code = activationPayment.mpesa_receipt_number;
+      activationFeeTransaction.metadata.mpesa_receipt_number = activationPayment.mpesa_receipt_number;
+      await activationFeeTransaction.save();
+    }
+
     // =============================================================================
     // STEP 2: Process Referral Bonuses — strict 2-tier structure
     //   KES 95 activation split:

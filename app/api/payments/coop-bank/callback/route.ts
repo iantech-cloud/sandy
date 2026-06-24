@@ -136,6 +136,23 @@ export async function POST(request: NextRequest) {
 
     await mpesaTransaction.save({ session });
 
+    // Write OperatorTxnID (bank's own ref) into the linked Transaction.transaction_code
+    if (paymentStatus === 'completed' && callbackData.OperatorTxnID) {
+      await (Transaction as any).findOneAndUpdate(
+        { mpesa_transaction_id: mpesaTransaction._id },
+        {
+          $set: {
+            transaction_code: callbackData.OperatorTxnID,
+            'metadata.coop_operator_txn_id': callbackData.OperatorTxnID,
+            'metadata.coop_receipt_number': callbackData.ReceiptNumber,
+            'metadata.coop_conversation_id': callbackData.ConversationID,
+            'metadata.mpesa_receipt_number': receiptNumber,
+          }
+        },
+        { session }
+      );
+    }
+
     const depositType: string = mpesaTransaction.metadata?.deposit_type || 'unknown';
 
     console.log('[CoopCallback] depositType:', depositType, '| status:', paymentStatus);
