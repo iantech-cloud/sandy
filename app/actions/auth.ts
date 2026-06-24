@@ -11,7 +11,7 @@ export async function registerUser(userData: {
   email: string;
   phone: string;
   password: string;
-  referralId?: string;
+  referralId: string; // REQUIRED: Must have a valid referrer
   // NEW: Add these optional fields
   isOAuthUser?: boolean;
   oauthProvider?: string;
@@ -26,6 +26,11 @@ export async function registerUser(userData: {
     await connectToDatabase();
 
     const { username, email, phone, password, referralId, isOAuthUser, oauthProvider, oauthId, googleProfilePicture } = userData;
+
+    // Validate referralId is provided - prevent unclaimed referral bonuses
+    if (!referralId || referralId.trim() === '') {
+      return { success: false, message: 'A referral ID is required to join' };
+    }
 
     // Normalize email: lowercase and trim
     const normalizedEmail = email.toLowerCase().trim();
@@ -55,18 +60,15 @@ export async function registerUser(userData: {
       }
     }
 
-    // Handle referral
-    let referrerProfile = null;
-    if (referralId) {
-      referrerProfile = await (Profile as any).findOne({ 
-        referral_id: referralId.toUpperCase(),
-        approval_status: 'approved',
-        status: 'active'
-      });
+    // Handle referral - lookup valid referrer
+    const referrerProfile = await (Profile as any).findOne({ 
+      referral_id: referralId.toUpperCase(),
+      approval_status: 'approved',
+      status: 'active'
+    });
 
-      if (!referrerProfile) {
-        return { success: false, message: 'Invalid referral ID' };
-      }
+    if (!referrerProfile) {
+      return { success: false, message: 'Invalid referral ID - please check and try again' };
     }
 
     // Create user
