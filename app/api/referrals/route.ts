@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { connectToDatabase, Profile, Referral } from '@/app/lib/models';
+import { connectToDatabase, Profile, Referral, Transaction } from '@/app/lib/models';
 import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
@@ -33,8 +33,6 @@ export async function GET(request: NextRequest) {
     // The match filter — always scoped to this user. Uses the referrer_id index.
     const userMatch = { referrer_id: userIdStr };
 
-    const LegacyTransaction = mongoose.models['Transaction'] as mongoose.Model<any> | undefined;
-
     // ── Run 4 fast queries in parallel ─────────────────────────────────────────
     // 1. countDocuments  — hits referrer_id index directly, returns in <5 ms
     // 2. summaryAgg      — $group on already-filtered docs then $lookup profiles
@@ -53,18 +51,10 @@ export async function GET(request: NextRequest) {
       Referral.aggregate([
         { $match: userMatch },
         {
-          // Convert the referred_id string field to ObjectId so the _id index is hit
-          $addFields: {
-            referred_oid: {
-              $convert: { input: '$referred_id', to: 'objectId', onError: null, onNull: null },
-            },
-          },
-        },
-        {
-          // No nested pipeline — localField/foreignField only, for broad MongoDB compatibility
+          // Direct String-to-String lookup: referred_id and Profile._id are both UUID strings
           $lookup: {
             from: 'profiles',
-            localField: 'referred_oid',
+            localField: 'referred_id',
             foreignField: '_id',
             as: '_p',
           },
@@ -101,17 +91,10 @@ export async function GET(request: NextRequest) {
         { $skip: skip },
         { $limit: limit },
         {
-          $addFields: {
-            referred_oid: {
-              $convert: { input: '$referred_id', to: 'objectId', onError: null, onNull: null },
-            },
-          },
-        },
-        {
-          // localField/foreignField without a nested pipeline — supported on all MongoDB versions
+          // Direct String-to-String lookup: referred_id and Profile._id are both UUID strings
           $lookup: {
             from: 'profiles',
-            localField: 'referred_oid',
+            localField: 'referred_id',
             foreignField: '_id',
             as: '_p',
           },
@@ -143,25 +126,23 @@ export async function GET(request: NextRequest) {
       ]).exec(),
 
       // 4. Earnings per referred user from the Transaction collection
-      LegacyTransaction
-        ? LegacyTransaction.aggregate([
-            {
-              $match: {
-                user_id: userIdStr,
-                type: 'REFERRAL',
-                status: 'completed',
-              },
+      Transaction.aggregate([
+        {
+          $match: {
+            user_id: userIdStr,
+            type: 'REFERRAL',
+            status: 'completed',
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $ifNull: ['$metadata.referred_user_id', '$metadata.referredUser'],
             },
-            {
-              $group: {
-                _id: {
-                  $ifNull: ['$metadata.referred_user_id', '$metadata.referredUser'],
-                },
-                total: { $sum: '$amount_cents' },
-              },
-            },
-          ]).exec()
-        : Promise.resolve([]),
+            total: { $sum: '$amount_cents' },
+          },
+        },
+      ]).exec(),
     ]);
 
     // Build earnings map  { referred_user_id_string => total_cents }
