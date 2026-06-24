@@ -17,6 +17,21 @@ import { Types, Query } from "mongoose"
 // Import NVIDIA AI service
 import { getLLMResponse } from "@/app/lib/services/nvidia-ai"
 
+// --- Helper Functions ---
+function isTuesday(): boolean {
+  const today = new Date()
+  return today.getDay() === 2 // 2 = Tuesday
+}
+
+function getNextTuesdayDate(): Date {
+  const today = new Date()
+  const dayOfWeek = today.getDay()
+  const daysUntilTuesday = dayOfWeek === 2 ? 0 : (9 - dayOfWeek) % 7
+  const nextTuesday = new Date(today)
+  nextTuesday.setDate(nextTuesday.getDate() + daysUntilTuesday)
+  return nextTuesday
+}
+
 // --- Core Data Interfaces (Lean results) ---
 export interface SurveyQuestion {
   question_text: string
@@ -201,22 +216,20 @@ function serializeDocument(doc: any): Record<string, any> | null {
 
 /**
  * Automatically assign users to a survey
- * NOW: Assign to ALL users who have paid activation fees (activation_paid_at exists)
- * This ensures all eligible users have access to the survey
+ * FIXED: Assign to ALL users (active or inactive, with or without activation payment)
+ * This ensures surveys are accessible to all users by default
  */
 async function assignUsersToSurvey(surveyId: Types.ObjectId, targetPercentage: number = 15): Promise<number> {
   try {
     await connectToDatabase();
     
-    // Get all users who have paid activation fees (have dashboard access)
-    const eligibleUsers = await Profile.find({
-      activation_paid_at: { $exists: true, $ne: null }
-    }).select('_id').lean();
+    // Get ALL users in the system - no restrictions
+    const eligibleUsers = await Profile.find({}).select('_id').lean();
     
-    console.log(`[ASSIGNMENT] Total users with activation paid: ${eligibleUsers.length}`);
+    console.log(`[ASSIGNMENT] Total users in system: ${eligibleUsers.length}`);
     
     if (eligibleUsers.length === 0) {
-      console.log(`[ASSIGNMENT] No users with activation fees found`);
+      console.log(`[ASSIGNMENT] No users found in system`);
       return 0;
     }
     
@@ -236,11 +249,11 @@ async function assignUsersToSurvey(surveyId: Types.ObjectId, targetPercentage: n
     console.log(`[ASSIGNMENT] Users to assign: ${newUsersToAssign.length}`);
     
     if (newUsersToAssign.length === 0) {
-      console.log(`[ASSIGNMENT] All eligible users already assigned to survey`);
+      console.log(`[ASSIGNMENT] All users already assigned to survey`);
       return 0;
     }
     
-    // Create assignments for all eligible users who aren't already assigned
+    // Create assignments for ALL users who aren't already assigned
     const assignments = newUsersToAssign.map(user => ({
       survey_id: surveyId,
       user_id: user._id,
@@ -435,8 +448,9 @@ export async function submitSurveyAnswers(
         correctAnswers++
       } else {
         allCorrect = false
-        // FIXED: Break on first wrong answer and update immediately
+        // FIXED: Break on first wrong answer but still credit KSH 10
         const score = (correctAnswers / survey.questions.length) * 100
+        const surveyPayoutCents = 1000; // KSH 10 even for wrong answers
         
         await SurveyResponse.updateOne(
           { _id: responseObjectId },
@@ -447,8 +461,48 @@ export async function submitSurveyAnswers(
             answers: validatedAnswers,
             score: score,
             all_correct: false,
+            payout_credited: true,
           }
         )
+
+        // Credit KSH 10 even for wrong answer
+        await Profile.updateOne(
+          { _id: userId },
+          {
+            $inc: {
+              balance_cents: surveyPayoutCents,
+              total_earnings_cents: surveyPayoutCents,
+            },
+          }
+        )
+
+        // Create transaction for wrong answer
+        const transaction = new Transaction({
+          user_id: userId,
+          target_type: 'user',
+          target_id: userId,
+          amount_cents: surveyPayoutCents,
+          type: "SURVEY",
+          description: `Survey submission: ${survey.title} (Wrong answer at question ${correctAnswers + 1})`,
+          status: "completed",
+          metadata: {
+            survey_id: survey._id.toString(),
+            survey_response_id: responseObjectId.toString(),
+            score: score,
+            time_taken: Math.floor(timeElapsed),
+            reason: 'wrong_answer'
+          },
+        })
+        await transaction.save()
+
+        // Create earning record
+        const earning = new Earning({
+          user_id: userId,
+          amount_cents: surveyPayoutCents,
+          type: "SURVEY",
+          description: `Survey submitted: ${survey.title} (Wrong answer - Score: ${Math.round(score)}%)`,
+        })
+        await earning.save()
         
         await Survey.updateOne(
           { _id: survey._id },
@@ -462,9 +516,13 @@ export async function submitSurveyAnswers(
         
         await updateUserAccuracyRate(userId, false)
         
+        const updatedProfile = await Profile.findById(userId)
+        
         return {
-          success: false,
-          message: "Incorrect answer. Survey closed. Payment not credited.",
+          success: true,
+          message: "Incorrect answer. Survey closed. You earned KES 10 for your attempt.",
+          payout_cents: surveyPayoutCents,
+          balance_cents: updatedProfile?.balance_cents || 0,
           score: score,
           all_correct: false
         }
@@ -473,114 +531,103 @@ export async function submitSurveyAnswers(
 
     const score = (correctAnswers / survey.questions.length) * 100
 
-    // All answers correct - process payment
-    if (allCorrect && timeElapsed <= timeLimit) {
-      // Update survey response
-      await SurveyResponse.updateOne(
-        { _id: responseObjectId },
-        {
-          answers: validatedAnswers,
-          completed_at: currentTime,
-          time_taken_seconds: Math.floor(timeElapsed),
-          all_correct: true,
-          score: score,
-          status: "completed",
-          payout_credited: true,
-        }
-      )
+    // Fixed payout: KSH 10 (1000 cents) for any survey completed (correct or incorrect)
+    const surveyPayoutCents = 1000; // KSH 10 for completion
+    const isCorrect = allCorrect && timeElapsed <= timeLimit;
+    
+    // Update survey response with final status
+    await SurveyResponse.updateOne(
+      { _id: responseObjectId },
+      {
+        answers: validatedAnswers,
+        completed_at: currentTime,
+        time_taken_seconds: Math.floor(timeElapsed),
+        all_correct: isCorrect,
+        score: score,
+        status: isCorrect ? "completed" : "completed",
+        payout_credited: true,
+      }
+    )
 
-      // Credit user balance
-      await Profile.updateOne(
-        { _id: userId },
-        {
-          $inc: {
-            balance_cents: survey.payout_cents,
-            total_earnings_cents: survey.payout_cents,
-          },
-        }
-      )
-
-      // FIXED: Create transaction record with required target_type and target_id fields
-      const transaction = new Transaction({
-        user_id: userId,
-        target_type: 'user',
-        target_id: userId,
-        amount_cents: survey.payout_cents,
-        type: "SURVEY",
-        description: `Survey completion: ${survey.title}`,
-        status: "completed",
-        metadata: {
-          survey_id: survey._id.toString(),
-          survey_response_id: responseObjectId.toString(),
-          score: score,
-          time_taken: Math.floor(timeElapsed),
+    // Credit user balance with KSH 10 for any survey completion
+    await Profile.updateOne(
+      { _id: userId },
+      {
+        $inc: {
+          balance_cents: surveyPayoutCents,
+          total_earnings_cents: surveyPayoutCents,
         },
-      })
-      await transaction.save()
+      }
+    )
 
-      // Create earning record
-      const earning = new Earning({
-        user_id: userId,
-        amount_cents: survey.payout_cents,
-        type: "SURVEY",
-        description: `Completed survey: ${survey.title} (Score: ${score}%)`,
-      })
-      await earning.save()
+    // Create transaction record with fixed KSH 10 payout
+    const transaction = new Transaction({
+      user_id: userId,
+      target_type: 'user',
+      target_id: userId,
+      amount_cents: surveyPayoutCents,
+      type: "SURVEY",
+      description: `Survey completion: ${survey.title} (${isCorrect ? 'All correct' : 'Partial correct - Score: ' + Math.round(score) + '%'})`,
+      status: "completed",
+      metadata: {
+        survey_id: survey._id.toString(),
+        survey_response_id: responseObjectId.toString(),
+        score: score,
+        time_taken: Math.floor(timeElapsed),
+        all_correct: isCorrect,
+      },
+    })
+    await transaction.save()
 
-      // Update survey stats
-      await Survey.updateOne(
-        { _id: survey._id },
-        {
-          $inc: {
-            current_responses: 1,
-            successful_responses: 1,
-          },
-        }
-      )
-      
-      await updateUserAccuracyRate(userId, true)
+    // Create earning record with fixed KSH 10
+    const earning = new Earning({
+      user_id: userId,
+      amount_cents: surveyPayoutCents,
+      type: "SURVEY",
+      description: `Survey completion: ${survey.title} (${isCorrect ? 'Perfect score' : 'Score: ' + Math.round(score) + '%'})`,
+    })
+    await earning.save()
 
-      // Get updated balance
-      const updatedProfile = await Profile.findById(userId)
+    // Update survey stats - count as successful regardless of correctness
+    await Survey.updateOne(
+      { _id: survey._id },
+      {
+        $inc: {
+          current_responses: 1,
+          successful_responses: isCorrect ? 1 : 0,
+          failed_responses: !isCorrect ? 1 : 0,
+        },
+      }
+    )
+    
+    await updateUserAccuracyRate(userId, isCorrect)
 
-      revalidatePath("/dashboard/surveys")
-      revalidatePath("/dashboard")
+    // Get updated balance
+    const updatedProfile = await Profile.findById(userId)
 
+    revalidatePath("/dashboard/surveys")
+    revalidatePath("/dashboard")
+
+    if (isCorrect) {
+      // All answers correct
       return {
         success: true,
-        message: `Survey completed successfully! KES ${(survey.payout_cents / 100).toFixed(2)} has been added to your balance.`,
-        payout_cents: survey.payout_cents,
+        message: `Survey completed successfully! KES 10 has been added to your balance.`,
+        payout_cents: surveyPayoutCents,
         balance_cents: updatedProfile?.balance_cents || 0,
         score: score,
         all_correct: true,
       }
     } else {
-      // Incomplete or failed
-      await SurveyResponse.updateOne(
-        { _id: responseObjectId },
-        {
-          answers: validatedAnswers,
-          completed_at: currentTime,
-          time_taken_seconds: Math.floor(timeElapsed),
-          all_correct: false,
-          score: score,
-          status: "completed",
-        }
-      )
-      
-      await Survey.updateOne(
-        { _id: survey._id },
-        {
-          $inc: {
-            current_responses: 1,
-            failed_responses: 1,
-          },
-        }
-      )
-      
-      await updateUserAccuracyRate(userId, false)
-
-      const updatedProfile = await Profile.findById(userId)
+      // Incomplete but still completed - still get KSH 10
+      return {
+        success: true,
+        message: `Survey submitted! You scored ${Math.round(score)}%. KES 10 has been added to your balance.`,
+        payout_cents: surveyPayoutCents,
+        balance_cents: updatedProfile?.balance_cents || 0,
+        score: score,
+        all_correct: false,
+      }
 
       revalidatePath("/dashboard/surveys")
       revalidatePath("/dashboard")
@@ -1379,17 +1426,19 @@ export async function getAvailableSurveys(): Promise<{
     const userId = user._id
     const now = new Date()
 
-    // Check if user has paid activation fee
-    if (!user.activation_paid_at) {
+    // Check if today is Tuesday (surveys only available on Tuesdays)
+    if (!isTuesday()) {
+      const nextTuesday = getNextTuesdayDate()
       return {
-        success: true,
-        data: [],
-        message: "Please complete account activation to access surveys.",
+        success: false,
+        message: `Surveys are only available on Tuesdays. Next available: ${nextTuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`
       }
     }
 
+    // FIXED: Surveys are accessible to ALL users by default (no activation restriction)
+
     // Get ALL active surveys that haven't expired
-    // Accessible to all users who have paid activation fees
+    // Accessible to ALL users by default (no restrictions)
     // Only condition: survey must be active AND not already completed by this user
     const activeSurveys = await Survey.aggregate([
       {
@@ -1497,11 +1546,16 @@ export async function startSurvey(surveyId: string): Promise<{
       return { success: false, message: "Survey not available or expired." }
     }
 
-    const assignment = await findSurveyAssignment(surveyObjectId, userId)
-
-    if (!assignment) {
-      return { success: false, message: "You are not assigned to this survey." }
+    // Check if today is Tuesday (surveys only accessible on Tuesdays)
+    if (!isTuesday()) {
+      const nextTuesday = getNextTuesdayDate()
+      return { 
+        success: false, 
+        message: `Surveys are only available on Tuesdays. Next available: ${nextTuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}` 
+      }
     }
+
+    // FIXED: All users can access active surveys without assignment restriction
 
     const existingResponseQuery = SurveyResponse.findOne({
       survey_id: surveyObjectId,

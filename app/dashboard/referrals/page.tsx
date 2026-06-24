@@ -1,444 +1,409 @@
-// app/dashboard/referrals/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import Alert from '@/app/ui/Alert';
-import { useDashboard } from '../DashboardContext';
-import { getReferrals, getReferralCommissionStats, getReferralInfo } from '@/app/actions/referrals';
+import { useState, useEffect, useCallback } from 'react';
+import { Users, TrendingUp, CheckCircle, Clock, Loader2, RefreshCw, Copy, Check } from 'lucide-react';
+import { format } from 'date-fns';
 import { maskEmail } from '@/app/lib/email-utils';
+import { getReferralCommissionStats, getReferralInfo } from '@/app/actions/referrals';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Referral {
   id: string;
   name: string;
   email: string;
   joinDate: string;
-  status: 'active' | 'pending' | 'suspended' | 'banned';
-  earnings: number;
-  level?: number;
-  rank?: string;
-  referredUser?: string;
-  earning?: number;
+  status: string;
   activationStatus: string;
+  earnings: number;
+  level: number;
+  rank: string;
+  tasksCompleted: number;
   referralCount: number;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+}
+
+interface Summary {
+  total: number;
+  active: number;
+  activated: number;
+  totalEarnings: number;
+}
+
+interface ApiResponse {
+  success: boolean;
+  data: Referral[];
+  pagination: Pagination;
+  summary: Summary;
+}
+
 interface CommissionStats {
-  level1: {
-    totalEarnings: number;
-    count: number;
-  };
-  level2: {
-    totalEarnings: number;
-    count: number;
-  };
+  level1: { totalEarnings: number; count: number };
+  level2: { totalEarnings: number; count: number };
   total: number;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function safeDate(d: string | null | undefined): string {
+  if (!d) return '—';
+  try { return format(new Date(d), 'MMM dd, yyyy'); } catch { return '—'; }
+}
+
+function statusColor(status: string) {
+  switch (status) {
+    case 'active':    return 'bg-green-900/30 text-green-300';
+    case 'pending':   return 'bg-yellow-900/30 text-yellow-300';
+    case 'suspended': return 'bg-orange-900/30 text-orange-300';
+    case 'banned':    return 'bg-red-900/30 text-red-300';
+    default:          return 'bg-slate-700 text-slate-400';
+  }
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function ReferralsPage() {
-  const { user } = useDashboard();
-  const [referrals, setReferrals] = useState<Referral[]>([]);
-  const [allReferrals, setAllReferrals] = useState<Referral[]>([]);
-  const [commissionStats, setCommissionStats] = useState<CommissionStats | null>(null);
-  const [referralLink, setReferralLink] = useState<string>('');
-  const [message, setMessage] = useState<string | null>(null);
-  const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
-  const [loading, setLoading] = useState(true);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
+  const [referrals, setReferrals]           = useState<Referral[]>([]);
+  const [pagination, setPagination]         = useState<Pagination | null>(null);
+  const [summary, setSummary]               = useState<Summary | null>(null);
+  const [commStats, setCommStats]           = useState<CommissionStats | null>(null);
+  const [referralLink, setReferralLink]     = useState('');
+  const [referralCode, setReferralCode]     = useState('');
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setStatsLoading(true);
+  const [loading, setLoading]               = useState(true);
+  const [statsLoading, setStatsLoading]     = useState(true);
+  const [currentPage, setCurrentPage]       = useState(1);
 
-        // Fetch referrals, commission stats, and referral info in parallel
-        const [referralsResult, statsResult, infoResult] = await Promise.all([
-          getReferrals(),
-          getReferralCommissionStats(),
-          getReferralInfo()
-        ]);
+  const [copiedCode, setCopiedCode]         = useState(false);
+  const [copiedLink, setCopiedLink]         = useState(false);
 
-        if (referralsResult.success && referralsResult.data) {
-          const transformedReferrals = referralsResult.data.map(ref => ({
-            ...ref,
-            earnings: ref.earnings || ref.earning || 0,
-            referredUser: ref.name || ref.email || 'Unknown User'
-          }));
-          setAllReferrals(transformedReferrals);
-          // Set first page
-          setCurrentPage(1);
-        } else {
-          setMessage(referralsResult.message || 'Failed to load referrals.');
-          setMessageType('error');
-        }
+  const LIMIT = 20;
 
-        if (statsResult.success && statsResult.data) {
-          setCommissionStats(statsResult.data);
-        } else {
-          console.error('Failed to load commission stats:', statsResult.message);
-        }
-
-        if (infoResult.success && infoResult.data) {
-          // Build the link using the browser's own origin so it always
-          // reflects the correct domain instead of the server-side NEXTAUTH_URL.
-          const code = infoResult.data.referralCode;
-          const origin = typeof window !== 'undefined' ? window.location.origin : '';
-          setReferralLink(`${origin}/auth/sign-up?ref=${code}`);
-        }
-
-      } catch (error) {
-        console.error('[v0] Error fetching data:', error);
-        setMessage('An error occurred while loading data.');
-        setMessageType('error');
-      } finally {
-        setLoading(false);
-        setStatsLoading(false);
+  // ── Fetch paginated referrals ─────────────────────────────────────────────
+  const fetchReferrals = useCallback(async (page: number) => {
+    setLoading(true);
+    try {
+      const res  = await fetch(`/api/referrals?page=${page}&limit=${LIMIT}`);
+      const json: ApiResponse = await res.json();
+      if (json.success) {
+        setReferrals(json.data);
+        setPagination(json.pagination);
+        setSummary(json.summary);
+      } else {
+        setReferrals([]);
       }
-    };
-    
-    fetchData();
+    } catch (err) {
+      console.error('[referrals] fetch error', err);
+      setReferrals([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Pagination effect
+  // ── Fetch commission stats + referral link once ───────────────────────────
   useEffect(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    setReferrals(allReferrals.slice(startIndex, endIndex));
-  }, [currentPage, allReferrals]);
+    (async () => {
+      setStatsLoading(true);
+      try {
+        const [statsRes, infoRes] = await Promise.all([
+          getReferralCommissionStats(),
+          getReferralInfo(),
+        ]);
+        if (statsRes.success && statsRes.data) setCommStats(statsRes.data);
+        if (infoRes.success && infoRes.data) {
+          const code   = infoRes.data.referralCode;
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          setReferralCode(code);
+          setReferralLink(`${origin}/auth/sign-up?ref=${code}`);
+        }
+      } catch (err) {
+        console.error('[referrals] stats/info error', err);
+      } finally {
+        setStatsLoading(false);
+      }
+    })();
+  }, []);
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setMessage(`${label} copied to clipboard!`);
-    setMessageType('success');
-    setTimeout(() => setMessage(null), 3000);
+  useEffect(() => {
+    fetchReferrals(currentPage);
+  }, [fetchReferrals, currentPage]);
+
+  // ── Clipboard helpers ─────────────────────────────────────────────────────
+  const copyCode = () => {
+    navigator.clipboard.writeText(referralCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+  const copyLink = () => {
+    navigator.clipboard.writeText(referralLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-6"></div>
-          <div className="bg-white p-6 rounded-xl shadow-lg mb-8">
-            <div className="h-4 bg-gray-200 rounded w-1/3 mb-2"></div>
-            <div className="h-6 bg-gray-200 rounded w-1/2"></div>
-          </div>
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-12 bg-gray-200 rounded mb-4 last:mb-0"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <h2 className="text-3xl font-extrabold text-gray-800 mb-6 border-b pb-2">Referrals</h2>
-      
-      {message && <Alert type={messageType} message={message} onClose={() => setMessage(null)} />}
-      
-      {/* Referral Code & Link Section */}
-      <div className="bg-white p-6 rounded-xl shadow-lg mb-8">
-        <h3 className="font-bold text-lg mb-4 text-gray-800">Your Referral Information</h3>
-        
-        {/* Referral Code */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Referral Code</label>
-          <div className="flex items-center gap-4 flex-wrap">
-            <code className="text-lg lg:text-xl font-mono text-indigo-600 bg-indigo-50 px-4 py-2 rounded-lg border-2 border-indigo-200 break-all">
-              {referralLink && referralLink.includes('ref=') ? referralLink.split('ref=')[1]?.split('&')[0] : 'Loading...'}
-            </code>
-            <button
-              onClick={() => {
-                if (referralLink && referralLink.includes('ref=')) {
-                  const code = referralLink.split('ref=')[1]?.split('&')[0];
-                  if (code) {
-                    copyToClipboard(code, 'Referral code');
-                  }
-                }
-              }}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap flex-shrink-0"
-            >
-              Copy Code
-            </button>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 md:p-6">
+      <div className="max-w-6xl mx-auto">
 
-        {/* Referral Link */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Referral Link</label>
-          <div className="flex items-center gap-4 flex-wrap">
-            <input
-              type="text"
-              readOnly
-              value={referralLink || 'Loading...'}
-              className="flex-1 px-4 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg font-mono text-gray-600 break-all"
-            />
-            <button
-              onClick={() => {
-                if (referralLink) {
-                  copyToClipboard(referralLink, 'Referral link');
-                }
-              }}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap flex-shrink-0"
-            >
-              Copy Link
-            </button>
-          </div>
-        </div>
-
-        <p className="text-gray-600 mt-4 text-sm">
-          Share your referral link. Earn <strong>KES 65</strong> (Level 1) when someone you refer activates, plus <strong>KES 10</strong> (Level 2) when your referred member&apos;s referral activates. For Chat Foreigners, earn <strong>KES 70</strong> (L1) and <strong>KES 10</strong> (L2) per personality unlock.
-        </p>
-      </div>
-
-      {/* Commission Breakdown Section */}
-      <div className="bg-white p-6 rounded-xl shadow-lg mb-8">
-        <h3 className="font-bold text-lg mb-4 text-gray-800">Commission Breakdown</h3>
-        
-        {statsLoading ? (
-          <div className="animate-pulse">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="text-center p-4 bg-gray-100 rounded-lg">
-                  <div className="h-8 bg-gray-200 rounded mb-2"></div>
-                  <div className="h-4 bg-gray-200 rounded"></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : commissionStats ? (
+        {/* Header */}
+        <div className="mb-8 flex items-center justify-between">
           <div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              {/* Level 1 earnings */}
-              <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
-                <div className="text-2xl font-bold text-green-600">
-                  KES {commissionStats.level1.totalEarnings.toFixed(2)}
-                </div>
-                <div className="text-sm text-gray-600 mt-1">Level 1 Earnings</div>
-                <div className="text-xs text-green-500 mt-1">{commissionStats.level1.count} commission{commissionStats.level1.count !== 1 ? 's' : ''}</div>
-              </div>
-
-              {/* Level 2 earnings */}
-              <div className="text-center p-4 bg-amber-50 rounded-lg border border-amber-200">
-                <div className="text-2xl font-bold text-amber-600">
-                  KES {commissionStats.level2 ? commissionStats.level2.totalEarnings.toFixed(2) : '0.00'}
-                </div>
-                <div className="text-sm text-gray-600 mt-1">Level 2 Earnings</div>
-                <div className="text-xs text-amber-500 mt-1">{commissionStats.level2?.count ?? 0} commission{(commissionStats.level2?.count ?? 0) !== 1 ? 's' : ''}</div>
-              </div>
-
-              {/* Total */}
-              <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="text-2xl font-bold text-blue-600">
-                  KES {commissionStats.total.toFixed(2)}
-                </div>
-                <div className="text-sm text-gray-600 mt-1">Total Referral Earnings</div>
-                <div className="text-xs text-blue-500 mt-1">All tiers combined</div>
-              </div>
-            </div>
-
-          {/* Commission Structure Info */}
-            <div className="p-4 bg-gray-50 rounded-lg border">
-              <h4 className="font-semibold text-gray-800 mb-3">Commission Structure</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                {/* Activation */}
-                <div>
-                  <p className="font-medium text-gray-700 mb-2">Account Activation (KES 95 fee)</p>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 bg-green-500 rounded-full flex-shrink-0"></div>
-                      <span>Level 1: <strong>KES 65</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 bg-amber-500 rounded-full flex-shrink-0"></div>
-                      <span>Level 2: <strong>KES 10</strong></span>
-                    </div>
-                  </div>
-                </div>
-                {/* Chat Foreigners */}
-                <div>
-                  <p className="font-medium text-gray-700 mb-2">Chat Foreigners Unlock (KES 100 fee)</p>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 bg-green-500 rounded-full flex-shrink-0"></div>
-                      <span>Level 1: <strong>KES 70</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 bg-amber-500 rounded-full flex-shrink-0"></div>
-                      <span>Level 2: <strong>KES 10</strong></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-4">
-                All earnings go directly to your main wallet and are withdrawable.
-              </p>
-            </div>
+            <h1 className="text-3xl font-bold text-white mb-1">Referral Network</h1>
+            <p className="text-slate-400 text-sm">Grow your network and earn commissions on every activation</p>
           </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            <svg className="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            <p>Commission data not available</p>
-          </div>
-        )}
-      </div>
-
-      {/* Referrals List Section */}
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-        <div className="bg-gray-50 px-6 py-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-800">Your Referral Network</h3>
+          <button
+            onClick={() => fetchReferrals(currentPage)}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
-        
-        {referrals.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="text-gray-400 mb-4">
-              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <p className="text-gray-500 text-lg mb-2">No referrals yet</p>
-            <p className="text-gray-400 text-sm">Start sharing your referral link to grow your network!</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Activated</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Joined</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Referrals</th>
-                  <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Your Earning</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {referrals.map((ref) => (
-                  <tr key={ref.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{ref.name || 'Unknown User'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {maskEmail(ref.email, 2)}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        ref.status === 'active' 
-                          ? 'bg-green-100 text-green-800' 
-                          : ref.status === 'pending'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {ref.status?.charAt(0).toUpperCase() + ref.status?.slice(1) || 'Unknown'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        ref.activationStatus === 'activated' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {ref.activationStatus === 'activated' ? '✓ Yes' : 'No'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {ref.joinDate ? new Date(ref.joinDate).toLocaleDateString() : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{ref.referralCount || 0}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-green-600 text-right">
-                      KES {(ref.earnings || 0).toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
 
-        {/* Pagination Controls - Mobile Responsive */}
-        {allReferrals.length > ITEMS_PER_PAGE && (
-          <div className="border-t bg-gray-50 px-4 md:px-6 py-4">
-            <div className="text-xs md:text-sm text-gray-600 mb-3">
-              Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, allReferrals.length)} of {allReferrals.length} referrals
-            </div>
-            <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 md:justify-between">
-              <div className="flex items-center gap-1 md:gap-2 flex-wrap justify-center md:justify-start">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-lg p-5">
+            <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide">Total Referred</p>
+            <p className="text-2xl font-bold text-blue-400">{summary?.total ?? '—'}</p>
+            <Users className="w-5 h-5 text-blue-500 mt-2" />
+          </div>
+          <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/30 border border-green-500/30 rounded-lg p-5">
+            <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide">Active</p>
+            <p className="text-2xl font-bold text-green-400">{summary?.active ?? '—'}</p>
+            <CheckCircle className="w-5 h-5 text-green-500 mt-2" />
+          </div>
+          <div className="bg-gradient-to-br from-amber-900/30 to-orange-900/30 border border-amber-500/30 rounded-lg p-5">
+            <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide">Activated</p>
+            <p className="text-2xl font-bold text-amber-400">{summary?.activated ?? '—'}</p>
+            <Clock className="w-5 h-5 text-amber-500 mt-2" />
+          </div>
+          <div className="bg-gradient-to-br from-purple-900/30 to-violet-900/30 border border-purple-500/30 rounded-lg p-5">
+            <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide">Total Earned</p>
+            <p className="text-2xl font-bold text-purple-400">
+              KES {(summary?.totalEarnings ?? 0).toLocaleString('en-KE', { minimumFractionDigits: 0 })}
+            </p>
+            <TrendingUp className="w-5 h-5 text-purple-500 mt-2" />
+          </div>
+        </div>
+
+        {/* Referral Code + Link */}
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-lg p-5 mb-6">
+          <h2 className="text-white font-semibold mb-4">Your Referral Details</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Code */}
+            <div>
+              <label className="text-slate-400 text-xs font-medium mb-2 block uppercase tracking-wide">Referral Code</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-indigo-300 font-mono text-sm truncate">
+                  {referralCode || 'Loading...'}
+                </code>
                 <button
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                  className="flex items-center gap-1 px-2 md:px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs md:text-sm"
+                  onClick={copyCode}
+                  disabled={!referralCode}
+                  className="flex items-center gap-1.5 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm transition-colors disabled:opacity-40"
                 >
-                  <ChevronLeft size={14} className="md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">Prev</span>
+                  {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copiedCode ? 'Copied' : 'Copy'}
                 </button>
-                
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.ceil(allReferrals.length / ITEMS_PER_PAGE) }, (_, i) => i + 1).map((page) => (
+              </div>
+            </div>
+            {/* Link */}
+            <div>
+              <label className="text-slate-400 text-xs font-medium mb-2 block uppercase tracking-wide">Referral Link</label>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={referralLink || 'Loading...'}
+                  className="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-slate-300 font-mono text-xs truncate focus:outline-none"
+                />
+                <button
+                  onClick={copyLink}
+                  disabled={!referralLink}
+                  className="flex items-center gap-1.5 px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors disabled:opacity-40"
+                >
+                  {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copiedLink ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Commission Breakdown */}
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-lg p-5 mb-6">
+          <h2 className="text-white font-semibold mb-4">Commission Breakdown</h2>
+          {statsLoading ? (
+            <div className="flex items-center gap-3 text-slate-400">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading commission data&hellip;</span>
+            </div>
+          ) : commStats ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-slate-900/50 border border-green-500/20 rounded-lg p-4 text-center">
+                <p className="text-2xl font-bold text-green-400">
+                  KES {commStats.level1.totalEarnings.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-slate-400 text-sm mt-1">Level 1 Earnings</p>
+                <p className="text-green-600 text-xs mt-0.5">{commStats.level1.count} commission{commStats.level1.count !== 1 ? 's' : ''}</p>
+              </div>
+              <div className="bg-slate-900/50 border border-amber-500/20 rounded-lg p-4 text-center">
+                <p className="text-2xl font-bold text-amber-400">
+                  KES {(commStats.level2?.totalEarnings ?? 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-slate-400 text-sm mt-1">Level 2 Earnings</p>
+                <p className="text-amber-600 text-xs mt-0.5">{commStats.level2?.count ?? 0} commission{(commStats.level2?.count ?? 0) !== 1 ? 's' : ''}</p>
+              </div>
+              <div className="bg-slate-900/50 border border-blue-500/20 rounded-lg p-4 text-center">
+                <p className="text-2xl font-bold text-blue-400">
+                  KES {commStats.total.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-slate-400 text-sm mt-1">Total Referral Earnings</p>
+                <p className="text-blue-600 text-xs mt-0.5">All tiers combined</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-slate-500 text-sm">Commission data not available.</p>
+          )}
+        </div>
+
+        {/* Referrals Table */}
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-lg overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+            <h2 className="text-white font-semibold">
+              Your Referral Network
+              {pagination && (
+                <span className="text-slate-500 text-sm font-normal ml-2">({pagination.total} total)</span>
+              )}
+            </h2>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-56 gap-3">
+              <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+              <p className="text-slate-400 text-sm">Loading referrals&hellip;</p>
+            </div>
+          ) : referrals.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-56 gap-2">
+              <Users className="w-12 h-12 text-slate-600" />
+              <p className="text-slate-300 font-medium">No referrals yet</p>
+              <p className="text-slate-500 text-sm">Share your referral link to grow your network.</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-700 bg-slate-900/50">
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">User</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Joined</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Activated</th>
+                      <th className="px-5 py-4 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Your Earning</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/50">
+                    {referrals.map(ref => (
+                      <tr key={ref.id} className="hover:bg-slate-700/30 transition-colors">
+                        <td className="px-5 py-4">
+                          {/* Primary: masked email */}
+                          <p className="text-slate-200 text-sm font-medium font-mono">
+                            {ref.email ? maskEmail(ref.email, 2) : <span className="text-slate-500 italic not-italic font-sans">No email</span>}
+                          </p>
+                          {/* Secondary: username if available */}
+                          {ref.name && (
+                            <p className="text-slate-500 text-xs mt-0.5">{ref.name}</p>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-slate-400 whitespace-nowrap">
+                          {safeDate(ref.joinDate)}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColor(ref.status)}`}>
+                            {ref.status ? ref.status.charAt(0).toUpperCase() + ref.status.slice(1) : 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                            ref.activationStatus === 'activated'
+                              ? 'bg-blue-900/30 text-blue-300'
+                              : 'bg-slate-700 text-slate-500'
+                          }`}>
+                            {ref.activationStatus === 'activated' ? 'Yes' : 'No'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-sm font-semibold text-right">
+                          <span className="text-green-400">
+                            KES {(ref.earnings || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {pagination && pagination.pages > 1 && (
+                <div className="px-5 py-4 border-t border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <p className="text-sm text-slate-400">
+                    Showing {((pagination.page - 1) * pagination.limit) + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} referrals
+                  </p>
+                  <div className="flex items-center gap-2">
                     <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`px-2 md:px-3 py-2 rounded-lg transition-colors text-xs md:text-sm ${
-                        currentPage === page
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
-                      }`}
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1 || loading}
+                      className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600 transition-colors"
                     >
-                      {page}
+                      Previous
                     </button>
-                  ))}
+                    {/* Page number pills — show up to 5 around current */}
+                    {Array.from({ length: pagination.pages }, (_, i) => i + 1)
+                      .filter(p => Math.abs(p - currentPage) <= 2 || p === 1 || p === pagination.pages)
+                      .reduce<(number | 'ellipsis')[]>((acc, p, idx, arr) => {
+                        if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push('ellipsis');
+                        acc.push(p);
+                        return acc;
+                      }, [])
+                      .map((item, idx) =>
+                        item === 'ellipsis' ? (
+                          <span key={`e-${idx}`} className="text-slate-600 px-1">…</span>
+                        ) : (
+                          <button
+                            key={item}
+                            onClick={() => setCurrentPage(item as number)}
+                            disabled={loading}
+                            className={`w-9 h-9 rounded-lg text-sm transition-colors disabled:opacity-40 ${
+                              currentPage === item
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                            }`}
+                          >
+                            {item}
+                          </button>
+                        )
+                      )}
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(pagination.pages, p + 1))}
+                      disabled={currentPage === pagination.pages || loading}
+                      className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-600 transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
-
-                <button
-                  onClick={() => setCurrentPage(Math.min(Math.ceil(allReferrals.length / ITEMS_PER_PAGE), currentPage + 1))}
-                  disabled={currentPage === Math.ceil(allReferrals.length / ITEMS_PER_PAGE)}
-                  className="flex items-center gap-1 px-2 md:px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs md:text-sm"
-                >
-                  <span className="hidden sm:inline">Next</span>
-                  <ChevronRight size={14} className="md:w-4 md:h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Stats Summary - Based on ALL referrals, not current page */}
-      {allReferrals.length > 0 && (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow border border-gray-200">
-            <div className="text-sm text-gray-500 mb-1">Total Referrals</div>
-            <div className="text-3xl font-bold text-gray-800">{allReferrals.length}</div>
-            <div className="text-xs text-gray-400 mt-1">All time</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border border-green-200">
-            <div className="text-sm text-gray-500 mb-1">Active Referrals</div>
-            <div className="text-3xl font-bold text-green-600">
-              {allReferrals.filter(ref => ref.status === 'active').length}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">Currently active</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border border-blue-200">
-            <div className="text-sm text-gray-500 mb-1">Activated Users</div>
-            <div className="text-3xl font-bold text-blue-600">
-              {allReferrals.filter(ref => ref.activationStatus === 'activated').length}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">Account verified</div>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow border border-purple-200">
-            <div className="text-sm text-gray-500 mb-1">Total Referral Earnings</div>
-            <div className="text-3xl font-bold text-purple-600">
-              KES {commissionStats ? commissionStats.total.toFixed(2) : '0.00'}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">L1 + L2 combined</div>
-          </div>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
