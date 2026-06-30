@@ -11,17 +11,6 @@ interface SessionProviderProps {
 }
 
 export default function SessionProvider({ children, session }: SessionProviderProps) {
-  // CRITICAL: Log the actual NextAuth session structure
-  console.log('SessionProvider - Client session:', {
-    hasSession: !!session,
-    hasUser: !!session?.user,
-    userId: session?.user?.id,
-    email: session?.user?.email,
-    // Log the actual structure to debug
-    sessionStructure: session ? Object.keys(session) : [],
-    userStructure: session?.user ? Object.keys(session.user) : []
-  });
-  
   return (
     <NextAuthSessionProvider 
       session={session}
