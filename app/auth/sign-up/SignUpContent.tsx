@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { formatPhoneNumber } from '@/app/lib/utils/phoneFormatter';
+import { resolveReferralCode } from '@/app/lib/utils/cookieUtils';
 
 export default function SignUpContent() {
   const searchParams = useSearchParams();
@@ -26,36 +27,18 @@ export default function SignUpContent() {
 
   // Resolve referral code with fallback: URL param → cookie → env default
   useEffect(() => {
-    const resolveReferralCode = () => {
-      // Priority 1: URL parameter (freshest signal)
+    try {
       const refParam = searchParams.get('ref');
-      if (refParam) {
-        const formattedRef = refParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
-        if (formattedRef) {
-          setFormData(prev => ({ ...prev, referralId: formattedRef }));
-          setHasValidReferral(true);
-          return;
-        }
-      }
-
-      // Priority 2: hh_ref cookie (persisted from earlier visit)
-      const cookieRef = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('hh_ref='))
-        ?.split('=')[1];
-      if (cookieRef) {
-        setFormData(prev => ({ ...prev, referralId: cookieRef }));
-        setHasValidReferral(true);
-        return;
-      }
-
-      // Priority 3: Default referral code from env (fallback)
-      const defaultRef = process.env.NEXT_PUBLIC_DEFAULT_REFERRAL_ID || 'SANDY001';
-      setFormData(prev => ({ ...prev, referralId: defaultRef }));
+      const resolvedCode = resolveReferralCode(refParam);
+      
+      setFormData(prev => ({ ...prev, referralId: resolvedCode }));
       setHasValidReferral(true);
-    };
-
-    resolveReferralCode();
+    } catch (error) {
+      console.error('[v0] Error resolving referral code:', error);
+      // Fallback to default on error
+      setFormData(prev => ({ ...prev, referralId: 'SANDY001' }));
+      setHasValidReferral(true);
+    }
   }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
