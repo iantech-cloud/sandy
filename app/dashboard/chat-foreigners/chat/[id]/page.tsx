@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Send, Loader, XCircle, CheckCircle2, AlertCircle,
-  Lock, Sparkles, Zap, MessageCircle, Globe,
+  Lock, Sparkles, Zap, MessageCircle, Globe, Coins,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
