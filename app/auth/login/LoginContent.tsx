@@ -240,6 +240,7 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
 
   const router       = useRouter();
   const searchParams = useSearchParams();
+  const refParam     = searchParams.get('ref');
   const isTimeout    = searchParams.get('timeout') === 'true';
   const callbackUrl  = searchParams.get('callbackUrl') || '/dashboard';
 
@@ -549,7 +550,7 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
               </button>
               <p className="text-sm text-gray-600 text-center">
                 Don&apos;t have an account?{' '}
-                <Link href="/auth/sign-up" className="text-indigo-600 font-semibold hover:text-indigo-700">
+                <Link href={`/auth/sign-up${refParam ? `?ref=${refParam}` : ''}`} className="text-indigo-600 font-semibold hover:text-indigo-700">
                   Create Account
                 </Link>
               </p>
