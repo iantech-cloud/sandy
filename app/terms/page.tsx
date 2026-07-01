@@ -55,20 +55,9 @@ const TermsPage: React.FC = () => {
                 </ul>
               </section>
 
-              {/* Section 4: Referral Program */}
+              {/* Section 4: No Refund Policy */}
               <section>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">4. Referral Program</h2>
-                <ul className="list-disc list-inside space-y-2 ml-4">
-                  <li>Use your referral link to invite others</li>
-                  <li>Earn commission when referrals complete activation</li>
-                  <li>Commissions are paid to your account in KES</li>
-                  <li>You can withdraw earnings once available</li>
-                </ul>
-              </section>
-
-              {/* Section 5: No Refund Policy */}
-              <section>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">5. No Refund Policy</h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">4. No Refund Policy</h2>
                 <div className="space-y-3">
                   <p className="font-semibold text-red-600">All payments, including activation fees, are non-refundable.</p>
                   <ul className="list-disc list-inside space-y-2 ml-4">
@@ -80,9 +69,9 @@ const TermsPage: React.FC = () => {
                 </div>
               </section>
 
-              {/* Section 6: Restrictions */}
+              {/* Section 5: Restrictions */}
               <section>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">6. What You Cannot Do</h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">5. What You Cannot Do</h2>
                 <ul className="list-disc list-inside space-y-2 ml-4">
                   <li>Engage in fraudulent or illegal activities</li>
                   <li>Manipulate or abuse the referral system</li>
@@ -91,15 +80,15 @@ const TermsPage: React.FC = () => {
                 </ul>
               </section>
 
-              {/* Section 7: Changes */}
+              {/* Section 6: Changes */}
               <section>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">7. Changes to Terms</h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">6. Changes to Terms</h2>
                 <p>We may update these terms at any time. Your continued use of the platform means you accept the new terms.</p>
               </section>
 
-              {/* Section 8: Contact */}
+              {/* Section 7: Contact */}
               <section>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">8. Contact Us</h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">7. Contact Us</h2>
                 <p>If you have questions about these terms, please contact us at:</p>
                 <p className="mt-2 font-semibold">Support: +254 707 871154</p>
               </section>
