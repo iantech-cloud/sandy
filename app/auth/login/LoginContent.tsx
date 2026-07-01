@@ -548,7 +548,10 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
                 Forgot your password?
               </button>
               <p className="text-sm text-gray-600 text-center">
-                New user? You must register using a valid referral link.
+                Don&apos;t have an account?{' '}
+                <Link href="/auth/sign-up" className="text-indigo-600 font-semibold hover:text-indigo-700">
+                  Create Account
+                </Link>
               </p>
             </div>
           </div>

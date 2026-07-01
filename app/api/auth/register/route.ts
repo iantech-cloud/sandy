@@ -77,14 +77,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Password must be at least 6 characters long.' }, { status: 400 });
     }
 
-    const referralId = rawReferralId ? rawReferralId.toUpperCase() : null;
-
-    // REQUIREMENT: Referral ID is MANDATORY - no registration without a referrer
+    // Resolve referral code: use provided code or fall back to default
+    let referralId = rawReferralId ? rawReferralId.toUpperCase() : null;
+    
+    // If no referral provided, use default from environment
     if (!referralId) {
-      return NextResponse.json(
-        { message: 'Referral code is required. You must register using a valid referral link.' }, 
-        { status: 400 }
-      );
+      referralId = (process.env.DEFAULT_REFERRAL_ID || 'SANDY001').toUpperCase();
+      console.log('No referral provided, using default:', referralId);
     }
 
     // Generate a unique username from the full name
