@@ -52,7 +52,7 @@ export function deleteCookie(name: string): void {
 
 /**
  * Get the referral code with fallback logic
- * Resolution order: URL param → Cookie → Default
+ * Resolution order: URL param → Cookie → Default (SANDY001)
  * @param urlParam - The referral code from URL parameter
  * @returns The resolved referral code
  */
@@ -71,6 +71,6 @@ export function resolveReferralCode(urlParam: string | null): string {
     return cookieRef;
   }
 
-  // Priority 3: Default referral code from env
-  return process.env.NEXT_PUBLIC_DEFAULT_REFERRAL_ID || 'SANDY001';
+  // Priority 3: Default referral code (SANDY001)
+  return 'SANDY001';
 }
