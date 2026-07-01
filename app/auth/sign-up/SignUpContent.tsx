@@ -24,25 +24,39 @@ export default function SignUpContent() {
   const [hasValidReferral, setHasValidReferral] = useState(false);
   const router = useRouter();
 
-  // Check for referral code in URL - REQUIRED to signup
+  // Resolve referral code with fallback: URL param → cookie → env default
   useEffect(() => {
-    const refParam = searchParams.get('ref');
-    
-    if (!refParam) {
-      // No referral code provided - show error and redirect
-      setError('You must sign up via a referral link. Please check your invitation link and try again.');
-      setHasValidReferral(false);
-      // Redirect to home after a delay
-      const timer = setTimeout(() => {
-        router.push('/');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
+    const resolveReferralCode = () => {
+      // Priority 1: URL parameter (freshest signal)
+      const refParam = searchParams.get('ref');
+      if (refParam) {
+        const formattedRef = refParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (formattedRef) {
+          setFormData(prev => ({ ...prev, referralId: formattedRef }));
+          setHasValidReferral(true);
+          return;
+        }
+      }
 
-    const formattedRef = refParam.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    setFormData(prev => ({ ...prev, referralId: formattedRef }));
-    setHasValidReferral(true);
-  }, [searchParams, router]);
+      // Priority 2: hh_ref cookie (persisted from earlier visit)
+      const cookieRef = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('hh_ref='))
+        ?.split('=')[1];
+      if (cookieRef) {
+        setFormData(prev => ({ ...prev, referralId: cookieRef }));
+        setHasValidReferral(true);
+        return;
+      }
+
+      // Priority 3: Default referral code from env (fallback)
+      const defaultRef = process.env.NEXT_PUBLIC_DEFAULT_REFERRAL_ID || 'SANDY001';
+      setFormData(prev => ({ ...prev, referralId: defaultRef }));
+      setHasValidReferral(true);
+    };
+
+    resolveReferralCode();
+  }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -361,9 +375,9 @@ export default function SignUpContent() {
           </form>
 
           <p className="mt-4 text-center text-sm text-gray-600">
-            Already have an account?{' '}
-            <Link href="/auth/login" className="text-indigo-600 font-semibold hover:text-indigo-700">
-              Sign in
+                Already have an account?{' '}
+                <Link href={`/auth/login?ref=${formData.referralId}`} className="text-indigo-600 font-semibold hover:text-indigo-700">
+                  Sign in
             </Link>
           </p>
         </div>

@@ -207,16 +207,16 @@ const HeroSection: React.FC = () => (
       
       <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
         <Link 
-          href="/auth/login"
+          href="/auth/sign-up?ref=SANDY001"
           className="px-8 py-3 text-lg font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
         >
-          Sign In
+          Sign Up
         </Link>
         <Link 
-          href="/about" 
+          href="/auth/login"
           className="px-8 py-3 text-lg font-semibold border-2 border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
         >
-          Learn More
+          Sign In
         </Link>
       </div>
 
@@ -357,16 +357,16 @@ const CTASection: React.FC = () => (
       
       <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
         <Link 
-          href="/auth/login"
+          href="/auth/sign-up?ref=SANDY001"
           className="px-8 py-3 text-lg font-semibold bg-white text-indigo-600 rounded-lg hover:bg-gray-100 transition-colors"
         >
-          Sign In
+          Create Account
         </Link>
         <Link 
-          href="/contact"
+          href="/auth/login"
           className="px-8 py-3 text-lg font-semibold border-2 border-white text-white rounded-lg hover:bg-indigo-700 transition-colors"
         >
-          Contact Us
+          Sign In
         </Link>
       </div>
     </div>

@@ -16,13 +16,25 @@ export function middleware(request: NextRequest) {
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-XSS-Protection', '1; mode=block');
   
-  // Clear persistent cookies - set them to expire immediately
-  const setCookieHeader = response.headers.get('set-cookie');
-  if (setCookieHeader) {
-    response.headers.set(
-      'set-cookie',
-      setCookieHeader.replace(/Max-Age=[^;]+/g, 'Max-Age=0').replace(/Expires=[^;]+/g, 'Expires=Thu, 01 Jan 1970 00:00:00 GMT')
-    );
+  // Referral tracking: persist referral code from ?ref= parameter into hh_ref cookie
+  const url = request.nextUrl;
+  const refParam = url.searchParams.get('ref');
+  
+  if (refParam) {
+    // Sanitize referral code (alphanumeric, underscores, hyphens only)
+    const sanitizedRef = refParam.replace(/[^a-zA-Z0-9_-]/g, '');
+    if (sanitizedRef) {
+      // Set cookie to expire in 30 days
+      const expiresAt = new Date();
+      expiresAt.setTime(expiresAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+      response.cookies.set('hh_ref', sanitizedRef, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        expires: expiresAt,
+      });
+    }
   }
 
   return response;
