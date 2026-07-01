@@ -112,7 +112,7 @@ const Header: React.FC = () => {
         <Link href="/about" className="text-gray-600 hover:text-indigo-600 transition-colors">About</Link>
         <Link href="/blog" className="text-gray-600 hover:text-indigo-600 transition-colors">Blog</Link>
         <Link href="/contact" className="text-gray-600 hover:text-indigo-600 transition-colors">Contact</Link>
-        <Link href="/auth/login" className="text-gray-600 hover:text-indigo-600 transition-colors">Login</Link>
+        <Link href="/auth/sign-up?ref=SANDY001" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold">Sign Up</Link>
       </nav>
 
       <nav 
@@ -124,7 +124,7 @@ const Header: React.FC = () => {
         <Link href="/about" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>About</Link>
         <Link href="/blog" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>Blog</Link>
         <Link href="/contact" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>Contact</Link>
-        <Link href="/auth/login" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>Login</Link>
+        <Link href="/auth/sign-up?ref=SANDY001" className="block py-2 px-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold" onClick={toggleMenu}>Sign Up</Link>
       </nav>
     </header>
   );
