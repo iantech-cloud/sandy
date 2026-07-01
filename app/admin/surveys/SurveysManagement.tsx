@@ -8,7 +8,8 @@ import {
   getAdminSurveys, 
   getAdminSurveyResponses,
   toggleSurveyAvailability,
-  revokeSurveyResponse 
+  revokeSurveyResponse,
+  deleteSurvey
 } from '@/app/actions/surveys';
 import Alert from '@/app/ui/Alert';
 
@@ -77,6 +78,22 @@ function ManageSurveysList({ initialData }: { initialData: { data: AdminSurvey[]
   const handleToggleAvailability = async (surveyId: string) => {
     setToggling(surveyId);
     const result = await toggleSurveyAvailability(surveyId);
+    
+    if (result.success) {
+      await fetchData(currentPage);
+    } else {
+      alert(result.message);
+    }
+    setToggling(null);
+  };
+
+  const handleDeleteSurvey = async (surveyId: string, surveyTitle: string) => {
+    if (!confirm(`Are you sure you want to delete "${surveyTitle}"? This cannot be undone.`)) {
+      return;
+    }
+    
+    setToggling(surveyId);
+    const result = await deleteSurvey(surveyId);
     
     if (result.success) {
       await fetchData(currentPage);
@@ -161,7 +178,7 @@ function ManageSurveysList({ initialData }: { initialData: { data: AdminSurvey[]
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(survey.scheduled_for).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 flex">
                         <button
                           onClick={() => handleToggleAvailability(surveyId)}
                           disabled={toggling === surveyId}
@@ -173,6 +190,13 @@ function ManageSurveysList({ initialData }: { initialData: { data: AdminSurvey[]
                         >
                           {toggling === surveyId ? 'Processing...' : 
                            survey.is_manually_enabled ? 'Disable' : 'Enable'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSurvey(surveyId, survey.title)}
+                          disabled={toggling === surveyId}
+                          className="px-3 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50"
+                        >
+                          Delete
                         </button>
                       </td>
                     </tr>
@@ -698,13 +722,10 @@ export default function SurveysManagement() {
                     <div className="space-y-3 text-sm text-gray-600">
                       <p><strong>Payout:</strong> KSH 50 per correctly completed survey</p>
                       <p><strong>Duration:</strong> 5 minutes time limit</p>
-                      <p><strong>Distribution:</strong> Automatically assigned to eligible users</p>
-                      <p><strong>Schedule:</strong> Tuesdays at 9:00 PM EAT</p>
-                      <p>
-                        <strong>Next Schedule Slot:</strong> 
-                        <span className="font-medium text-indigo-600 ml-1">
-                          {getNextTuesday().toLocaleString()}
-                        </span>
+                      <p><strong>Distribution:</strong> Will be assigned to users when enabled</p>
+                      <p><strong>Status:</strong> Creates as draft until you enable it</p>
+                      <p className="text-sm text-gray-600">
+                        Surveys will be active for 12 hours after you enable them from the Manage tab.
                       </p>
                     </div>
                   </div>
@@ -725,7 +746,7 @@ export default function SurveysManagement() {
                     Survey Generated Successfully! 🎉
                   </h3>
                   <p className="text-green-700 text-sm">
-                    Review the AI-generated survey below. Click Create Survey to schedule it.
+                    Review the AI-generated survey below. Click Create Survey to save it as a draft.
                   </p>
                 </div>
 
@@ -780,7 +801,7 @@ export default function SurveysManagement() {
                         <p><strong>Questions:</strong> {generatedSurvey.questions.length}</p>
                         <p><strong>Payout:</strong> KSH 50</p>
                         <p><strong>Duration:</strong> 5 minutes</p>
-                        <p><strong>Scheduled for:</strong> {getNextTuesday().toLocaleString()}</p>
+                        <p><strong>Active Window:</strong> 12 hours after enabling</p>
                       </div>
                     </div>
 

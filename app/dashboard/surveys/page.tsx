@@ -97,29 +97,15 @@ export default function SurveysPage() {
   const loadSurveys = async () => {
     setLoading(true);
     try {
-      // Check if today is Tuesday
-      const today = new Date();
-      const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday, etc.
-      const isTuesday = dayOfWeek === 2;
-      
       const result = await getAvailableSurveys();
       if (result && result.success && result.data) {
         setSurveys(result.data);
         setAvailabilityMessage('');
       } else {
         setSurveys([]);
-        
-        // Set custom message based on day of week
-        let messageToShow = result?.message || 'Failed to load surveys.';
-        if (!isTuesday) {
-          const daysUntilTuesday = dayOfWeek === 2 ? 0 : (9 - dayOfWeek) % 7;
-          const nextTuesday = new Date(today);
-          nextTuesday.setDate(nextTuesday.getDate() + daysUntilTuesday);
-          messageToShow = `Surveys are only available on Tuesdays. Next available: ${nextTuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`;
-        }
-        
+        const messageToShow = result?.message || 'No surveys available right now.';
         setMessage(messageToShow);
-        setMessageType('error');
+        setMessageType('info');
         setAvailabilityMessage(messageToShow);
       }
     } catch (error) {
@@ -593,8 +579,8 @@ export default function SurveysPage() {
                       <span className="font-bold text-green-600">KES {(survey.payout_cents / 100).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Available:</span>
-                      <span className="font-medium text-blue-600">Tuesdays Only</span>
+                      <span className="text-gray-500">Duration:</span>
+                      <span className="font-medium text-blue-600">{survey.duration_minutes} mins</span>
                     </div>
                     {survey.expires_at && (
                       <div className="flex justify-between items-center text-sm">

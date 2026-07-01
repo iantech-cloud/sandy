@@ -120,11 +120,11 @@ export async function activateScheduledSurveys() {
         // Calculate expiration based on activation time
         const expiresAt = new Date(now);
         
-        // If manually enabled, give 24 hours. Otherwise give 2 hours (Tuesday window)
+        // If manually enabled, give 12 hours. Otherwise give 2 hours (for scheduled surveys)
         if (survey.is_manually_enabled) {
-          expiresAt.setHours(expiresAt.getHours() + 24);
+          expiresAt.setHours(expiresAt.getHours() + 12); // 12-hour window for manually-enabled surveys
         } else {
-          expiresAt.setHours(expiresAt.getHours() + 2); // 2-hour window for Tuesday surveys
+          expiresAt.setHours(expiresAt.getHours() + 2); // 2-hour window for scheduled surveys
         }
 
         const result = await Survey.updateOne(
