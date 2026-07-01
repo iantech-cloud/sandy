@@ -1021,24 +1021,7 @@ export async function createSurvey(surveyData: {
 
     const scheduledDate = new Date(surveyData.scheduled_for)
     
-    // Validate Tuesday at 21:00 EAT
-    const eatString = scheduledDate.toLocaleString('en-US', { 
-      timeZone: 'Africa/Nairobi',
-      hour12: false 
-    })
-    const eatDate = new Date(eatString)
-    
-    if (eatDate.getDay() !== 2) {
-      return { success: false, message: "Surveys must be scheduled for Tuesday." }
-    }
-
-    if (eatDate.getHours() !== 21 || eatDate.getMinutes() !== 0) {
-      return { success: false, message: "Surveys must be scheduled for 21:00 hrs EAT." }
-    }
-
-    // Calculate expiration (2 hours after activation for Tuesday schedule)
-    const expiresAt = new Date(scheduledDate)
-    expiresAt.setHours(expiresAt.getHours() + 2)
+    // No time validation needed - survey created as scheduled and admin enables when ready
 
     // Create survey with ALL required fields
     const survey = new Survey({
@@ -1063,7 +1046,7 @@ export async function createSurvey(surveyData: {
       // Scheduling
       status: "scheduled",
       scheduled_for: scheduledDate,
-      expires_at: expiresAt,
+      expires_at: null,
       
       // Manual override
       is_manually_enabled: false,
@@ -1096,7 +1079,7 @@ export async function createSurvey(surveyData: {
     revalidatePath("/admin/surveys")
     return {
       success: true,
-      message: `Survey created successfully and assigned to ${assignedCount} users. Scheduled for next Tuesday.`,
+      message: `Survey created successfully as draft. Enable it from the Manage tab to activate.`,
       surveyId: survey._id.toString(),
     }
   } catch (error: any) {
@@ -1148,8 +1131,9 @@ export async function toggleSurveyAvailability(surveyId: string): Promise<{
 
     if (newStatus) {
       updates.status = 'active'
+      // Set 12-hour expiry when admin enables survey
       const expiresAt = new Date()
-      expiresAt.setHours(expiresAt.getHours() + 24)
+      expiresAt.setHours(expiresAt.getHours() + 12)
       updates.expires_at = expiresAt
       
       // If this is the first time enabling, ensure users are assigned
@@ -1184,6 +1168,57 @@ export async function toggleSurveyAvailability(surveyId: string): Promise<{
     return {
       success: false,
       message: error.message || "Failed to toggle survey availability.",
+    }
+  }
+}
+
+/**
+ * Delete a survey (Admin only)
+ * Guards against deleting surveys with user responses to prevent orphaning financial records
+ */
+export async function deleteSurvey(surveyId: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const session = await auth()
+
+    if (!session?.user?.email) {
+      return { success: false, message: "Unauthorized" }
+    }
+
+    if (!Types.ObjectId.isValid(surveyId)) {
+      return { success: false, message: "Invalid survey ID." }
+    }
+
+    await connectToDatabase()
+    const adminUser = await findProfileByEmail(session.user.email)
+
+    if (!adminUser?.role || adminUser.role !== "admin") {
+      return { success: false, message: "Admin access required" }
+    }
+
+    const survey = await Survey.findById(surveyId)
+    if (!survey) {
+      return { success: false, message: "Survey not found." }
+    }
+
+    // Guard: don't silently orphan paid-out responses
+    const responseCount = await SurveyResponse.countDocuments({ survey_id: new Types.ObjectId(surveyId) })
+    if (responseCount > 0) {
+      return { success: false, message: `Cannot delete: ${responseCount} user responses exist. Consider disabling instead.` }
+    }
+
+    // Delete survey assignments
+    await SurveyAssignment.deleteMany({ survey_id: new Types.ObjectId(surveyId) })
+    
+    // Delete the survey
+    await Survey.deleteOne({ _id: new Types.ObjectId(surveyId) })
+
+    revalidatePath("/admin/surveys")
+    return { success: true, message: "Survey deleted successfully." }
+  } catch (error: any) {
+    console.error("Error deleting survey:", error)
+    return {
+      success: false,
+      message: error.message || "Failed to delete survey.",
     }
   }
 }
@@ -1426,16 +1461,7 @@ export async function getAvailableSurveys(): Promise<{
     const userId = user._id
     const now = new Date()
 
-    // Check if today is Tuesday (surveys only available on Tuesdays)
-    if (!isTuesday()) {
-      const nextTuesday = getNextTuesdayDate()
-      return {
-        success: false,
-        message: `Surveys are only available on Tuesdays. Next available: ${nextTuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`
-      }
-    }
-
-    // FIXED: Surveys are accessible to ALL users by default (no activation restriction)
+    // Get surveys enabled by admin (no day-of-week restrictions)
 
     // Get ALL active surveys that haven't expired
     // Accessible to ALL users by default (no restrictions)
@@ -1546,17 +1572,7 @@ export async function startSurvey(surveyId: string): Promise<{
       return { success: false, message: "Survey not available or expired." }
     }
 
-    // Check if today is Tuesday (surveys only accessible on Tuesdays)
-    if (!isTuesday()) {
-      const nextTuesday = getNextTuesdayDate()
-      return { 
-        success: false, 
-        message: `Surveys are only available on Tuesdays. Next available: ${nextTuesday.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}` 
-      }
-    }
-
-    // FIXED: All users can access active surveys without assignment restriction
-
+    // Check if user already has a response for this survey (one-response-per-user enforcement)
     const existingResponseQuery = SurveyResponse.findOne({
       survey_id: surveyObjectId,
       user_id: userId,
@@ -1565,7 +1581,7 @@ export async function startSurvey(surveyId: string): Promise<{
 
     if (existingResponse) {
       if (existingResponse.status === "completed") {
-        return { success: false, message: "You have already completed this survey." }
+        return { success: false, message: "You have already submitted a response for this survey." }
       }
 
       if (existingResponse.status === "in_progress") {
