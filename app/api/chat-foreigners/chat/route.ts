@@ -6,6 +6,7 @@ import { successResponse, errorResponse, ApiError } from '@/app/lib/responses';
 import OpenAI from 'openai';
 import { rateLimit } from '@/app/lib/rate-limit';
 import mongoose from 'mongoose';
+import { generateText } from 'ai';
 
 const nvidiaClient = process.env.NVIDIA_API_KEY
   ? new OpenAI({
