@@ -4,6 +4,7 @@ import { timesNewRoman } from './ui/fonts';
 import type { Metadata, Viewport } from 'next';
 import { DashboardProvider } from './dashboard/DashboardContext';
 import SessionProvider from './providers/SessionProvider';
+import QueryProvider from './providers/QueryProvider';
 import Script from 'next/script';
 import { auth } from '@/auth';
 import { Analytics } from "@vercel/analytics/next"
@@ -99,9 +100,10 @@ export const metadata: Metadata = {
     },
   },
   
-  verification: {
-    google: 'your-google-verification-code',
-  },
+  // Note: Google Search Console verification should be added here
+  // verification: {
+  //   google: 'YOUR_VERIFICATION_CODE_FROM_GSC',
+  // },
   
   category: 'Business',
 };
@@ -162,6 +164,43 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${timesNewRoman.variable} bg-white`}>
       <head>
+        {/* Ezoic Privacy Scripts - Must load before header script */}
+        <Script
+          id="ezoic-privacy-1"
+          strategy="beforeInteractive"
+          src="https://cmp.gatekeeperconsent.com/min.js"
+          data-cfasync="false"
+        />
+        <Script
+          id="ezoic-privacy-2"
+          strategy="beforeInteractive"
+          src="https://the.gatekeeperconsent.com/cmp.min.js"
+          data-cfasync="false"
+        />
+        
+        {/* Ezoic Header Scripts */}
+        <Script
+          id="ezoic-sa"
+          strategy="beforeInteractive"
+          src="//www.ezojs.com/ezoic/sa.min.js"
+          async
+        />
+        <Script
+          id="ezoic-config"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.ezstandalone = window.ezstandalone || {};
+              ezstandalone.cmd = ezstandalone.cmd || [];
+            `,
+          }}
+        />
+        <Script
+          id="ezoic-analytics"
+          strategy="beforeInteractive"
+          src="//ezoicanalytics.com/analytics.js"
+        />
+
         <Script
           id="organization-schema"
           type="application/ld+json"
@@ -220,12 +259,14 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
       </head>
       <body className={`${timesNewRoman.className} antialiased bg-white`}>
-        <SessionProvider session={session}>
-          <DashboardProvider value={contextValue}>
-            {children}
-            <Analytics />
-          </DashboardProvider>
-        </SessionProvider>
+        <QueryProvider>
+          <SessionProvider session={session}>
+            <DashboardProvider value={contextValue}>
+              {children}
+              <Analytics />
+            </DashboardProvider>
+          </SessionProvider>
+        </QueryProvider>
       </body>
     </html>
   );
