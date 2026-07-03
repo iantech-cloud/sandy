@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { getUserBalance } from "@/app/actions/deposit";
 import { WalletContent } from "../WalletContent";
 import { Loader2 } from "lucide-react";
-import { auth } from "@/app/lib/auth";
 
 function LoadingFallback() {
   return (
@@ -17,10 +16,9 @@ function LoadingFallback() {
 
 export default async function WalletPage() {
   // Server-side fetch: no useState, no useEffect (rule 2)
-  const session = await auth();
   const balanceResult = await getUserBalance();
   const initialBalance = balanceResult.data?.balance || 0;
-  const userPhone = session?.user?.phone || "";
+  const userPhone = balanceResult.data?.userPhone || "";
 
   return (
     <Suspense fallback={<LoadingFallback />}>
