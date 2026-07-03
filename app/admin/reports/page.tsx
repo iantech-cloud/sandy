@@ -1,6 +1,23 @@
-import { Suspense } from 'react';
-import { AdminReportsContent } from '../AdminReportsContent';
-import { Loader2 } from 'lucide-react';
+// app/admin/reports/page.tsx - UPDATED FOR COMPANY MODEL
+"use client";
+
+import { useState, useEffect } from 'react';
+import { 
+  Download, 
+  TrendingUp, 
+  TrendingDown, 
+  DollarSign, 
+  BarChart3,
+  Calendar,
+  Users,
+  CreditCard,
+  AlertCircle,
+  RefreshCw,
+  FileText,
+  Activity,
+  Building2,
+  Wallet
+} from 'lucide-react';
 
 interface FinancialReport {
   incomeStatement: {
@@ -85,58 +102,571 @@ interface FinancialReport {
   };
 }
 
-async function getInitialReports() {
-  // Server-side fetch: no useState, no useEffect (rule 2)
-  try {
-    const startDate = new Date(
-      new Date().getFullYear(),
-      new Date().getMonth(),
-      1
-    )
-      .toISOString()
-      .split('T')[0];
-    const endDate = new Date().toISOString().split('T')[0];
+export default function ReportsPage() {
+  const [reports, setReports] = useState<FinancialReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState({
+    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
+  });
 
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/admin/reports?start=${startDate}&end=${endDate}`,
-      { cache: 'no-store' }
-    );
+  useEffect(() => {
+    fetchReports();
+  }, [dateRange]);
 
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      return null;
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`/api/admin/reports?start=${dateRange.start}&end=${dateRange.end}`);
+      
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Server returned ${response.status}: ${text.substring(0, 100)}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+      }
+      
+      if (data.success) {
+        setReports(data.data);
+      } else {
+        throw new Error(data.message || 'Failed to fetch reports');
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load financial reports');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportReport = (reportType: string) => {
+    if (!reports) return;
+
+    let csvContent = '';
+    let filename = '';
+
+    switch (reportType) {
+      case 'income':
+        csvContent = `Income Statement,${reports.incomeStatement.period}\nRevenue,${reports.incomeStatement.revenue}\nExpenses,${reports.incomeStatement.expenses}\nNet Income,${reports.incomeStatement.netIncome}`;
+        filename = `income_statement_${dateRange.start}_to_${dateRange.end}.csv`;
+        break;
+      case 'balance':
+        csvContent = `Balance Sheet,${reports.balanceSheet.date}\nAssets,${reports.balanceSheet.assets}\nLiabilities,${reports.balanceSheet.liabilities}\nEquity,${reports.balanceSheet.equity}`;
+        filename = `balance_sheet_${dateRange.start}.csv`;
+        break;
+      case 'cashflow':
+        csvContent = `Cash Flow Statement,${reports.cashFlow.period}\nOperating Activities,${reports.cashFlow.operating}\nInvesting Activities,${reports.cashFlow.investing}\nFinancing Activities,${reports.cashFlow.financing}\nNet Change,${reports.cashFlow.netChange}`;
+        filename = `cash_flow_${dateRange.start}_to_${dateRange.end}.csv`;
+        break;
+      case 'receivable':
+        const headers = ['Customer', 'Invoice', 'Amount', 'Due Date', 'Status', 'Days Overdue'];
+        const rows = reports.accountsReceivable.map(ar => 
+          [ar.customer, ar.invoice, ar.amount, new Date(ar.dueDate).toLocaleDateString(), ar.status, ar.daysOverdue]
+        );
+        csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+        filename = `accounts_receivable_${dateRange.start}.csv`;
+        break;
+      case 'full':
+        const fullHeaders = ['Report Type', 'Metric', 'Value', 'Period'];
+        const fullRows = [
+          ['Income Statement', 'Revenue', reports.incomeStatement.revenue, reports.incomeStatement.period],
+          ['Income Statement', 'Expenses', reports.incomeStatement.expenses, reports.incomeStatement.period],
+          ['Income Statement', 'Net Income', reports.incomeStatement.netIncome, reports.incomeStatement.period],
+          ['Balance Sheet', 'Assets', reports.balanceSheet.assets, reports.balanceSheet.date],
+          ['Balance Sheet', 'Liabilities', reports.balanceSheet.liabilities, reports.balanceSheet.date],
+          ['Balance Sheet', 'Equity', reports.balanceSheet.equity, reports.balanceSheet.date],
+          ['Cash Flow', 'Operating Activities', reports.cashFlow.operating, reports.cashFlow.period],
+          ['Cash Flow', 'Investing Activities', reports.cashFlow.investing, reports.cashFlow.period],
+          ['Cash Flow', 'Financing Activities', reports.cashFlow.financing, reports.cashFlow.period],
+          ['Cash Flow', 'Net Change', reports.cashFlow.netChange, reports.cashFlow.period],
+        ];
+        csvContent = [fullHeaders, ...fullRows].map(row => row.join(',')).join('\n');
+        filename = `full_financial_report_${dateRange.start}_to_${dateRange.end}.csv`;
+        break;
     }
 
-    const data = await response.json();
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
 
-    if (data.success) {
-      return data.data;
+  const getAgingColor = (status: string) => {
+    switch (status) {
+      case 'current': return 'bg-green-100 text-green-800 border border-green-200';
+      case '30_days': return 'bg-blue-100 text-blue-800 border border-blue-200';
+      case '60_days': return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+      case '90_days': return 'bg-orange-100 text-orange-800 border border-orange-200';
+      case 'over_90_days': return 'bg-red-100 text-red-800 border border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border border-gray-200';
     }
-    return null;
-  } catch (error) {
-    console.error('Failed to load reports:', error);
-    return null;
-  }
-}
+  };
 
-function LoadingFallback() {
-  return (
-    <div className="flex items-center justify-center p-8">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-        <p className="text-gray-600">Loading financial reports...</p>
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <RefreshCw className="animate-spin h-8 w-8 text-blue-600 mx-auto mb-2" />
+          <p className="text-gray-600">Generating financial reports...</p>
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-export default async function ReportsPage() {
-  // Server Component: no useState, no useEffect, no client libraries needed
-  const initialReports = await getInitialReports();
+  if (error) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <div className="flex items-center mb-4">
+            <AlertCircle className="h-6 w-6 text-red-600 mr-2" />
+            <h2 className="text-lg font-semibold text-red-800">Error Loading Reports</h2>
+          </div>
+          <p className="text-red-700 mb-4">{error}</p>
+          <button
+            onClick={fetchReports}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <Suspense fallback={<LoadingFallback />}>
-      <AdminReportsContent initialReports={initialReports} />
-    </Suspense>
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Financial Reports</h1>
+          <p className="text-gray-600 mt-1">Company financial analysis and reporting</p>
+        </div>
+        <button
+          onClick={() => exportReport('full')}
+          className="bg-green-600 text-white rounded-lg px-4 py-2 hover:bg-green-700 flex items-center gap-2"
+        >
+          <FileText className="h-4 w-4" />
+          Export All Reports
+        </button>
+      </div>
+
+      {/* Date Range Selector */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="flex items-center gap-4">
+          <Calendar className="h-5 w-5 text-gray-500" />
+          <div className="flex gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
+                className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
+                className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+          </div>
+          <button
+            onClick={fetchReports}
+            className="ml-auto bg-blue-600 text-white rounded-lg px-4 py-2 hover:bg-blue-700 flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {reports && (
+        <div className="space-y-6">
+          {/* Company Metrics Summary - NEW */}
+          {reports.companyMetrics && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow border border-blue-200">
+              <div className="p-4 border-b border-blue-200">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-blue-600" />
+                  <h2 className="text-xl font-semibold text-gray-900">Company Financial Overview</h2>
+                </div>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                    <Wallet className="h-6 w-6 text-blue-600 mx-auto mb-2" />
+                    <p className="text-xl font-bold text-blue-600">
+                      KES {reports.companyMetrics.companyWalletBalance.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">Company Wallet</p>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                    <TrendingUp className="h-6 w-6 text-green-600 mx-auto mb-2" />
+                    <p className="text-xl font-bold text-green-600">
+                      KES {reports.companyMetrics.totalCompanyRevenue.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">Total Revenue</p>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                    <TrendingDown className="h-6 w-6 text-orange-600 mx-auto mb-2" />
+                    <p className="text-xl font-bold text-orange-600">
+                      KES {reports.companyMetrics.totalCompanyExpenses.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">Total Expenses</p>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                    <DollarSign className="h-6 w-6 text-purple-600 mx-auto mb-2" />
+                    <p className="text-xl font-bold text-purple-600">
+                      KES {reports.companyMetrics.activationRevenue.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">Activation Revenue</p>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                    <BarChart3 className="h-6 w-6 text-indigo-600 mx-auto mb-2" />
+                    <p className="text-xl font-bold text-indigo-600">
+                      KES {reports.companyMetrics.unclaimedReferralRevenue.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">Unclaimed Referrals</p>
+                  </div>
+                </div>
+                <div className="mt-4 p-3 bg-white rounded-lg shadow-sm">
+                  <p className="text-sm text-gray-600 text-center">
+                    <span className="font-semibold text-gray-800">Net Profit:</span>{' '}
+                    <span className={`font-bold ${
+                      (reports.companyMetrics.totalCompanyRevenue - reports.companyMetrics.totalCompanyExpenses) >= 0 
+                        ? 'text-green-600' 
+                        : 'text-red-600'
+                    }`}>
+                      KES {(reports.companyMetrics.totalCompanyRevenue - reports.companyMetrics.totalCompanyExpenses).toFixed(2)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Platform Overview */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">Platform Overview</h2>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <Users className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-blue-600">{reports.userMetrics.totalUsers}</p>
+                  <p className="text-sm text-gray-600">Total Users</p>
+                </div>
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <Activity className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-green-600">{reports.userMetrics.activeUsers}</p>
+                  <p className="text-sm text-gray-600">Active Users</p>
+                </div>
+                <div className="text-center p-4 bg-purple-50 rounded-lg">
+                  <TrendingUp className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-purple-600">KES {reports.userMetrics.totalDeposits.toFixed(2)}</p>
+                  <p className="text-sm text-gray-600">Total Deposits</p>
+                </div>
+                <div className="text-center p-4 bg-orange-50 rounded-lg">
+                  <TrendingDown className="h-8 w-8 text-orange-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-orange-600">KES {reports.userMetrics.totalWithdrawals.toFixed(2)}</p>
+                  <p className="text-sm text-gray-600">Total Withdrawals</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Income Statement */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-900">Income Statement</h2>
+              <button
+                onClick={() => exportReport('income')}
+                className="bg-blue-600 text-white rounded-lg px-3 py-2 hover:bg-blue-700 flex items-center gap-2 text-sm"
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <DollarSign className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-green-600">
+                    KES {reports.incomeStatement.revenue.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Total Revenue</p>
+                </div>
+                <div className="text-center p-4 bg-red-50 rounded-lg">
+                  <TrendingDown className="h-8 w-8 text-red-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-red-600">
+                    KES {reports.incomeStatement.expenses.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Total Expenses</p>
+                </div>
+                <div className={`text-center p-4 rounded-lg ${
+                  reports.incomeStatement.netIncome >= 0 ? 'bg-blue-50' : 'bg-orange-50'
+                }`}>
+                  <TrendingUp className={`h-8 w-8 mx-auto mb-2 ${
+                    reports.incomeStatement.netIncome >= 0 ? 'text-blue-600' : 'text-orange-600'
+                  }`} />
+                  <p className={`text-2xl font-bold ${
+                    reports.incomeStatement.netIncome >= 0 ? 'text-blue-600' : 'text-orange-600'
+                  }`}>
+                    KES {reports.incomeStatement.netIncome.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Net Income</p>
+                </div>
+              </div>
+              
+              {/* Income Statement Breakdown */}
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold mb-4">Revenue & Expense Breakdown</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-3 bg-green-50 rounded border border-green-200">
+                    <p className="text-sm font-medium text-green-800">Company Revenue</p>
+                    <p className="text-lg font-bold text-green-600">KES {reports.incomeStatement.breakdown.companyRevenue.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded border border-green-200">
+                    <p className="text-sm font-medium text-green-800">Unclaimed Referrals</p>
+                    <p className="text-lg font-bold text-green-600">KES {reports.incomeStatement.breakdown.unclaimedReferrals.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-3 bg-red-50 rounded border border-red-200">
+                    <p className="text-sm font-medium text-red-800">Referral Bonuses</p>
+                    <p className="text-lg font-bold text-red-600">KES {reports.incomeStatement.breakdown.referralBonuses.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-3 bg-red-50 rounded border border-red-200">
+                    <p className="text-sm font-medium text-red-800">Withdrawals</p>
+                    <p className="text-lg font-bold text-red-600">KES {reports.incomeStatement.breakdown.withdrawals.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-3 bg-red-50 rounded border border-red-200">
+                    <p className="text-sm font-medium text-red-800">Bonuses</p>
+                    <p className="text-lg font-bold text-red-600">KES {reports.incomeStatement.breakdown.bonuses.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-3 bg-red-50 rounded border border-red-200">
+                    <p className="text-sm font-medium text-red-800">Task Payments</p>
+                    <p className="text-lg font-bold text-red-600">KES {reports.incomeStatement.breakdown.taskPayments.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-3 bg-red-50 rounded border border-red-200">
+                    <p className="text-sm font-medium text-red-800">Survey Payments</p>
+                    <p className="text-lg font-bold text-red-600">KES {reports.incomeStatement.breakdown.surveyPayments.toFixed(2)}</p>
+                  </div>
+                  <div className="text-center p-3 bg-red-50 rounded border border-red-200">
+                    <p className="text-sm font-medium text-red-800">Spin Wins</p>
+                    <p className="text-lg font-bold text-red-600">KES {reports.incomeStatement.breakdown.spinWins.toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <p className="text-center text-gray-500 mt-6 text-sm">
+                Period: {reports.incomeStatement.period}
+              </p>
+            </div>
+          </div>
+
+          {/* Balance Sheet */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-900">Balance Sheet</h2>
+              <button
+                onClick={() => exportReport('balance')}
+                className="bg-blue-600 text-white rounded-lg px-3 py-2 hover:bg-blue-700 flex items-center gap-2 text-sm"
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <CreditCard className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-green-600">
+                    KES {reports.balanceSheet.assets.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Total Assets</p>
+                </div>
+                <div className="text-center p-4 bg-red-50 rounded-lg">
+                  <TrendingDown className="h-8 w-8 text-red-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-red-600">
+                    KES {reports.balanceSheet.liabilities.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Total Liabilities</p>
+                </div>
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <BarChart3 className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                  <p className="text-2xl font-bold text-blue-600">
+                    KES {reports.balanceSheet.equity.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Total Equity</p>
+                </div>
+              </div>
+              
+              {/* Balance Sheet Breakdown */}
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold mb-4">Balance Sheet Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <h4 className="font-semibold text-blue-800 mb-3">Assets</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-blue-700">Company Cash</span>
+                        <span className="font-semibold text-blue-900">KES {reports.balanceSheet.breakdown.cash.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-blue-700">User Deposits Held</span>
+                        <span className="font-semibold text-blue-900">KES {reports.balanceSheet.breakdown.userDeposits.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                    <h4 className="font-semibold text-orange-800 mb-3">Liabilities</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-orange-700">User Balances</span>
+                        <span className="font-semibold text-orange-900">KES {reports.balanceSheet.breakdown.userBalances.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-orange-700">Pending Withdrawals</span>
+                        <span className="font-semibold text-orange-900">KES {reports.balanceSheet.breakdown.pendingWithdrawals.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <p className="text-center text-gray-500 mt-6 text-sm">
+                As of: {reports.balanceSheet.date}
+              </p>
+            </div>
+          </div>
+
+          {/* Cash Flow Statement */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-900">Cash Flow Statement</h2>
+              <button
+                onClick={() => exportReport('cashflow')}
+                className="bg-blue-600 text-white rounded-lg px-3 py-2 hover:bg-blue-700 flex items-center gap-2 text-sm"
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="text-center p-4 bg-green-50 rounded-lg">
+                  <p className="text-lg font-semibold text-green-600">
+                    KES {reports.cashFlow.operating.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Operating</p>
+                </div>
+                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                  <p className="text-lg font-semibold text-blue-600">
+                    KES {reports.cashFlow.investing.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Investing</p>
+                </div>
+                <div className="text-center p-4 bg-purple-50 rounded-lg">
+                  <p className="text-lg font-semibold text-purple-600">
+                    KES {reports.cashFlow.financing.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Financing</p>
+                </div>
+                <div className={`text-center p-4 rounded-lg ${
+                  reports.cashFlow.netChange >= 0 ? 'bg-green-50' : 'bg-red-50'
+                }`}>
+                  <p className={`text-lg font-semibold ${
+                    reports.cashFlow.netChange >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    KES {reports.cashFlow.netChange.toFixed(2)}
+                  </p>
+                  <p className="text-sm text-gray-600">Net Change</p>
+                </div>
+              </div>
+              <p className="text-center text-gray-500 mt-6 text-sm">
+                Period: {reports.cashFlow.period}
+              </p>
+            </div>
+          </div>
+
+          {/* Accounts Receivable Aging */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-900">Accounts Receivable Aging Report</h2>
+              <button
+                onClick={() => exportReport('receivable')}
+                className="bg-blue-600 text-white rounded-lg px-3 py-2 hover:bg-blue-700 flex items-center gap-2 text-sm"
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </button>
+            </div>
+            <div className="p-6">
+              {reports.accountsReceivable.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                  <p>No pending withdrawals found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Days Overdue</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {reports.accountsReceivable.map((ar, index) => (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-900">{ar.customer}</td>
+                          <td className="px-4 py-3 text-sm font-mono text-gray-600">{ar.invoice}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-red-600">
+                            KES {ar.amount.toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {new Date(ar.dueDate).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getAgingColor(ar.status)}`}>
+                              {ar.status.replace('_', ' ').toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {ar.daysOverdue > 0 ? `${ar.daysOverdue} days` : 'On time'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -495,8 +495,13 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Gradient text utility - DEPRECATED: Use solid colors instead for more confident design */
-/* .gradient-text { disabled to improve visual design } */
+/* Gradient text utility */
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
 
 /* Line clamping utilities */
 .line-clamp-1 {
@@ -629,17 +634,17 @@ button {
   transition: transform 4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Custom button variants - Updated for considered design system */
+/* Custom button variants */
 .btn-primary {
-  @apply bg-amber-700 text-white font-medium py-2 px-4 rounded-lg hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-600 focus:ring-offset-2 transition-colors duration-200;
+  @apply bg-indigo-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors duration-200;
 }
 
 .btn-secondary {
-  @apply bg-stone-200 text-stone-900 font-medium py-2 px-4 rounded-lg hover:bg-stone-300 focus:outline-none focus:ring-2 focus:ring-stone-500 focus:ring-offset-2 transition-colors duration-200;
+  @apply bg-gray-200 text-gray-900 font-medium py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200;
 }
 
 .btn-danger {
-  @apply bg-red-700 text-white font-medium py-2 px-4 rounded-lg hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2 transition-colors duration-200;
+  @apply bg-red-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200;
 }
 
 /* Card component base */
