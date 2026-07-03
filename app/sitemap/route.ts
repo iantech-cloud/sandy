@@ -2,167 +2,204 @@ import { MetadataRoute } from 'next'
 
 export async function GET() {
   const baseUrl = process.env.NEXTAUTH_URL || 'https://hustlehubafrica.com'
-  const today = new Date()
+  const lastModDate = new Date('2026-01-03T13:17:43+00:00')
   
   const sitemap: MetadataRoute.Sitemap = [
     // Homepage
     {
       url: baseUrl,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'daily',
       priority: 1.0,
     },
-    // Public Marketing Pages (only unauthenticated content)
+    // Main Pages
     {
       url: `${baseUrl}/blog`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'daily',
-      priority: 0.9,
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/refer-earn`,
+      lastModified: lastModDate,
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/dashboard`,
+      lastModified: lastModDate,
+      changeFrequency: 'weekly',
+      priority: 0.8,
     },
     {
       url: `${baseUrl}/academic-writing`,
-      lastModified: today,
+      lastModified: lastModDate,
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/dashboard/surveys`,
+      lastModified: lastModDate,
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/dashboard/content`,
+      lastModified: lastModDate,
       changeFrequency: 'weekly',
       priority: 0.8,
     },
     {
       url: `${baseUrl}/sales-marketing`,
-      lastModified: today,
-      changeFrequency: 'weekly',
-      priority: 0.8,
-    },
-    {
-      url: `${baseUrl}/refer-earn`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'weekly',
       priority: 0.8,
     },
     {
       url: `${baseUrl}/about`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
       url: `${baseUrl}/faq`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/contact`,
-      lastModified: today,
-      changeFrequency: 'monthly',
-      priority: 0.7,
-    },
-    {
       url: `${baseUrl}/terms`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'yearly',
-      priority: 0.5,
+      priority: 0.8,
     },
     {
       url: `${baseUrl}/privacy`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'yearly',
-      priority: 0.5,
+      priority: 0.8,
     },
     {
       url: `${baseUrl}/cookies`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'yearly',
-      priority: 0.5,
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/contact`,
+      lastModified: lastModDate,
+      changeFrequency: 'monthly',
+      priority: 0.64,
+    },
+    {
+      url: `${baseUrl}/dashboard/soko`,
+      lastModified: lastModDate,
+      changeFrequency: 'weekly',
+      priority: 0.51,
     },
     // Blog Posts
     {
       url: `${baseUrl}/blog/why-and-how-affiliate-marketing-is-the-future-of-earning-online`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.64,
     },
     {
       url: `${baseUrl}/blog/quick-ways-to-make-money-online-in-kenya`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.64,
     },
     {
       url: `${baseUrl}/blog/top-ai-tools-for-making-money-online-in-kenya`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.64,
     },
     {
       url: `${baseUrl}/blog/a-guide-to-online-writing-jobs-in-kenya`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.64,
     },
     {
       url: `${baseUrl}/blog/best-freelancing-websites-in-kenya`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.64,
     },
     {
       url: `${baseUrl}/blog/how-to-make-money-on-fiverr-in-kenya`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.64,
     },
     {
       url: `${baseUrl}/blog/how-to-make-money-on-tiktok-in-kenya`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.64,
     },
     {
       url: `${baseUrl}/blog/how-much-can-you-earn-on-a-faceless-youtube-channel`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.64,
     },
     {
       url: `${baseUrl}/blog/how-to-make-money-on-youtube-in-kenya`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.64,
     },
     {
       url: `${baseUrl}/blog/affiliate-marketing-in-kenya`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.51,
     },
     {
       url: `${baseUrl}/blog/how-to-get-additional-sources-of-income-in-kenya`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.51,
     },
     {
       url: `${baseUrl}/blog/how-to-make-money-online-in-kenya-2025`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.51,
     },
     {
       url: `${baseUrl}/blog/how-to-make-money-online-in-kenya-various-ways-2025-guide`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.51,
     },
     {
       url: `${baseUrl}/blog/affiliate-marketing-in-kenya-2025-guide-how-to-get-started`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
       priority: 0.51,
     },
     {
       url: `${baseUrl}/blog/guidelines-on-how-to-register`,
-      lastModified: today,
+      lastModified: lastModDate,
       changeFrequency: 'monthly',
-      priority: 0.65,
+      priority: 0.51,
+    },
+    // Blog Pagination
+    {
+      url: `${baseUrl}/blog?page=1`,
+      lastModified: lastModDate,
+      changeFrequency: 'daily',
+      priority: 0.64,
+    },
+    {
+      url: `${baseUrl}/blog?page=2`,
+      lastModified: lastModDate,
+      changeFrequency: 'daily',
+      priority: 0.64,
     },
   ]
 
