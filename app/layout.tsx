@@ -4,6 +4,7 @@ import { timesNewRoman } from './ui/fonts';
 import type { Metadata, Viewport } from 'next';
 import { DashboardProvider } from './dashboard/DashboardContext';
 import SessionProvider from './providers/SessionProvider';
+import QueryProvider from './providers/QueryProvider';
 import Script from 'next/script';
 import { auth } from '@/auth';
 import { Analytics } from "@vercel/analytics/next"
@@ -220,12 +221,14 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
       </head>
       <body className={`${timesNewRoman.className} antialiased bg-white`}>
-        <SessionProvider session={session}>
-          <DashboardProvider value={contextValue}>
-            {children}
-            <Analytics />
-          </DashboardProvider>
-        </SessionProvider>
+        <QueryProvider>
+          <SessionProvider session={session}>
+            <DashboardProvider value={contextValue}>
+              {children}
+              <Analytics />
+            </DashboardProvider>
+          </SessionProvider>
+        </QueryProvider>
       </body>
     </html>
   );
