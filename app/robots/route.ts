@@ -8,14 +8,14 @@ export async function GET() {
 User-agent: *
 Allow: /
 
-# Disallow admin and private areas
+# Disallow admin, authenticated dashboard, and private areas
 Disallow: /admin/
 Disallow: /api/
-Disallow: /dashboard/private/
+Disallow: /dashboard/
 Disallow: /_next/
 Disallow: /auth/
 
-# Allow specific public pages
+# Allow specific public auth pages
 Allow: /auth/sign-up
 Allow: /auth/login
 
@@ -24,7 +24,6 @@ Crawl-delay: 0.5
 
 # Sitemap location
 Sitemap: ${baseUrl}/sitemap
-Sitemap: ${baseUrl}/sitemap-0.xml
 
 # Specific search engine rules
 User-agent: Googlebot
