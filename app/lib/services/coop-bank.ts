@@ -271,7 +271,10 @@ export class CoopBankService {
 
     try {
       const abortController = new AbortController();
-      const timeout = setTimeout(() => abortController.abort(), 60000); // 60 second timeout
+      // STK Push is synchronous and users may take time to complete the transaction.
+      // Co-op Bank's endpoint can also be slow. 5 minutes should be safe.
+      const timeoutMs = parseInt(process.env.STK_PUSH_TIMEOUT_MS || '300000', 10);
+      const timeout = setTimeout(() => abortController.abort(), timeoutMs);
 
       const response = await fetch(this.stkPushUrl, {
         method: 'POST',
@@ -340,8 +343,10 @@ export class CoopBankService {
       return result;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error('[v0] STK Push timeout (60s)');
-        throw new Error('Co-op Bank STK Push timed out');
+        const timeoutMs = parseInt(process.env.STK_PUSH_TIMEOUT_MS || '300000', 10);
+        const timeoutSec = Math.round(timeoutMs / 1000);
+        console.error(`[v0] STK Push timeout (${timeoutSec}s)`);
+        throw new Error(`Co-op Bank STK Push timed out after ${timeoutSec} seconds. Please try again.`);
       }
       console.error('[v0] STK Push request error:', error instanceof Error ? error.message : String(error));
       throw error;
