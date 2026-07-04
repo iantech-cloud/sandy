@@ -151,8 +151,25 @@ async function runRecovery() {
           txn.result_code = safeResultCode;
           txn.result_desc = statusResponse.ResponseDescription || '';
           txn.completed_at = new Date();
+          
+          // Persist M-Pesa receipt and operator transaction ID
+          if (statusResponse.ReceiptNumber) {
+            txn.mpesa_receipt_number = statusResponse.ReceiptNumber;
+          }
+          if (statusResponse.OperatorTxnID) {
+            txn.operator_txn_id = statusResponse.OperatorTxnID;
+          }
+          
           await txn.save();
           summary.stuck_completed++;
+          
+          // Also update the linked Transaction ledger record with the transaction code
+          if (statusResponse.OperatorTxnID) {
+            await (Transaction as any).findOneAndUpdate(
+              { mpesa_transaction_id: txn._id },
+              { transaction_code: statusResponse.OperatorTxnID }
+            );
+          }
 
           // If this is an activation, drive it to completion.
           const isActivation =
@@ -194,14 +211,27 @@ async function runRecovery() {
           txn.result_code = safeResultCode;
           txn.result_desc = statusResponse.ResponseDescription || '';
           txn.failed_at = new Date();
+          
+          // Persist M-Pesa receipt and operator transaction ID even for failed transactions
+          if (statusResponse.ReceiptNumber) {
+            txn.mpesa_receipt_number = statusResponse.ReceiptNumber;
+          }
+          if (statusResponse.OperatorTxnID) {
+            txn.operator_txn_id = statusResponse.OperatorTxnID;
+          }
+          
           await txn.save();
           summary.stuck_failed++;
 
           // BUG FIX: Also reconcile the linked ledger row so it stops showing as 'processing'
           // This closes the loop for wallet deposits that only have the callback as recovery path
+          const updateLedgerData: any = { status: mappedStatus };
+          if (statusResponse.OperatorTxnID) {
+            updateLedgerData.transaction_code = statusResponse.OperatorTxnID;
+          }
           await (Transaction as any).findOneAndUpdate(
             { mpesa_transaction_id: txn._id },
-            { status: mappedStatus }
+            updateLedgerData
           );
         }
       } catch (err) {

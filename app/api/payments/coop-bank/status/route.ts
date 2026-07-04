@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { connectToDatabase, MpesaTransaction } from '@/app/lib/models';
+import { connectToDatabase, MpesaTransaction, Transaction } from '@/app/lib/models';
 import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank';
 
 // ---------------------------------------------------------------------------
@@ -117,14 +117,34 @@ async function handleStatusCheck(request: NextRequest, messageReferenceFromPath?
       // Persist the updated status if we got a terminal result
       if (terminalStatuses.includes(mappedStatus)) {
         console.log('[CoopStatus] Persisting terminal status to DB...');
-        await MpesaTransaction.findByIdAndUpdate(mpesaTransaction._id, {
+        
+        // Extract M-Pesa receipt and operator transaction ID (returned on completed transactions)
+        const mpesaReceiptNumber = statusResponse.ReceiptNumber || null;
+        const operatorTxnID = statusResponse.OperatorTxnID || null;
+        
+        const updateData: any = {
           status: mappedStatus,
           result_code: parseInt(statusResponse.ResponseCode || '1', 10),
           result_desc: statusResponse.ResponseDescription || '',
           ...(mappedStatus === 'completed'
             ? { completed_at: new Date() }
             : { failed_at: new Date() }),
-        });
+        };
+        
+        // Persist receipt numbers if available
+        if (mpesaReceiptNumber) {
+          updateData.mpesa_receipt_number = mpesaReceiptNumber;
+        }
+        
+        await MpesaTransaction.findByIdAndUpdate(mpesaTransaction._id, updateData);
+        
+        // Also update the linked Transaction ledger record with the transaction code
+        if (mappedStatus === 'completed' && operatorTxnID) {
+          await (Transaction as any).findOneAndUpdate(
+            { mpesa_transaction_id: mpesaTransaction._id },
+            { transaction_code: operatorTxnID }
+          );
+        }
       }
 
       console.log('[CoopStatus] Returning live status:', mappedStatus);
