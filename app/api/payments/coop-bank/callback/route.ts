@@ -242,30 +242,46 @@ export async function POST(request: NextRequest) {
     // ========================================================================
     // WALLET DEPOSIT (user wallet top-up)
     // ========================================================================
-    if (depositType === 'wallet' && paymentStatus === 'completed') {
-      // FIXED: Use updateOne directly instead of find + save (atomic operation)
-      // This reduces latency by avoiding fetch + serialize roundtrip
-      await Profile.findByIdAndUpdate(
-        mpesaTransaction.user_id,
-        {
-          $inc: { balance_cents: mpesaTransaction.amount_cents },
-        },
-        { session, new: false } // Don't fetch updated doc - we already know the amount
-      );
+    if (depositType === 'wallet') {
+      if (paymentStatus === 'completed') {
+        // FIXED: Use updateOne directly instead of find + save (atomic operation)
+        // This reduces latency by avoiding fetch + serialize roundtrip
+        await Profile.findByIdAndUpdate(
+          mpesaTransaction.user_id,
+          {
+            $inc: { balance_cents: mpesaTransaction.amount_cents },
+          },
+          { session, new: false } // Don't fetch updated doc - we already know the amount
+        );
 
-      // Parallelize: Update transaction record independently
-      await (Transaction as any).findOneAndUpdate(
-        {
-          mpesa_transaction_id: mpesaTransaction._id,
-          type: 'DEPOSIT',
-        },
-        { status: 'completed' },
-        { session }
-      );
+        // Parallelize: Update transaction record independently
+        await (Transaction as any).findOneAndUpdate(
+          {
+            mpesa_transaction_id: mpesaTransaction._id,
+            type: 'DEPOSIT',
+          },
+          { status: 'completed' },
+          { session }
+        );
 
-      console.log(
-        `[CoopCallback] User wallet credited: +KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`
-      );
+        console.log(
+          `[CoopCallback] User wallet credited: +KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`
+        );
+      } else if (['failed', 'cancelled', 'timeout'].includes(paymentStatus)) {
+        // BUG FIX: Mark transaction as failed/cancelled/timeout so it doesn't persist on 'processing'
+        await (Transaction as any).findOneAndUpdate(
+          {
+            mpesa_transaction_id: mpesaTransaction._id,
+            type: 'DEPOSIT',
+          },
+          { status: paymentStatus },
+          { session }
+        );
+
+        console.log(
+          `[CoopCallback] Wallet deposit failed: ${paymentStatus} for user ${mpesaTransaction.user_id}`
+        );
+      }
     }
 
     // ========================================================================
@@ -338,48 +354,60 @@ export async function POST(request: NextRequest) {
       transaction_type: 'chat_foreigners_unlock',
     }).session(session);
 
-    if (chatForeignersUnlock && paymentStatus === 'completed') {
-      // Grant lifetime access immediately for chat-foreigners
-      // Set lifetimeAccessUnlocked = true for permanent chat access after KSH 100 payment
-      try {
-        await ChatForeignersBotAccess.findOneAndUpdate(
-          {
-            user_id: chatForeignersUnlock.user_id,
-            bot_id: chatForeignersUnlock.metadata?.bot_id,
-          },
-          {
-            lifetimeAccessUnlocked: true,
-            lifetimeAccessUnlockedAt: new Date(),
-          },
-          { session }
+    if (chatForeignersUnlock) {
+      if (paymentStatus === 'completed') {
+        // Grant lifetime access immediately for chat-foreigners
+        // Set lifetimeAccessUnlocked = true for permanent chat access after KSH 100 payment
+        try {
+          await ChatForeignersBotAccess.findOneAndUpdate(
+            {
+              user_id: chatForeignersUnlock.user_id,
+              bot_id: chatForeignersUnlock.metadata?.bot_id,
+            },
+            {
+              lifetimeAccessUnlocked: true,
+              lifetimeAccessUnlockedAt: new Date(),
+            },
+            { session }
+          );
+
+          console.log('[CoopCallback] Lifetime access granted for chat-foreigners:', {
+            userId: chatForeignersUnlock.user_id,
+            botId: chatForeignersUnlock.metadata?.bot_id,
+            amount: chatForeignersUnlock.amount_cents / 100,
+          });
+        } catch (err) {
+          console.error('[CoopCallback] Error granting lifetime access:', err);
+        }
+
+        // Commit the main transaction first, then process the unlock in the background
+        // so the callback response is never delayed by the unlock work.
+        await session.commitTransaction();
+        session.endSession();
+        session = null;
+
+        void completeBotUnlockPayment(chatForeignersUnlock._id.toString()).catch(
+          (chatError) => {
+            console.error('[CoopCallback] Background chat-foreigners unlock error (can retry manually):', chatError);
+          }
         );
 
-        console.log('[CoopCallback] Lifetime access granted for chat-foreigners:', {
-          userId: chatForeignersUnlock.user_id,
-          botId: chatForeignersUnlock.metadata?.bot_id,
-          amount: chatForeignersUnlock.amount_cents / 100,
+        return NextResponse.json({
+          success: true,
+          data: { status: paymentStatus, messageReference },
+          message: 'Lifetime chat access unlocked! Enjoy unlimited chatting.',
         });
-      } catch (err) {
-        console.error('[CoopCallback] Error granting lifetime access:', err);
+      } else if (['failed', 'cancelled', 'timeout'].includes(paymentStatus)) {
+        // BUG FIX: Mark transaction as failed so it doesn't persist on 'processing'
+        chatForeignersUnlock.status = paymentStatus;
+        chatForeignersUnlock.failed_at = new Date();
+        await chatForeignersUnlock.save({ session });
+
+        console.log('[CoopCallback] Chat-foreigners unlock failed:', {
+          userId: chatForeignersUnlock.user_id,
+          status: paymentStatus,
+        });
       }
-
-      // Commit the main transaction first, then process the unlock in the background
-      // so the callback response is never delayed by the unlock work.
-      await session.commitTransaction();
-      session.endSession();
-      session = null;
-
-      void completeBotUnlockPayment(chatForeignersUnlock._id.toString()).catch(
-        (chatError) => {
-          console.error('[CoopCallback] Background chat-foreigners unlock error (can retry manually):', chatError);
-        }
-      );
-
-      return NextResponse.json({
-        success: true,
-        data: { status: paymentStatus, messageReference },
-        message: 'Lifetime chat access unlocked! Enjoy unlimited chatting.',
-      });
     }
 
     // ========================================================================
@@ -390,24 +418,36 @@ export async function POST(request: NextRequest) {
       transaction_type: 'chat_foreigners_deposit',
     }).session(session);
 
-    if (chatForeignersDeposit && paymentStatus === 'completed') {
-      // Commit the main transaction and run the wallet credit in the background
-      // to keep callback response times fast under high traffic.
-      await session.commitTransaction();
-      session.endSession();
-      session = null;
+    if (chatForeignersDeposit) {
+      if (paymentStatus === 'completed') {
+        // Commit the main transaction and run the wallet credit in the background
+        // to keep callback response times fast under high traffic.
+        await session.commitTransaction();
+        session.endSession();
+        session = null;
 
-      void completeWalletDeposit(chatForeignersDeposit._id.toString(), null).catch(
-        (chatDepositError) => {
-          console.error('[CoopCallback] Background chat-foreigners deposit error:', chatDepositError);
-        }
-      );
+        void completeWalletDeposit(chatForeignersDeposit._id.toString(), null).catch(
+          (chatDepositError) => {
+            console.error('[CoopCallback] Background chat-foreigners deposit error:', chatDepositError);
+          }
+        );
 
-      return NextResponse.json({
-        success: true,
-        data: { status: paymentStatus, messageReference },
-        message: 'Chat foreigners deposit confirmed. Processing in background.',
-      });
+        return NextResponse.json({
+          success: true,
+          data: { status: paymentStatus, messageReference },
+          message: 'Chat foreigners deposit confirmed. Processing in background.',
+        });
+      } else if (['failed', 'cancelled', 'timeout'].includes(paymentStatus)) {
+        // BUG FIX: Mark transaction as failed so it doesn't persist on 'processing'
+        chatForeignersDeposit.status = paymentStatus;
+        chatForeignersDeposit.failed_at = new Date();
+        await chatForeignersDeposit.save({ session });
+
+        console.log('[CoopCallback] Chat-foreigners deposit failed:', {
+          userId: chatForeignersDeposit.user_id,
+          status: paymentStatus,
+        });
+      }
     }
 
     await session.commitTransaction();

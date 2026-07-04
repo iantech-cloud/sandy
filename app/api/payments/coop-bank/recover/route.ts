@@ -28,6 +28,7 @@ import {
   connectToDatabase,
   MpesaTransaction,
   ActivationPayment,
+  Transaction,
 } from '@/app/lib/models';
 import { CoopBankService, createCoopBankService } from '@/app/lib/services/coop-bank';
 import { completeActivationAfterPayment } from '@/app/actions/activation';
@@ -195,6 +196,13 @@ async function runRecovery() {
           txn.failed_at = new Date();
           await txn.save();
           summary.stuck_failed++;
+
+          // BUG FIX: Also reconcile the linked ledger row so it stops showing as 'processing'
+          // This closes the loop for wallet deposits that only have the callback as recovery path
+          await (Transaction as any).findOneAndUpdate(
+            { mpesa_transaction_id: txn._id },
+            { status: mappedStatus }
+          );
         }
       } catch (err) {
         summary.errors.push(
