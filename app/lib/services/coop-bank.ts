@@ -69,6 +69,11 @@ export interface TransactionStatusResponse {
   // Possible status values from the API
   status?: string;
   
+  // M-Pesa receipt and operator transaction identifiers (returned on completed transactions)
+  ReceiptNumber?: string;
+  OperatorTxnID?: string;
+  ConversationID?: string;
+  
   // ⚠️  Co-op Bank Status API might use these field names
   // We map MessageCode -> ResponseCode and MessageDescription -> ResponseDescription
   MessageCode?: string;
