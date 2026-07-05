@@ -6,6 +6,7 @@ import { Wallet, LogOut, Award, HelpCircle, Settings, BarChart, User as UserIcon
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import TrainingCTA from './TrainingCTA';
 
 interface SideNavProps {
   userName: string;
@@ -141,6 +142,11 @@ export default function SideNav({ userName, onLogout }: SideNavProps) {
               </Link>
             );
           })}
+        </div>
+
+        {/* Training CTA */}
+        <div className="mt-8 mb-6">
+          <TrainingCTA />
         </div>
 
         {/* Bottom Section with Dark Mode Toggle and Logout */}
