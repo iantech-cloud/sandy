@@ -4,6 +4,7 @@ import { timesNewRoman } from './ui/fonts';
 import type { Metadata, Viewport } from 'next';
 import { DashboardProvider } from './dashboard/DashboardContext';
 import SessionProvider from './providers/SessionProvider';
+import { ThemeProvider } from './providers/ThemeProvider';
 import Script from 'next/script';
 import { auth } from '@/auth';
 import { Analytics } from "@vercel/analytics/next"
@@ -160,7 +161,7 @@ export default async function RootLayout({
   };
 
   return (
-    <html lang="en" className={`${timesNewRoman.variable} bg-white`}>
+    <html lang="en" className={`${timesNewRoman.variable}`} suppressHydrationWarning>
       <head>
         <Script
           id="organization-schema"
@@ -219,13 +220,15 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
       </head>
-      <body className={`${timesNewRoman.className} antialiased bg-white`}>
-        <SessionProvider session={session}>
-          <DashboardProvider value={contextValue}>
-            {children}
-            <Analytics />
-          </DashboardProvider>
-        </SessionProvider>
+      <body className={`${timesNewRoman.className} antialiased`} suppressHydrationWarning>
+        <ThemeProvider>
+          <SessionProvider session={session}>
+            <DashboardProvider value={contextValue}>
+              {children}
+              <Analytics />
+            </DashboardProvider>
+          </SessionProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
