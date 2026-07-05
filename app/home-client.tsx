@@ -2,7 +2,8 @@
 
 import React from 'react';
 import Link from 'next/link'; 
-import Image from 'next/image'; 
+import Image from 'next/image';
+import { ThemeToggle } from './components/ThemeToggle'; 
 
 interface ServiceFeature {
   icon: React.ReactNode;
@@ -37,6 +38,11 @@ const serviceFeatures: ServiceFeature[] = [
     name: 'Sales & Marketing', 
     description: 'Promote products and services through affiliate marketing and earn commissions on sales.' 
   },
+  { 
+    icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>,
+    name: 'Global Chat', 
+    description: 'Chat with international users, provide friendly conversations, and earn based on your engagement and activity.' 
+  },
 ];
 
 const valuePropositions: ValueProp[] = [
@@ -67,7 +73,7 @@ const Header: React.FC = () => {
   const toggleMenu = () => setIsOpen(!isOpen);
 
   return (
-    <header className="flex flex-col sm:flex-row justify-between items-center py-4 px-4 md:px-12 bg-white shadow-sm sticky top-0 z-50">
+    <header className="flex flex-col sm:flex-row justify-between items-center py-4 px-4 md:px-12 bg-surface shadow-sm sticky top-0 z-50 border-b border-border">
       <div className="flex justify-between items-center w-full sm:w-auto">
         <div className="flex items-center space-x-2">
           <Link href="/" aria-label="Go to HustleHub Africa homepage">
@@ -88,50 +94,54 @@ const Header: React.FC = () => {
           </Link>
         </div>
 
-        <button
-          onClick={toggleMenu}
-          className="sm:hidden p-2 text-gray-600 hover:text-indigo-600 focus:outline-none rounded-lg"
-          aria-label="Toggle navigation menu"
-          aria-expanded={isOpen}
-          aria-controls="mobile-menu"
-        >
-          {isOpen ? (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          ) : (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
-            </svg>
-          )}
-        </button>
+        <div className="flex items-center space-x-2">
+          <ThemeToggle />
+          <button
+            onClick={toggleMenu}
+            className="sm:hidden p-2 text-text-muted hover:text-indigo-600 focus:outline-none rounded-lg transition-colors"
+            aria-label="Toggle navigation menu"
+            aria-expanded={isOpen}
+            aria-controls="mobile-menu"
+          >
+            {isOpen ? (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
       
       <nav className="hidden sm:flex space-x-4 sm:space-x-8 items-center" aria-label="Primary navigation">
-        <Link href="/" className="text-gray-600 hover:text-indigo-600 transition-colors">Home</Link>
-        <Link href="/about" className="text-gray-600 hover:text-indigo-600 transition-colors">About</Link>
-        <Link href="/blog" className="text-gray-600 hover:text-indigo-600 transition-colors">Blog</Link>
-        <Link href="/contact" className="text-gray-600 hover:text-indigo-600 transition-colors">Contact</Link>
+        <Link href="/" className="text-text-muted hover:text-indigo-600 transition-colors">Home</Link>
+        <Link href="/about" className="text-text-muted hover:text-indigo-600 transition-colors">About</Link>
+        <Link href="/blog" className="text-text-muted hover:text-indigo-600 transition-colors">Blog</Link>
+        <Link href="/contact" className="text-text-muted hover:text-indigo-600 transition-colors">Contact</Link>
         <Link href="/auth/sign-up?ref=SANDY001" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold">Sign Up</Link>
+        <ThemeToggle />
       </nav>
 
       <nav 
         id="mobile-menu"
-        className={`sm:hidden w-full flex-col mt-3 transition-all duration-300 ease-in-out bg-white ${isOpen ? 'max-h-96 opacity-100 py-2 border-t border-gray-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
+        className={`sm:hidden w-full flex-col mt-3 transition-all duration-300 ease-in-out bg-surface ${isOpen ? 'max-h-96 opacity-100 py-2 border-t border-border' : 'max-h-0 opacity-0 overflow-hidden'}`}
         aria-label="Mobile navigation menu"
       >
-        <Link href="/" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>Home</Link>
-        <Link href="/about" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>About</Link>
-        <Link href="/blog" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>Blog</Link>
-        <Link href="/contact" className="block py-2 px-3 text-gray-700 hover:bg-indigo-50 rounded-lg" onClick={toggleMenu}>Contact</Link>
-        <Link href="/auth/sign-up?ref=SANDY001" className="block py-2 px-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold" onClick={toggleMenu}>Sign Up</Link>
+        <Link href="/" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>Home</Link>
+        <Link href="/about" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>About</Link>
+        <Link href="/blog" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>Blog</Link>
+        <Link href="/contact" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>Contact</Link>
+        <Link href="/auth/sign-up?ref=SANDY001" className="block py-2 px-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold transition-colors" onClick={toggleMenu}>Sign Up</Link>
       </nav>
     </header>
   );
 };
 
 const Footer: React.FC = () => (
-  <footer className="bg-gray-900 text-gray-400 pt-12 pb-8 px-4 md:px-12">
+  <footer className="bg-gray-900 dark:bg-gray-950 text-gray-400 dark:text-gray-500 pt-12 pb-8 px-4 md:px-12">
     <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
       <div className="col-span-1 sm:col-span-2 md:col-span-1">
         <div className="flex items-center space-x-2 mb-4">
@@ -196,12 +206,12 @@ const Footer: React.FC = () => (
 );
 
 const HeroSection: React.FC = () => (
-  <section className="py-16 md:py-24 px-4 md:px-12 bg-gradient-to-b from-indigo-50 to-white">
+  <section className="py-16 md:py-24 px-4 md:px-12 bg-gradient-to-b from-indigo-50 to-bg dark:from-slate-900 dark:to-bg">
     <div className="max-w-6xl mx-auto text-center">
-      <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight text-balance">
+      <h1 className="text-4xl md:text-5xl font-bold text-heading mb-6 leading-tight text-balance">
         Freelance Opportunities for African Professionals
       </h1>
-      <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto text-pretty">
+      <p className="text-xl text-text-muted mb-8 max-w-3xl mx-auto text-pretty">
         HustleHub Africa connects skilled professionals with legitimate freelance work opportunities including content writing, academic writing, surveys, and marketing projects.
       </p>
       
@@ -243,27 +253,27 @@ const HeroSection: React.FC = () => (
 );
 
 const ServicesSection: React.FC = () => (
-  <section id="services" className="py-16 px-4 md:px-12 bg-white">
+  <section id="services" className="py-16 px-4 md:px-12 bg-bg">
     <div className="max-w-6xl mx-auto">
       <div className="text-center mb-12">
-        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-heading mb-4">
           Our Services
         </h2>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+        <p className="text-lg text-text-muted max-w-2xl mx-auto">
           We offer various freelance opportunities for skilled professionals looking for legitimate work.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {serviceFeatures.map((feature, index) => (
-          <div key={index} className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+          <div key={index} className="bg-bg-subtle p-6 rounded-xl border border-border hover:shadow-lg transition-shadow">
             <div className="flex items-start space-x-4">
               <div className="flex-shrink-0 text-indigo-600">
                 {feature.icon}
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{feature.name}</h3>
-                <p className="text-gray-600">{feature.description}</p>
+                <h3 className="text-xl font-semibold text-heading mb-2">{feature.name}</h3>
+                <p className="text-text-muted">{feature.description}</p>
               </div>
             </div>
           </div>
@@ -274,25 +284,25 @@ const ServicesSection: React.FC = () => (
 );
 
 const WhyChooseUsSection: React.FC = () => (
-  <section id="why-us" className="py-16 px-4 md:px-12 bg-gray-50">
+  <section id="why-us" className="py-16 px-4 md:px-12 bg-bg-subtle">
     <div className="max-w-6xl mx-auto">
       <div className="text-center mb-12">
-        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-heading mb-4">
           Why Choose HustleHub Africa
         </h2>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+        <p className="text-lg text-text-muted max-w-2xl mx-auto">
           We are committed to providing a trustworthy platform for freelancers and businesses alike.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {valuePropositions.map((prop, index) => (
-          <div key={index} className="bg-white p-6 rounded-xl border border-gray-100 text-center">
+          <div key={index} className="bg-surface p-6 rounded-xl border border-border text-center hover:shadow-lg transition-shadow">
             <div className="flex justify-center mb-4 text-indigo-600">
               {prop.icon}
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{prop.title}</h3>
-            <p className="text-gray-600 text-sm">{prop.description}</p>
+            <h3 className="text-lg font-semibold text-heading mb-2">{prop.title}</h3>
+            <p className="text-text-muted text-sm">{prop.description}</p>
           </div>
         ))}
       </div>
@@ -301,13 +311,13 @@ const WhyChooseUsSection: React.FC = () => (
 );
 
 const HowItWorksSection: React.FC = () => (
-  <section className="py-16 px-4 md:px-12 bg-white">
+  <section className="py-16 px-4 md:px-12 bg-bg">
     <div className="max-w-6xl mx-auto">
       <div className="text-center mb-12">
-        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-heading mb-4">
           How It Works
         </h2>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+        <p className="text-lg text-text-muted max-w-2xl mx-auto">
           Getting started with HustleHub Africa is simple and straightforward.
         </p>
       </div>
@@ -317,8 +327,8 @@ const HowItWorksSection: React.FC = () => (
           <div className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">
             1
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Create Your Account</h3>
-          <p className="text-gray-600">
+          <h3 className="text-xl font-semibold text-heading mb-2">Create Your Account</h3>
+          <p className="text-text-muted">
             Sign up with your email and complete your profile with your skills and experience.
           </p>
         </div>
@@ -326,8 +336,8 @@ const HowItWorksSection: React.FC = () => (
           <div className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">
             2
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Browse Opportunities</h3>
-          <p className="text-gray-600">
+          <h3 className="text-xl font-semibold text-heading mb-2">Browse Opportunities</h3>
+          <p className="text-text-muted">
             Explore available projects that match your skills and interests.
           </p>
         </div>
@@ -335,8 +345,8 @@ const HowItWorksSection: React.FC = () => (
           <div className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">
             3
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Complete Work & Get Paid</h3>
-          <p className="text-gray-600">
+          <h3 className="text-xl font-semibold text-heading mb-2">Complete Work & Get Paid</h3>
+          <p className="text-text-muted">
             Deliver quality work and receive payment through M-Pesa.
           </p>
         </div>

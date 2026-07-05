@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -17,6 +18,14 @@ const config: Config = {
           500: '#0070F3',
           600: '#2F6FEB',
         },
+        // Semantic color tokens (mapped from CSS variables)
+        bg: 'var(--color-bg)',
+        'bg-subtle': 'var(--color-bg-subtle)',
+        surface: 'var(--color-surface)',
+        border: 'var(--color-border)',
+        text: 'var(--color-text)',
+        'text-muted': 'var(--color-text-muted)',
+        heading: 'var(--color-heading)',
       },
     },
     keyframes: {

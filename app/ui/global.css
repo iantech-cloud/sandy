@@ -10,6 +10,38 @@
 
 /* ---------------------------------------------------- */
 
+/* 2. Semantic Color Tokens for Dark/Light Mode */
+
+:root {
+  /* Light mode colors */
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f9fafb;
+  --color-surface: #ffffff;
+  --color-border: #e5e7eb;
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+  --color-heading: #111827;
+
+  /* Safe area insets for mobile devices */
+  --safe-area-inset-top: env(safe-area-inset-top);
+  --safe-area-inset-right: env(safe-area-inset-right);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom);
+  --safe-area-inset-left: env(safe-area-inset-left);
+}
+
+.dark {
+  /* Dark mode colors */
+  --color-bg: #0f172a;
+  --color-bg-subtle: #1e293b;
+  --color-surface: #1e293b;
+  --color-border: #334155;
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  --color-heading: #f8fafc;
+}
+
+/* ---------------------------------------------------- */
+
 /* 2. Global Resets and Base Styles */
 
 /* Box-Sizing Reset for consistent layout behavior */
@@ -21,10 +53,7 @@
 
 /* Base Body and Root Styles */
 :root {
-  --safe-area-inset-top: env(safe-area-inset-top);
-  --safe-area-inset-right: env(safe-area-inset-right);
-  --safe-area-inset-bottom: env(safe-area-inset-bottom);
-  --safe-area-inset-left: env(safe-area-inset-left);
+  /* Already defined in color tokens section above */
 }
 
 html,
@@ -36,14 +65,15 @@ body {
   scroll-behavior: smooth;
   /* Prevent horizontal scrollbar on some devices */
   overflow-x: hidden;
-  /* Set a default background and text color */
-  background-color: white;
-  color: #1f2937; /* equivalent to Tailwind's gray-800 or similar dark text */
+  /* Use semantic color tokens for dark/light mode support */
+  background-color: var(--color-bg);
+  color: var(--color-text);
   /* Improve text rendering */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* Tap highlight color for mobile */
   -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* ---------------------------------------------------- */
@@ -136,13 +166,13 @@ button {
 
 /* Styles for a 'prose' container to format raw content (like blog posts) */
 .prose {
-  color: #374151; /* Gray-700 for main text */
+  color: var(--color-text);
   max-width: none; /* Override default Tailwind 'prose' max-width if applicable */
   line-height: 1.75;
 }
 
 .prose h1, .prose h2, .prose h3, .prose h4 {
-  color: #111827; /* Gray-900 for headings */
+  color: var(--color-heading);
   font-weight: 700;
   margin-top: 2em;
   margin-bottom: 1em;
@@ -150,7 +180,7 @@ button {
 
 .prose h1 {
   font-size: 2.25em;
-  border-bottom: 1px solid #e5e7eb; /* Gray-200 border */
+  border-bottom: 1px solid var(--color-border);
   padding-bottom: 0.5em;
 }
 
@@ -177,11 +207,11 @@ button {
 }
 
 .prose blockquote {
-  border-left: 4px solid #3b82f6; /* Blue-500 border */
+  border-left: 4px solid #3b82f6;
   padding-left: 1.5em;
   margin: 2em 0;
   font-style: italic;
-  color: #6b7280; /* Gray-500 for quote text */
+  color: var(--color-text-muted);
 }
 
 .prose img {
@@ -196,13 +226,13 @@ button {
 }
 
 .prose th, .prose td {
-  border: 1px solid #e5e7eb; /* Gray-200 border */
+  border: 1px solid var(--color-border);
   padding: 0.75em;
   text-align: left;
 }
 
 .prose th {
-  background-color: #f9fafb; /* Gray-50 background */
+  background-color: var(--color-bg-subtle);
   font-weight: 600;
 }
 
@@ -210,24 +240,37 @@ button {
 
 /* 6. Custom Scrollbar Styles */
 
-/* Sidenav Custom Scrollbar - Works in Webkit browsers (Chrome, Safari, Edge) */
+/* Sidenav Custom Scrollbar - Dark mode by default */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.3); /* slate-900 with opacity */
+  background: rgba(15, 23, 42, 0.3);
   border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.8); /* slate-700 with opacity */
+  background: rgba(71, 85, 105, 0.8);
   border-radius: 10px;
   transition: background 0.3s ease;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.9); /* slate-600 with opacity */
+  background: rgba(100, 116, 139, 0.9);
+}
+
+/* Light mode scrollbar variant */
+:root .custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.5);
+}
+
+:root .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.6);
+}
+
+:root .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
 }
 
 /* Firefox scrollbar styling */
@@ -236,29 +279,50 @@ button {
   scrollbar-color: rgba(71, 85, 105, 0.8) rgba(15, 23, 42, 0.3);
 }
 
-/* Main content scrollbar - lighter theme */
+:root .custom-scrollbar {
+  scrollbar-color: rgba(148, 163, 184, 0.6) rgba(241, 245, 249, 0.5);
+}
+
+/* Main content scrollbar */
 .main-content-scrollbar::-webkit-scrollbar {
   width: 8px;
 }
 
 .main-content-scrollbar::-webkit-scrollbar-track {
-  background: rgba(241, 245, 249, 0.5); /* slate-100 with opacity */
+  background: rgba(148, 163, 184, 0.3);
   border-radius: 10px;
 }
 
 .main-content-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.6); /* slate-400 with opacity */
+  background: rgba(100, 116, 139, 0.6);
   border-radius: 10px;
   transition: background 0.3s ease;
 }
 
 .main-content-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.8); /* slate-500 with opacity */
+  background: rgba(71, 85, 105, 0.8);
+}
+
+/* Light mode main content scrollbar */
+:root .main-content-scrollbar::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.5);
+}
+
+:root .main-content-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.6);
+}
+
+:root .main-content-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
 }
 
 /* Firefox scrollbar styling for main content */
 .main-content-scrollbar {
   scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.6) rgba(148, 163, 184, 0.3);
+}
+
+:root .main-content-scrollbar {
   scrollbar-color: rgba(148, 163, 184, 0.6) rgba(241, 245, 249, 0.5);
 }
 
@@ -636,24 +700,24 @@ button {
 
 /* Custom button variants */
 .btn-primary {
-  @apply bg-indigo-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors duration-200;
+  @apply bg-indigo-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors duration-200 dark:bg-indigo-700 dark:hover:bg-indigo-600;
 }
 
 .btn-secondary {
-  @apply bg-gray-200 text-gray-900 font-medium py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200;
+  @apply bg-gray-200 text-gray-900 font-medium py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600;
 }
 
 .btn-danger {
-  @apply bg-red-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200;
+  @apply bg-red-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200 dark:bg-red-700 dark:hover:bg-red-600;
 }
 
 /* Card component base */
 .card {
-  @apply bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden;
+  @apply rounded-xl shadow-lg overflow-hidden bg-surface border border-border;
 }
 
 .card-header {
-  @apply px-6 py-4 border-b border-gray-200 bg-gray-50;
+  @apply px-6 py-4 border-b border-border bg-bg-subtle;
 }
 
 .card-body {
@@ -661,7 +725,7 @@ button {
 }
 
 .card-footer {
-  @apply px-6 py-4 border-t border-gray-200 bg-gray-50;
+  @apply px-6 py-4 border-t border-border bg-bg-subtle;
 }
 
 /* Custom form styles */
