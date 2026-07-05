@@ -38,6 +38,11 @@ const serviceFeatures: ServiceFeature[] = [
     name: 'Sales & Marketing', 
     description: 'Promote products and services through affiliate marketing and earn commissions on sales.' 
   },
+  { 
+    icon: <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>,
+    name: 'Global Chat', 
+    description: 'Chat with international users, provide friendly conversations, and earn based on your engagement and activity.' 
+  },
 ];
 
 const valuePropositions: ValueProp[] = [
@@ -248,27 +253,27 @@ const HeroSection: React.FC = () => (
 );
 
 const ServicesSection: React.FC = () => (
-  <section id="services" className="py-16 px-4 md:px-12 bg-white">
+  <section id="services" className="py-16 px-4 md:px-12 bg-bg">
     <div className="max-w-6xl mx-auto">
       <div className="text-center mb-12">
-        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-heading mb-4">
           Our Services
         </h2>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+        <p className="text-lg text-text-muted max-w-2xl mx-auto">
           We offer various freelance opportunities for skilled professionals looking for legitimate work.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {serviceFeatures.map((feature, index) => (
-          <div key={index} className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+          <div key={index} className="bg-bg-subtle p-6 rounded-xl border border-border hover:shadow-lg transition-shadow">
             <div className="flex items-start space-x-4">
               <div className="flex-shrink-0 text-indigo-600">
                 {feature.icon}
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{feature.name}</h3>
-                <p className="text-gray-600">{feature.description}</p>
+                <h3 className="text-xl font-semibold text-heading mb-2">{feature.name}</h3>
+                <p className="text-text-muted">{feature.description}</p>
               </div>
             </div>
           </div>
@@ -279,25 +284,25 @@ const ServicesSection: React.FC = () => (
 );
 
 const WhyChooseUsSection: React.FC = () => (
-  <section id="why-us" className="py-16 px-4 md:px-12 bg-gray-50">
+  <section id="why-us" className="py-16 px-4 md:px-12 bg-bg-subtle">
     <div className="max-w-6xl mx-auto">
       <div className="text-center mb-12">
-        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-heading mb-4">
           Why Choose HustleHub Africa
         </h2>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+        <p className="text-lg text-text-muted max-w-2xl mx-auto">
           We are committed to providing a trustworthy platform for freelancers and businesses alike.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {valuePropositions.map((prop, index) => (
-          <div key={index} className="bg-white p-6 rounded-xl border border-gray-100 text-center">
+          <div key={index} className="bg-surface p-6 rounded-xl border border-border text-center hover:shadow-lg transition-shadow">
             <div className="flex justify-center mb-4 text-indigo-600">
               {prop.icon}
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{prop.title}</h3>
-            <p className="text-gray-600 text-sm">{prop.description}</p>
+            <h3 className="text-lg font-semibold text-heading mb-2">{prop.title}</h3>
+            <p className="text-text-muted text-sm">{prop.description}</p>
           </div>
         ))}
       </div>
@@ -306,13 +311,13 @@ const WhyChooseUsSection: React.FC = () => (
 );
 
 const HowItWorksSection: React.FC = () => (
-  <section className="py-16 px-4 md:px-12 bg-white">
+  <section className="py-16 px-4 md:px-12 bg-bg">
     <div className="max-w-6xl mx-auto">
       <div className="text-center mb-12">
-        <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-heading mb-4">
           How It Works
         </h2>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+        <p className="text-lg text-text-muted max-w-2xl mx-auto">
           Getting started with HustleHub Africa is simple and straightforward.
         </p>
       </div>
@@ -322,8 +327,8 @@ const HowItWorksSection: React.FC = () => (
           <div className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">
             1
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Create Your Account</h3>
-          <p className="text-gray-600">
+          <h3 className="text-xl font-semibold text-heading mb-2">Create Your Account</h3>
+          <p className="text-text-muted">
             Sign up with your email and complete your profile with your skills and experience.
           </p>
         </div>
@@ -331,8 +336,8 @@ const HowItWorksSection: React.FC = () => (
           <div className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">
             2
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Browse Opportunities</h3>
-          <p className="text-gray-600">
+          <h3 className="text-xl font-semibold text-heading mb-2">Browse Opportunities</h3>
+          <p className="text-text-muted">
             Explore available projects that match your skills and interests.
           </p>
         </div>
@@ -340,8 +345,8 @@ const HowItWorksSection: React.FC = () => (
           <div className="w-12 h-12 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">
             3
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Complete Work & Get Paid</h3>
-          <p className="text-gray-600">
+          <h3 className="text-xl font-semibold text-heading mb-2">Complete Work & Get Paid</h3>
+          <p className="text-text-muted">
             Deliver quality work and receive payment through M-Pesa.
           </p>
         </div>
