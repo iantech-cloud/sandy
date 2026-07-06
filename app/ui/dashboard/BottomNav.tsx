@@ -89,8 +89,8 @@ export default function BottomNav({ userName }: BottomNavProps) {
         <div className="absolute -top-4 inset-x-0 h-4 bg-gradient-to-t from-black/10 to-transparent pointer-events-none"></div>
 
         {/* Training CTA - Premium callout */}
-        <div className="relative px-4 py-3 bg-gradient-to-r from-green-50/80 via-emerald-50/80 to-teal-50/80 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 backdrop-blur-md border-b border-green-100/50 dark:border-green-900/30">
-          <div className="max-w-lg mx-auto">
+        <div className="relative px-3 sm:px-4 py-2 sm:py-3 bg-gradient-to-r from-green-50/80 via-emerald-50/80 to-teal-50/80 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 backdrop-blur-md border-b border-green-100/50 dark:border-green-900/30">
+          <div className="w-full max-w-lg mx-auto px-1 sm:px-0">
             <TrainingCTA />
           </div>
         </div>
