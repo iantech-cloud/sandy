@@ -179,19 +179,31 @@ install_dependencies() {
 }
 
 build_application() {
-  log_section "Building Application"
+  log_section "Building Next.js Application"
 
-  log_info "Running: pnpm run build"
-  if pnpm run build; then
-    log_success "Build successful"
+  log_info "Building with: pnpm build"
+  log_info "This may take several minutes..."
+  
+  # Clean build artifacts before building to ensure fresh CSS/styles
+  log_info "Clearing previous build cache..."
+  rm -rf .next/cache 2>/dev/null || true
+
+  if pnpm build 2>&1 | tee build.log; then
+    log_success "Build completed successfully"
     
-    # Verify .next directory
-    if [ ! -d ".next" ]; then
-      exit_error "Build completed but .next directory not found"
+    # Show build output
+    if [ -f .next/BUILD_ID ]; then
+      log_info "Build ID: $(cat .next/BUILD_ID)"
     fi
-    log_success ".next directory verified"
+    
+    # Verify CSS was built
+    if find .next -name "*.css" -o -name "*.css.map" | grep -q .; then
+      log_success "CSS files compiled successfully"
+    else
+      log_warning "CSS files not found in build output - may be inlined"
+    fi
   else
-    exit_error "Build failed"
+    exit_error "Build failed. Check build.log and logs above for details."
   fi
 }
 
@@ -202,34 +214,26 @@ build_application() {
 setup_pm2() {
   log_section "Setting Up PM2"
 
-  # Stop existing process
-  log_info "Stopping existing PM2 processes..."
-  pm2 stop "$APP_NAME" 2>/dev/null || true
-  sleep 2
-
-  # Delete existing process
-  log_info "Deleting existing PM2 processes..."
+  # Kill existing process if running to ensure clean start
+  log_info "Stopping current PM2 process (if running)..."
   pm2 delete "$APP_NAME" 2>/dev/null || true
   sleep 1
 
-  # Start new process
-  log_info "Starting application with PM2..."
-  if pm2 start ecosystem.config.js --name "$APP_NAME" --env "$ENVIRONMENT"; then
-    log_success "Application started with PM2"
-    sleep 2
+  log_info "Starting application with PM2 (environment: $ENVIRONMENT)..."
+  log_info "Using ecosystem.config.js configuration..."
+  
+  if pm2 start ecosystem.config.js --env "$ENVIRONMENT" 2>&1 | tee pm2-start.log; then
+    log_success "PM2 process started successfully"
+    sleep 3  # Give app time to start
+    
+    # Show PM2 status
+    log_info "PM2 process status:"
+    pm2 status | grep -E "$APP_NAME|Name|Status"
   else
-    exit_error "Failed to start application with PM2"
-  fi
-
-  # Verify process is running
-  log_info "Verifying process status..."
-  sleep 2
-  if pm2 list | grep -q "$APP_NAME"; then
-    log_success "Process verified as running"
-  else
-    log_error "Process not found in PM2 list"
-    pm2 logs "$APP_NAME" --err --lines 20
-    exit_error "PM2 verification failed"
+    log_error "Failed to start PM2 process"
+    log_warning "Checking PM2 error logs..."
+    pm2 logs --err --lines 20
+    exit_error "PM2 startup failed"
   fi
 }
 

@@ -13,7 +13,8 @@ const nextConfig: NextConfig = {
   ],
 
   experimental: {
-    optimizeCss: true,
+    // optimizeCss disabled - causes CSS 404 errors in development
+    // optimizeCss: true,
     optimizePackageImports: ['lucide-react', 'react-icons'],
   },
 
