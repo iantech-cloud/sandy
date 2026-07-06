@@ -5,6 +5,14 @@
 # 
 # This script automates the deployment process for external servers (not Vercel)
 # 
+# Features:
+#   - Pulls latest changes from GitHub (main branch)
+#   - Validates prerequisites and environment variables
+#   - Installs dependencies with pnpm
+#   - Builds Next.js application
+#   - Starts/restarts PM2 process
+#   - Verifies deployment health
+# 
 # Usage:
 #   chmod +x scripts/deploy.sh
 #   ./scripts/deploy.sh production
@@ -13,10 +21,12 @@
 #
 # Prerequisites:
 #   - Node.js 22.x installed
-#   - pnpm installed
+#   - pnpm installed globally: npm install -g pnpm
 #   - PM2 installed globally: npm install -g pm2
+#   - Git configured with GitHub SSH keys (for git pull)
 #   - .env.local or .env.production.local configured
 #   - MongoDB connection available
+#   - SSH access to server for deployment
 #
 ###############################################################################
 
@@ -119,6 +129,28 @@ validate_environment() {
     fi
   else
     log_warning "Environment validation script not found, skipping"
+  fi
+}
+
+# ============================================================================
+# Git Update
+# ============================================================================
+
+pull_latest_changes() {
+  log_section "Pulling Latest Changes from GitHub"
+
+  log_info "Current branch: $(git branch --show-current)"
+  log_info "Running: git pull origin main"
+
+  if git pull origin main; then
+    log_success "Latest changes pulled successfully"
+    
+    # Show git status
+    log_info "Git status:"
+    git status --short | head -10
+  else
+    log_error "Failed to pull latest changes"
+    log_warning "Continuing with current code..."
   fi
 }
 
@@ -294,6 +326,7 @@ main() {
 
   # Execute deployment steps
   check_prerequisites
+  pull_latest_changes
   validate_environment
   install_dependencies
   build_application
