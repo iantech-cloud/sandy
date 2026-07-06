@@ -63,21 +63,23 @@ module.exports = {
       },
 
       // ===================================================================
-      // Restart & Recovery Policies
+      // Restart & Recovery Policies (Optimized for 2GB server)
       // ===================================================================
       autorestart: true,
       max_restarts: 10,
       min_uptime: '10s',
       restart_delay: 5000,
-      max_memory_restart: '500M',  // Restart if exceeds 500MB
+      max_memory_restart: '900M',  // Restart if exceeds 900MB (safeguard for 2GB)
 
       // ===================================================================
-      // Logging
+      // Logging (Optimized log rotation)
       // ===================================================================
       error_file: '/var/log/sandy/error.log',
       out_file: '/var/log/sandy/out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: false,
+      max_file: 5242880,           // Max 5MB per log file
+      max_restarts_log: '/var/log/sandy/restart.log',
 
       // ===================================================================
       // Graceful Shutdown
@@ -94,10 +96,12 @@ module.exports = {
       ],
 
       // ===================================================================
-      // Node.js Options
+      // Node.js Options (Optimized for 2GB server)
       // ===================================================================
       node_args: [
-        '--max-old-space-size=2048',  // 2GB memory allocation
+        '--max-old-space-size=1400',  // 1.4GB old space (reserved 600MB for OS/system)
+        '--max-semi-space-size=256',  // Smaller semi-space for GC efficiency
+        '--nouse-strict',
       ],
 
       // ===================================================================
