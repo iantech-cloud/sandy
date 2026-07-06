@@ -123,13 +123,14 @@ export async function POST(request: NextRequest) {
         responseCode: stkResponse.ResponseCode,
         description: stkResponse.ResponseDescription,
       });
-      // Mark the pre-created record as failed
-      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+      // Mark the pre-created record as failed (non-blocking background update)
+      (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: 'failed',
         result_code: parseInt(stkResponse.ResponseCode || '1', 10) || 1,
         result_desc: stkResponse.ResponseDescription || 'STK Push rejected by bank',
         failed_at: new Date(),
-      });
+      }).catch((err: any) => console.error('[API] Failed to update transaction status:', err));
+      
       return NextResponse.json(
         {
           success: false,

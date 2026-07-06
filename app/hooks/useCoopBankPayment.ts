@@ -121,15 +121,18 @@ export function useCoopBankPayment() {
   }, []);
 
   /**
-   * Poll transaction status with exponential backoff
+   * Poll transaction status with optimized delays for fast response
+   * Most callbacks arrive within 5-10 seconds, so we check aggressively at first
    */
   const pollTransactionStatus = useCallback(
-    async (msgRef: string, maxAttempts = 60, initialDelayMs = 2000): Promise<TransactionStatus | null> => {
+    async (msgRef: string, maxAttempts = 30, initialDelayMs = 500): Promise<TransactionStatus | null> => {
       let delayMs = initialDelayMs;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        // Wait before checking
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        // Check immediately on first attempt, then wait
+        if (attempt > 1) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
 
         console.log(`[Payment Poll] Attempt ${attempt}/${maxAttempts} - checking status for ${msgRef}`);
 
@@ -145,8 +148,8 @@ export function useCoopBankPayment() {
           }
         }
 
-        // Exponential backoff: increase delay gradually (2s → 4s → 8s, capped at 10s)
-        delayMs = Math.min(delayMs * 1.5, 10000);
+        // Smart backoff: Start fast (500ms), increase gradually, cap at 3s (most callbacks arrive within 10s)
+        delayMs = Math.min(delayMs * 1.3, 3000);
       }
 
       // Max attempts reached, return last known status

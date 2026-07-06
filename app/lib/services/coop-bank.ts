@@ -280,9 +280,10 @@ export class CoopBankService {
 
     try {
       const abortController = new AbortController();
-      // STK Push is synchronous and users may take time to complete the transaction.
-      // Co-op Bank's endpoint can also be slow. 5 minutes should be safe.
-      const timeoutMs = parseInt(process.env.STK_PUSH_TIMEOUT_MS || '300000', 10);
+      // STK Push endpoint should respond quickly (~2-3 seconds).
+      // Don't wait for user to complete the transaction — callback handles that.
+      // Use short timeout to fail fast and prevent timeout errors.
+      const timeoutMs = parseInt(process.env.STK_PUSH_TIMEOUT_MS || '15000', 10);
       const timeout = setTimeout(() => abortController.abort(), timeoutMs);
 
       const response = await fetch(this.stkPushUrl, {
