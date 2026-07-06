@@ -6,6 +6,7 @@ import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as 
 // (UserIcon used for Profile entry; Settings icon used for Settings entry)
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import TrainingCTA from './TrainingCTA';
 
 interface HamburgerMenuProps {
   userName?: string;
@@ -132,9 +133,16 @@ export default function HamburgerMenu({ userName, onLogout }: HamburgerMenuProps
             })}
           </div>
 
+          {/* Training CTA Section */}
+          <div className="border-t border-gray-200 dark:border-slate-700 pt-4 mt-4 mb-4">
+            <div onClick={() => setIsOpen(false)} className="px-2">
+              <TrainingCTA />
+            </div>
+          </div>
+
           {/* Logout Button */}
           {onLogout && (
-            <div className="border-t border-gray-200 dark:border-slate-700 pt-4 mt-4">
+            <div className="border-t border-gray-200 dark:border-slate-700 pt-4">
               <button
                 onClick={() => {
                   setIsOpen(false);
