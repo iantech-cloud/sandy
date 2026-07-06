@@ -95,9 +95,6 @@ const Header: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2">
-          <Link href="/auth/login" className="hidden sm:inline px-3 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors">
-            Login
-          </Link>
           <ThemeToggle />
           <button
             onClick={toggleMenu}
@@ -124,6 +121,7 @@ const Header: React.FC = () => {
         <Link href="/about" className="text-text-muted hover:text-indigo-600 transition-colors">About</Link>
         <Link href="/blog" className="text-text-muted hover:text-indigo-600 transition-colors">Blog</Link>
         <Link href="/contact" className="text-text-muted hover:text-indigo-600 transition-colors">Contact</Link>
+        <Link href="/auth/login" className="text-text-muted hover:text-indigo-600 transition-colors font-medium">Login</Link>
         <Link href="/auth/sign-up?ref=SANDY001" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold">Sign Up</Link>
         <ThemeToggle />
       </nav>
