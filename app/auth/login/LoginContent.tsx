@@ -286,10 +286,9 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
 
       const user = sessionData.user;
 
-      // Check if user is admin - they bypass all other checks
+      // Admins bypass activation/approval checks - go straight to dashboard
       if (user.role === 'admin' || user.role === 'super_admin') {
-        // Admins go straight to admin dashboard
-        router.push('/admin');
+        router.push('/dashboard');
         return;
       }
 
