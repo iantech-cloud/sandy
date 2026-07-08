@@ -4,6 +4,11 @@ import { auth, signOut, handleServerLogout } from '@/auth';
 import { connectToDatabase } from '@/app/lib/mongoose';
 import { UserSession } from '@/app/lib/models/UserSession';
 
+// Handle GET requests (common for logout)
+export async function GET() {
+  return handleLogout();
+}
+
 // Handle POST requests
 export async function POST() {
   return handleLogout();

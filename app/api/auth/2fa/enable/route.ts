@@ -2,11 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
-import bcrypt from 'bcryptjs';
 import { connectToDatabase } from '@/app/lib/mongoose';
 import { Profile } from '@/app/lib/models/Profile';
 import { auth } from '@/auth';
-import { rateLimit } from '@/app/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
@@ -171,7 +169,6 @@ export async function GET(request: NextRequest) {
 }
 
 // DELETE method to disable 2FA or reset setup
-// SECURITY: Requires password re-confirmation to prevent session hijack from disabling 2FA
 export async function DELETE(request: NextRequest) {
   try {
     const session = await auth();
@@ -185,64 +182,16 @@ export async function DELETE(request: NextRequest) {
 
     const userEmail = session.user.email;
     
-    // Parse request body to get password
-    let password: string;
-    try {
-      const body = await request.json();
-      password = body.password;
-    } catch (e) {
-      return NextResponse.json(
-        { error: 'Invalid request format. Password is required.' },
-        { status: 400 }
-      );
-    }
-
-    if (!password) {
-      return NextResponse.json(
-        { error: 'Password is required to disable 2FA for security reasons.' },
-        { status: 400 }
-      );
-    }
-
-    // SECURITY: Rate limit 2FA disable attempts to prevent brute-force attacks
-    const { exceeded: disableRateLimitExceeded } = rateLimit(
-      `2fa:disable:${userEmail}`,
-      5,  // Max 5 attempts
-      60 * 60_000  // Per hour
-    );
-    if (disableRateLimitExceeded) {
-      return NextResponse.json(
-        { error: 'Too many 2FA disable attempts. Please try again later.' },
-        { status: 429 }
-      );
-    }
-
     // Connect to database
     await connectToDatabase();
 
-    // Find and verify the profile
-    const profile = await Profile.findOne({ email: userEmail }).select('+password');
+    // Find and update the profile
+    const profile = await Profile.findOne({ email: userEmail });
     
     if (!profile) {
       return NextResponse.json(
         { error: 'User profile not found.' },
         { status: 404 }
-      );
-    }
-
-    // SECURITY: Verify password before allowing 2FA to be disabled
-    if (!profile.password) {
-      return NextResponse.json(
-        { error: 'Password verification failed.' },
-        { status: 401 }
-      );
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, profile.password);
-    if (!isPasswordValid) {
-      return NextResponse.json(
-        { error: 'Password is incorrect. 2FA was not disabled.' },
-        { status: 401 }
       );
     }
 
@@ -253,19 +202,19 @@ export async function DELETE(request: NextRequest) {
     profile.twoFABackupCodes = [];
     await profile.save();
 
-    console.log('2FA disabled successfully for user:', userEmail);
+    console.log('2FA reset successfully for user:', userEmail);
 
     return NextResponse.json(
       {
         success: true,
-        message: '2FA has been disabled for your account. You will need to enter only your password on next login.',
+        message: '2FA setup has been reset. You can now set up 2FA again.',
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error disabling 2FA:', error);
+    console.error('Error resetting 2FA:', error);
     return NextResponse.json(
-      { error: 'An error occurred while disabling 2FA.' },
+      { error: 'An error occurred while resetting 2FA.' },
       { status: 500 }
     );
   }
