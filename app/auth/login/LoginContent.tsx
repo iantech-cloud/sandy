@@ -245,6 +245,18 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
   const callbackUrl  = searchParams.get('callbackUrl') || '/dashboard';
 
   useEffect(() => {
+    const checkAdminRedirect = async () => {
+      const session = await getSession();
+      if (session?.user?.role === 'admin' || session?.user?.role === 'super_admin') {
+        // Admin is logged in regular login page - redirect to admin portal
+        router.push('/auth/admin-login');
+        return;
+      }
+    };
+    checkAdminRedirect();
+  }, [router]);
+
+  useEffect(() => {
     if (hasExistingSession) {
       setMessage('You are already logged in. You can continue to your dashboard or log in with a different account.');
       setMessageType('info');
@@ -286,9 +298,12 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
 
       const user = sessionData.user;
 
-      // Admins bypass activation/approval checks - go to admin dashboard
+      // Reject admin users from regular login - they should use /auth/admin-login
       if (user.role === 'admin' || user.role === 'super_admin') {
-        router.push('/admin');
+        setMessage('Admin users must login via the admin portal at /auth/admin-login');
+        setMessageType('error');
+        setLoading(false);
+        await signOut({ redirect: false });
         return;
       }
 

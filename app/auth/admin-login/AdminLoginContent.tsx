@@ -52,6 +52,22 @@ export default function AdminLoginContent() {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
+    const checkSession = async () => {
+      const session = await getSession();
+      if (session?.user) {
+        // If non-admin is already logged in, sign them out
+        if (session.user.role !== 'admin' && session.user.role !== 'super_admin') {
+          await signOut({ redirect: false });
+        } else {
+          // Admin is logged in, redirect to admin dashboard
+          router.push('/admin');
+        }
+      }
+    };
+    checkSession();
+  }, [router]);
+
+  useEffect(() => {
     const errorParam = searchParams.get('error');
     if (errorParam && errorParam !== 'SignOut') {
       setMessage(handleNextAuthError(errorParam).message);
@@ -98,6 +114,8 @@ export default function AdminLoginContent() {
           setMessage('Admin access denied. This account does not have admin privileges.');
           setMessageType('error');
           setLoading(false);
+          // Sign out non-admin users from admin portal
+          await signOut({ redirect: false });
         }
       }
     } catch (error) {
