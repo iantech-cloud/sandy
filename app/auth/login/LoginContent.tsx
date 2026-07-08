@@ -286,9 +286,9 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
 
       const user = sessionData.user;
 
-      // Admins bypass activation/approval checks - go straight to dashboard
+      // Admins bypass activation/approval checks - go to admin dashboard
       if (user.role === 'admin' || user.role === 'super_admin') {
-        router.push('/dashboard');
+        router.push('/admin');
         return;
       }
 
