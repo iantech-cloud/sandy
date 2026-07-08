@@ -19,7 +19,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
   // Verify admin role from session (already populated from JWT by auth.ts)
   const userRole = session.user.role;
   if (userRole !== 'admin' && userRole !== 'super_admin') {
-    redirect('/unauthorized');
+    redirect('/dashboard');
   }
 
   // SECURITY: Verify role hasn't changed in database since JWT was issued
@@ -27,8 +27,14 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
     await connectToDatabase();
     const profile = await Profile.findOne({ email: session.user.email }).select('role');
     
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'super_admin')) {
+    if (!profile) {
+      console.error('[v0] Admin profile not found for email:', session.user.email);
+      redirect('/auth/login');
+    }
+
+    if (profile.role !== 'admin' && profile.role !== 'super_admin') {
       // Role was revoked or changed - redirect to dashboard
+      console.warn('[v0] Admin role revoked for user:', session.user.email);
       redirect('/dashboard');
     }
   } catch (error) {
