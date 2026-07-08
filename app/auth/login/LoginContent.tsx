@@ -286,7 +286,14 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
 
       const user = sessionData.user;
 
-      // Activation check
+      // Check if user is admin and redirect accordingly
+      if (user.role === 'admin' || user.role === 'super_admin') {
+        // Admins go straight to admin dashboard, bypassing activation checks
+        router.push('/admin');
+        return;
+      }
+
+      // Activation check (only for regular users)
       if (!user.isActivationPaid && !user.activation_paid_at) {
         // Include phone number in URL (remove + prefix if present)
         const phone = (user.phone_number || user.phone || '')?.replace(/^\+/, '');
@@ -294,7 +301,7 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
         router.push(activateUrl);
         return;
       }
-      // Approval / active check
+      // Approval / active check (only for regular users)
       if (!user.is_approved || user.approval_status === 'pending') {
         router.push('/auth/pending-approval');
         return;
@@ -303,7 +310,7 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
         router.push('/auth/pending-approval');
         return;
       }
-      // All good
+      // Regular user - redirect to dashboard
       router.push(redirectUrl);
     } catch {
       setMessage('Error checking user status. Please try again.');

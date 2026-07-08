@@ -1,36 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { connectToDatabase, Profile, Transaction } from '@/app/lib/models';
+import { validateAdminAuth, buildPaginationMeta } from '../../middleware';
+import { connectToDatabase, Transaction } from '@/app/lib/models';
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    // Validate admin access
+    const authResult = await validateAdminAuth();
+    if (!authResult.authorized) {
+      return NextResponse.json(
+        { success: false, message: authResult.error },
+        { status: authResult.status || 401 }
+      );
     }
 
     await connectToDatabase();
 
-    const adminUser = await (Profile as any).findOne({ email: session.user.email }).select('role').lean();
-    if (adminUser?.role !== 'admin') {
-      return NextResponse.json({ success: false, message: 'Admin access required' }, { status: 403 });
-    }
-
-    // Use aggregation pipelines for unlimited record processing (no hard limit)
-    const [revenueAgg, expenseAgg] = await Promise.all([
-      // Company Revenue: All completed transactions to company grouped by type
+    // Use aggregation pipelines for accurate financial calculations
+    const [revenueBreakdown, expenseBreakdown] = await Promise.all([
+      // Revenue breakdown by type
       (Transaction as any).aggregate([
         { $match: { target_type: 'company', status: 'completed' } },
         {
           $group: {
             _id: '$type',
-            total: { $sum: '$amount_cents' },
-            docs: { $push: { type: '$type', metadata: '$metadata', description: '$description', amount: '$amount_cents' } }
+            total: { $sum: '$amount' },
+            count: { $sum: 1 }
           }
-        }
+        },
+        { $sort: { total: -1 } }
       ]),
       
-      // Company Expenses: All completed payouts grouped by type
+      // Expense breakdown by type
       (Transaction as any).aggregate([
         {
           $match: {
@@ -43,7 +43,8 @@ export async function GET(req: NextRequest) {
                 'SPIN_WIN', 
                 'REFERRAL', 
                 'SURVEY',
-                'WITHDRAWAL'
+                'WITHDRAWAL',
+                'ADMIN_CREDIT'
               ] 
             }
           }
@@ -51,119 +52,92 @@ export async function GET(req: NextRequest) {
         {
           $group: {
             _id: '$type',
-            total: { $sum: '$amount_cents' }
+            total: { $sum: '$amount' },
+            count: { $sum: 1 }
           }
-        }
+        },
+        { $sort: { total: -1 } }
       ])
     ]);
 
-    // Calculate Revenue Breakdown from aggregation results
-    let activationFees = 0;
-    let unclaimedReferrals = 0;
-    let spinCosts = 0;
-    let contentPayments = 0;
-    let otherRevenue = 0;
-
-    for (const group of revenueAgg) {
-      const amount = group.total;
-      
-      switch (group._id) {
-        case 'ACTIVATION_FEE':
-        case 'ACCOUNT_ACTIVATION':
-        case 'COMPANY_REVENUE':
-          // Check first document in group for metadata
-          const firstDoc = group.docs?.[0];
-          if (firstDoc?.metadata?.source === 'unclaimed_referral') {
-            unclaimedReferrals += amount;
-          } else {
-            activationFees += amount;
-          }
-          break;
-        
-        case 'SPIN_COST':
-          spinCosts += amount;
-          break;
-        
-        default:
-          // Check if any document mentions content
-          if (group.docs?.some((d: any) => d.description?.toLowerCase().includes('content'))) {
-            contentPayments += amount;
-          } else {
-            otherRevenue += amount;
-          }
-      }
+    // Map revenue categories
+    const revenueMap: Record<string, { total: number; count: number }> = {};
+    for (const item of revenueBreakdown) {
+      revenueMap[item._id] = { total: item.total, count: item.count };
     }
 
-    const totalCompanyRevenue = activationFees + unclaimedReferrals + spinCosts + contentPayments + otherRevenue;
-
-    // Calculate Expense Breakdown from aggregation results
-    let userPayouts = 0;
-    let bonuses = 0;
-    let referralCommissions = 0;
-    let spinPrizes = 0;
-    let taskPayments = 0;
-    let surveyPayments = 0;
-    let otherExpenses = 0;
-
-    for (const group of expenseAgg) {
-      const amount = group.total;
-      
-      switch (group._id) {
-        case 'WITHDRAWAL':
-          userPayouts += amount;
-          break;
-        case 'BONUS':
-          bonuses += amount;
-          break;
-        case 'REFERRAL':
-          referralCommissions += amount;
-          break;
-        case 'SPIN_WIN':
-        case 'SPIN_PRIZE':
-          spinPrizes += amount;
-          break;
-        case 'TASK_PAYMENT':
-          taskPayments += amount;
-          break;
-        case 'SURVEY':
-          surveyPayments += amount;
-          break;
-        default:
-          otherExpenses += amount;
+    const activationFees = (revenueMap['ACTIVATION_FEE']?.total || 0) + (revenueMap['ACCOUNT_ACTIVATION']?.total || 0);
+    const spinCosts = revenueMap['SPIN_COST']?.total || 0;
+    const companyRevenue = revenueMap['COMPANY_REVENUE']?.total || 0;
+    const unclaimedReferrals = revenueMap['UNCLAIMED_REFERRAL']?.total || 0;
+    const contentPayments = revenueMap['SURVEY']?.total || 0;
+    const otherRevenue = revenueBreakdown.reduce((sum: number, item: any) => {
+      if (!['ACTIVATION_FEE', 'ACCOUNT_ACTIVATION', 'SPIN_COST', 'COMPANY_REVENUE', 'UNCLAIMED_REFERRAL', 'SURVEY'].includes(item._id)) {
+        return sum + item.total;
       }
+      return sum;
+    }, 0);
+
+    const totalCompanyRevenue = activationFees + spinCosts + companyRevenue + unclaimedReferrals + contentPayments + otherRevenue;
+
+    // Map expense categories
+    const expenseMap: Record<string, { total: number; count: number }> = {};
+    for (const item of expenseBreakdown) {
+      expenseMap[item._id] = { total: item.total, count: item.count };
     }
 
-    const totalCompanyExpenses = userPayouts + bonuses + referralCommissions + 
-                                  spinPrizes + taskPayments + surveyPayments + otherExpenses;
-    
+    const userPayouts = expenseMap['WITHDRAWAL']?.total || 0;
+    const bonuses = expenseMap['BONUS']?.total || 0;
+    const referralCommissions = expenseMap['REFERRAL']?.total || 0;
+    const spinPrizes = (expenseMap['SPIN_WIN']?.total || 0) + (expenseMap['SPIN_PRIZE']?.total || 0);
+    const taskPayments = expenseMap['TASK_PAYMENT']?.total || 0;
+    const surveyPayments = expenseMap['SURVEY']?.total || 0;
+    const adminCredits = expenseMap['ADMIN_CREDIT']?.total || 0;
+    const otherExpenses = expenseBreakdown.reduce((sum: number, item: any) => {
+      if (!['WITHDRAWAL', 'BONUS', 'REFERRAL', 'SPIN_WIN', 'SPIN_PRIZE', 'TASK_PAYMENT', 'SURVEY', 'ADMIN_CREDIT'].includes(item._id)) {
+        return sum + item.total;
+      }
+      return sum;
+    }, 0);
+
+    const totalCompanyExpenses = userPayouts + bonuses + referralCommissions + spinPrizes + taskPayments + surveyPayments + adminCredits + otherExpenses;
     const netProfit = totalCompanyRevenue - totalCompanyExpenses;
 
     return NextResponse.json({
       success: true,
       data: {
-        totalCompanyRevenue,
-        totalCompanyExpenses,
-        netProfit,
+        summary: {
+          totalRevenue: totalCompanyRevenue,
+          totalExpenses: totalCompanyExpenses,
+          netProfit: netProfit,
+          profitMargin: totalCompanyRevenue > 0 ? ((netProfit / totalCompanyRevenue) * 100).toFixed(2) + '%' : '0%',
+        },
         revenueBreakdown: {
-          activationFees,
-          unclaimedReferrals,
-          spinCosts,
-          contentPayments,
-          otherRevenue
+          activationFees: { amount: activationFees, count: (revenueMap['ACTIVATION_FEE']?.count || 0) + (revenueMap['ACCOUNT_ACTIVATION']?.count || 0) },
+          spinCosts: { amount: spinCosts, count: revenueMap['SPIN_COST']?.count || 0 },
+          companyRevenue: { amount: companyRevenue, count: revenueMap['COMPANY_REVENUE']?.count || 0 },
+          unclaimedReferrals: { amount: unclaimedReferrals, count: revenueMap['UNCLAIMED_REFERRAL']?.count || 0 },
+          contentPayments: { amount: contentPayments, count: revenueMap['SURVEY']?.count || 0 },
+          other: { amount: otherRevenue, count: 0 }
         },
         expenseBreakdown: {
-          userPayouts,
-          bonuses,
-          referralCommissions,
-          spinPrizes,
-          taskPayments,
-          surveyPayments,
-          otherExpenses
-        }
-      }
+          userPayouts: { amount: userPayouts, count: expenseMap['WITHDRAWAL']?.count || 0 },
+          bonuses: { amount: bonuses, count: expenseMap['BONUS']?.count || 0 },
+          referralCommissions: { amount: referralCommissions, count: expenseMap['REFERRAL']?.count || 0 },
+          spinPrizes: { amount: spinPrizes, count: (expenseMap['SPIN_WIN']?.count || 0) + (expenseMap['SPIN_PRIZE']?.count || 0) },
+          taskPayments: { amount: taskPayments, count: expenseMap['TASK_PAYMENT']?.count || 0 },
+          surveyPayments: { amount: surveyPayments, count: expenseMap['SURVEY']?.count || 0 },
+          adminCredits: { amount: adminCredits, count: expenseMap['ADMIN_CREDIT']?.count || 0 },
+          other: { amount: otherExpenses, count: 0 }
+        },
+        timestamp: new Date().toISOString(),
+      },
     });
   } catch (error: any) {
     console.error('[v0] Breakdown stats error:', error);
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: error.message || 'Failed to calculate breakdown' },
+      { status: 500 }
+    );
   }
 }

@@ -1,21 +1,21 @@
 // app/api/admin/spin/toggle/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { connectToDatabase, Profile, SpinSettings, AdminAuditLog } from '@/app/lib/models';
+import { validateAdminAuth } from '../../middleware';
+import { connectToDatabase, SpinSettings, AdminAuditLog, Profile } from '@/app/lib/models';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    // Validate admin access
+    const authResult = await validateAdminAuth();
+    if (!authResult.authorized) {
+      return NextResponse.json(
+        { success: false, message: authResult.error },
+        { status: authResult.status || 401 }
+      );
     }
 
     await connectToDatabase();
-    const adminUser = await Profile.findOne({ email: session.user.email });
-    
-    if (!adminUser || adminUser.role !== 'admin') {
-      return NextResponse.json({ success: false, message: 'Admin access required' }, { status: 403 });
-    }
+    const adminUser = await Profile.findOne({ email: authResult.email }).select('_id');
 
     const { activate } = await request.json();
 

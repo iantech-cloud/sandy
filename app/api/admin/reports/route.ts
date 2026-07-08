@@ -1,27 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { connectToDatabase, Profile, Transaction, Withdrawal, Company } from '@/app/lib/models';
+import { validateAdminAuth } from '../middleware';
+import { connectToDatabase, Transaction, Withdrawal, Company } from '@/app/lib/models';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    
-    if (!session?.user?.email) {
+    // Validate admin access
+    const authResult = await validateAdminAuth();
+    if (!authResult.authorized) {
       return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
+        { success: false, message: authResult.error },
+        { status: authResult.status || 401 }
       );
     }
 
     await connectToDatabase();
-
-    const user = await Profile.findOne({ email: session.user.email });
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, message: 'Forbidden - Admin access required' },
-        { status: 403 }
-      );
-    }
 
     let company = await Company.findOne({ email: 'company@hustlehubafrica.com' });
     if (!company) {

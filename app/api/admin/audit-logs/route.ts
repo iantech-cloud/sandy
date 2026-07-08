@@ -1,33 +1,29 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { NextRequest } from 'next/server';
+import { validateAdminRequest } from '@/app/lib/admin/auth';
+import { apiSuccess, apiServerError } from '@/app/lib/admin/api-response';
 import { connectToDatabase } from '@/app/lib/mongoose';
 import { AdminAuditLog } from '@/app/lib/models';
+import { parsePaginationParams, buildPaginationMeta } from '@/app/lib/admin/pagination';
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
-    const session = await auth();
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // SECURITY: Validate admin access first
+    const authValidation = await validateAdminRequest();
+    if (!authValidation.authorized) {
+      return apiServerError(authValidation.error, authValidation.status);
     }
 
     await connectToDatabase();
 
-    // Check if user is admin (you might need to adjust this based on your user model)
-    const User = (await import('@/app/lib/models')).User || (await import('@/app/lib/models')).Profile;
-    const user = await User.findOne({ email: session.user.email });
-    
-    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
     // Get query parameters
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = searchParams.get('page') || '1';
+    const limit = searchParams.get('limit') || '10';
     const search = searchParams.get('search');
     const action = searchParams.get('action');
     const status = searchParams.get('status');
+
+    const { skip, limit: parsedLimit } = parsePaginationParams(page, limit);
 
     // Build filter
     const filter: any = {};
@@ -49,33 +45,25 @@ export async function GET(request: NextRequest) {
       filter.status = status;
     }
 
-    // Calculate pagination
-    const skip = (page - 1) * limit;
-
     // Fetch logs with population
     const logs = await (AdminAuditLog as any)
       .find(filter)
       .populate('actor_id', 'username email')
       .sort({ created_at: -1 })
       .skip(skip)
-      .limit(limit)
+      .limit(parsedLimit)
       .lean();
 
     // Get total count
     const total = await (AdminAuditLog as any).countDocuments(filter);
+    const pagination = buildPaginationMeta(parseInt(page), parsedLimit, total);
 
-    return NextResponse.json({
+    return apiSuccess({
       logs,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    });
+      pagination,
+    }, 'Audit logs retrieved successfully');
   } catch (error) {
-    console.error('Error fetching audit logs:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('[v0] Error fetching audit logs:', error);
+    return apiServerError(error);
   }
 }
