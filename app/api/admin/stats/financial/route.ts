@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateAdminAuth } from '../../middleware';
-import { connectToDatabase, Profile, UserWallet, Transaction, UserSession } from '@/app/lib/models';
+import { connectToDatabase, Profile, SpinWallet, Transaction, Withdrawal } from '@/app/lib/models';
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,24 +29,30 @@ export async function GET(req: NextRequest) {
     ] = await Promise.all([
       Profile.countDocuments({ is_verified: true }),
       Profile.countDocuments({ is_verified: true, last_login: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }),
-      UserWallet.aggregate([{ $group: { _id: null, total: { $sum: '$balance' } } }]),
-      UserWallet.aggregate([{ $match: { wallet_type: 'spin' }, $group: { _id: null, total: { $sum: '$balance' } } }]),
-      UserSession.countDocuments({ status: 'pending_withdrawal' }),
-      UserSession.aggregate([
-        { $match: { status: 'pending_withdrawal' } },
-        { $group: { _id: null, total: { $sum: '$withdrawal_amount' } } }
+      // Sum all user wallet balances from Profile collection
+      (Profile as any).aggregate([{ $group: { _id: null, total: { $sum: '$balance_cents' } } }]),
+      // Sum all spin wallet balances from SpinWallet collection
+      (SpinWallet as any).aggregate([{ $group: { _id: null, total: { $sum: '$balance_cents' } } }]),
+      // Count pending withdrawals
+      Withdrawal.countDocuments({ status: 'pending' }),
+      // Sum pending withdrawal amounts
+      (Withdrawal as any).aggregate([
+        { $match: { status: 'pending' } },
+        { $group: { _id: null, total: { $sum: '$amount_cents' } } }
       ]),
-      Transaction.countDocuments({
-        type: { $in: ['WITHDRAWAL'] },
+      // Count completed withdrawals this month
+      Withdrawal.countDocuments({
         status: 'completed',
-        created_at: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
+        processed_at: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
       }),
-      Transaction.aggregate([
-        { $match: { type: { $in: ['REFERRAL', 'ACTIVATION_FEE', 'TASK_PAYMENT', 'BONUS'] } } },
+      // Sum all revenue transactions
+      (Transaction as any).aggregate([
+        { $match: { target_type: 'company', status: 'completed' } },
         { $group: { _id: null, total: { $sum: '$amount' } } }
       ]),
-      Transaction.aggregate([
-        { $match: { type: { $in: ['WITHDRAWAL', 'ADMIN_DEBIT'] } } },
+      // Sum all expense transactions (user payouts)
+      (Transaction as any).aggregate([
+        { $match: { target_type: 'user', status: 'completed' } },
         { $group: { _id: null, total: { $sum: '$amount' } } }
       ]),
     ]);
