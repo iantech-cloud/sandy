@@ -1,5 +1,3 @@
-'use server';
-
 import { auth } from '@/auth';
 import { connectToDatabase, Profile } from '@/app/lib/models';
 
