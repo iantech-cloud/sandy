@@ -21,10 +21,16 @@ export async function requireAuth() {
 /**
  * Check if user meets all status requirements (credentials only).
  * Redirects to the appropriate page if a requirement is not met.
+ * Admins bypass all activation/approval checks.
  */
 export async function checkUserStatus() {
   const session = await requireAuth();
   const user = session.user;
+
+  // Admins bypass activation and approval requirements
+  if (user.role === 'admin' || user.role === 'super_admin') {
+    return session;
+  }
 
   // Credentials users go straight to activation — no email-verification step.
   if (!user.isActivationPaid) {
@@ -40,12 +46,19 @@ export async function checkUserStatus() {
 /**
  * Require specific user role
  * Redirects to unauthorized if role doesn't match
+ * Note: Admins can access both admin and dashboard routes
  */
 export async function requireRole(allowedRoles: string[]) {
-  const session = await checkUserStatus();
+  const session = await requireAuth();
+  const user = session.user;
   
-  if (!allowedRoles.includes(session.user.role)) {
-    redirect('/unauthorized');
+  // Admins can bypass role checks for most routes
+  if ((user.role === 'admin' || user.role === 'super_admin') && !allowedRoles.includes('user_only')) {
+    return session;
+  }
+
+  if (!allowedRoles.includes(user.role)) {
+    redirect('/dashboard');
   }
   
   return session;
@@ -78,6 +91,7 @@ export async function hasRole(role: string): Promise<boolean> {
 /**
  * Check if user meets status requirements (without redirect)
  * Useful for conditional rendering
+ * Admins always meet requirements (bypass activation/approval)
  */
 export async function getUserStatus() {
   try {
@@ -93,7 +107,17 @@ export async function getUserStatus() {
 
     const missingRequirements: string[] = [];
 
-    // Credentials-only checks
+    // Admins always meet requirements
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      return {
+        authenticated: true,
+        meetsRequirements: true,
+        missingRequirements: [],
+        user
+      };
+    }
+
+    // Regular users - check activation and approval
     if (!user.isActivationPaid) missingRequirements.push('activation_payment');
     if (!user.is_approved || !user.is_active) missingRequirements.push('approval');
 
@@ -126,6 +150,7 @@ export async function refreshSession(path?: string) {
 
 /**
  * Check if user can access a specific path
+ * Admins can access both /admin and /dashboard routes
  */
 export async function canAccessPath(path: string): Promise<boolean> {
   try {
@@ -133,20 +158,25 @@ export async function canAccessPath(path: string): Promise<boolean> {
     
     if (!user) return false;
 
-    // Admin routes
+    // Admin routes - admins only
     if (path.startsWith('/admin')) {
       return ['admin', 'super_admin'].includes(user.role);
+    }
+
+    // Dashboard routes - regular users and admins (admins bypass activation)
+    if (path.startsWith('/dashboard') || path.startsWith('/account')) {
+      // Admins can always access dashboard
+      if (['admin', 'super_admin'].includes(user.role)) {
+        return true;
+      }
+      // Regular users need to meet requirements
+      const status = await getUserStatus();
+      return status.meetsRequirements;
     }
 
     // Support routes
     if (path.startsWith('/support')) {
       return ['support', 'admin', 'super_admin'].includes(user.role);
-    }
-
-    // Dashboard routes - check user status
-    if (path.startsWith('/dashboard') || path.startsWith('/account')) {
-      const status = await getUserStatus();
-      return status.meetsRequirements;
     }
 
     return true;
@@ -166,9 +196,17 @@ export async function protectDashboard() {
 
 /**
  * Protect admin routes with admin role requirement
+ * Does not check activation/approval - admins bypass those
  */
 export async function protectAdmin() {
-  return await requireRole(['admin', 'super_admin']);
+  const session = await requireAuth();
+  
+  // Check role
+  if (!['admin', 'super_admin'].includes(session.user.role)) {
+    redirect('/dashboard');
+  }
+  
+  return session;
 }
 
 /**

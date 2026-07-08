@@ -161,20 +161,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
           
           // SECURITY: Check account status before issuing session
-          // Reject banned, suspended, inactive, or unapproved accounts
+          // Only reject banned and suspended accounts
           if (user.status === 'banned' || user.status === 'suspended') {
             console.warn('[v0] Auth rejected: User account is ' + user.status, email);
             return null;
           }
 
-          if (!user.is_active) {
-            console.warn('[v0] Auth rejected: User account is inactive', email);
-            return null;
-          }
-
-          if (!user.is_approved) {
-            console.warn('[v0] Auth rejected: User account not approved', email);
-            return null;
+          // Allow inactive/unapproved users to login - they will be redirected to appropriate flow
+          // Admins bypass activation/approval checks
+          if (user.role !== 'admin' && user.role !== 'super_admin') {
+            // Regular users can still login even if inactive or unapproved
+            // The login flow will redirect them to activation or approval page
+            console.log('[v0] Auth: User account needs activation/approval', {
+              email,
+              is_active: user.is_active,
+              is_approved: user.is_approved,
+              status: user.status
+            });
           }
 
           // Update last login

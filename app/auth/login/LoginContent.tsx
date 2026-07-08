@@ -286,14 +286,16 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
 
       const user = sessionData.user;
 
-      // Check if user is admin and redirect accordingly
+      // Check if user is admin - they bypass all other checks
       if (user.role === 'admin' || user.role === 'super_admin') {
-        // Admins go straight to admin dashboard, bypassing activation checks
+        // Admins go straight to admin dashboard
         router.push('/admin');
         return;
       }
 
-      // Activation check (only for regular users)
+      // For regular users, check status in this order:
+
+      // 1. Activation payment check
       if (!user.isActivationPaid && !user.activation_paid_at) {
         // Include phone number in URL (remove + prefix if present)
         const phone = (user.phone_number || user.phone || '')?.replace(/^\+/, '');
@@ -301,16 +303,20 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
         router.push(activateUrl);
         return;
       }
-      // Approval / active check (only for regular users)
+
+      // 2. Approval check
       if (!user.is_approved || user.approval_status === 'pending') {
         router.push('/auth/pending-approval');
         return;
       }
+
+      // 3. Active status check
       if (!user.is_active || user.status !== 'active') {
         router.push('/auth/pending-approval');
         return;
       }
-      // Regular user - redirect to dashboard
+
+      // All checks passed - redirect to dashboard or callback URL
       router.push(redirectUrl);
     } catch {
       setMessage('Error checking user status. Please try again.');
