@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { Loader2, CheckCircle, XCircle, Clock, Phone, UserCheck } from 'lucide-react';
 import { checkActivationPaymentStatus, completeActivationAfterPayment } from '@/app/actions/activation';
 
@@ -18,6 +19,7 @@ interface PaymentStatus {
 export default function MpesaWaitingContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { data: session, update: updateSession } = useSession();
   
   const messageReference = searchParams.get('messageReference');
   const amount = searchParams.get('amount');
@@ -131,26 +133,43 @@ export default function MpesaWaitingContent() {
         // Even if activation fails, we still show payment success
         // but log the error for debugging
       } else {
-        console.log('[v0] Account activation successful, refreshing session...');
+        console.log('[v0] Account activation successful, updating session...');
         
-        // ✅ NEW: Refresh session after successful activation
-        // This ensures the JWT token is updated with new user status
-        try {
-          const refreshResponse = await fetch('/api/auth/refresh-session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          
-          if (refreshResponse.ok) {
-            const refreshData = await refreshResponse.json();
-            console.log('[v0] Session refreshed successfully:', refreshData.session?.user);
-          } else {
-            console.warn('[v0] Session refresh returned non-OK status:', refreshResponse.status);
+        // ✅ CRITICAL FIX: Update session using NextAuth's update() function
+        // This triggers the JWT callback to re-run, which fetches fresh data from DB
+        if (updateSession) {
+          try {
+            console.log('[v0] Calling NextAuth session.update() to refresh JWT callback...');
+            const updatedSession = await updateSession();
+            
+            if (updatedSession) {
+              console.log('[v0] Session updated successfully via NextAuth:', {
+                is_active: updatedSession.user?.is_active,
+                approval_status: updatedSession.user?.approval_status,
+                rank: updatedSession.user?.rank
+              });
+            } else {
+              console.warn('[v0] Session update returned undefined');
+            }
+          } catch (updateError) {
+            console.error('[v0] NextAuth session update error:', updateError);
+            // Fall back to refresh endpoint if NextAuth update fails
+            try {
+              const refreshResponse = await fetch('/api/auth/refresh-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+              });
+              
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json();
+                console.log('[v0] Fallback session refresh successful:', refreshData.session?.user);
+              }
+            } catch (refreshError) {
+              console.error('[v0] Fallback session refresh error:', refreshError);
+            }
           }
-        } catch (refreshError) {
-          console.error('[v0] Session refresh error (not critical):', refreshError);
-          // Don't fail the whole flow if session refresh fails
-          // User will eventually get refreshed token on next request
+        } else {
+          console.warn('[v0] updateSession not available, session not updated');
         }
       }
     } catch (error) {
