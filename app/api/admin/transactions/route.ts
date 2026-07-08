@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { connectToDatabase, Profile, ChatForeignersTransaction } from '@/app/lib/models';
+import { NextRequest } from 'next/server';
+import { validateAdminRequest } from '@/app/lib/admin/auth';
+import { apiSuccess, apiServerError } from '@/app/lib/admin/api-response';
+import { connectToDatabase, ChatForeignersTransaction } from '@/app/lib/models';
+import { parsePaginationParams, buildPaginationMeta } from '@/app/lib/admin/pagination';
 import mongoose from 'mongoose';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -39,17 +41,13 @@ const DEBIT_TYPES = new Set([
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    // SECURITY: Validate admin access first
+    const authValidation = await validateAdminRequest();
+    if (!authValidation.authorized) {
+      return apiServerError(authValidation.error, authValidation.status);
     }
 
     await connectToDatabase();
-
-    const user = await Profile.findOne({ email: session.user.email }).select('role').lean();
-    if (!user || (user as any).role !== 'admin') {
-      return NextResponse.json({ success: false, message: 'Forbidden' }, { status: 403 });
-    }
 
     const { searchParams } = new URL(request.url);
     const page       = Math.max(parseInt(searchParams.get('page')  || '1'),  1);
@@ -312,21 +310,15 @@ export async function GET(request: NextRequest) {
       failedCount:    (lr.failedCount[0]?.n    || 0) + (cr.failedCount[0]?.n    || 0),
     };
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        transactions: rows,
-        summary,
-        count: rows.length,
-        pagination: { page, limit, total: totalCount, pages },
-      },
-    });
+    return apiSuccess({
+      transactions: rows,
+      summary,
+      count: rows.length,
+      pagination: buildPaginationMeta(page, limit, totalCount),
+    }, 'Transactions retrieved successfully');
 
   } catch (error) {
-    console.error('Admin transactions API error:', error);
-    return NextResponse.json(
-      { success: false, message: 'Internal server error', error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    console.error('[v0] Admin transactions API error:', error);
+    return apiServerError(error);
   }
 }

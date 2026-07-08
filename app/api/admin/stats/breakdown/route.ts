@@ -1,20 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { connectToDatabase, Profile, Transaction } from '@/app/lib/models';
+import { NextRequest } from 'next/server';
+import { validateAdminRequest } from '@/app/lib/admin/auth';
+import { apiServerError, apiSuccess } from '@/app/lib/admin/api-response';
+import { connectToDatabase, Transaction } from '@/app/lib/models';
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.email) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    // SECURITY: Validate admin access first
+    const authValidation = await validateAdminRequest();
+    if (!authValidation.authorized) {
+      return apiServerError(authValidation.error, authValidation.status);
     }
 
     await connectToDatabase();
-
-    const adminUser = await (Profile as any).findOne({ email: session.user.email }).select('role').lean();
-    if (adminUser?.role !== 'admin') {
-      return NextResponse.json({ success: false, message: 'Admin access required' }, { status: 403 });
-    }
 
     // Use aggregation pipelines for unlimited record processing (no hard limit)
     const [revenueAgg, expenseAgg] = await Promise.all([
@@ -138,32 +135,29 @@ export async function GET(req: NextRequest) {
     
     const netProfit = totalCompanyRevenue - totalCompanyExpenses;
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        totalCompanyRevenue,
-        totalCompanyExpenses,
-        netProfit,
-        revenueBreakdown: {
-          activationFees,
-          unclaimedReferrals,
-          spinCosts,
-          contentPayments,
-          otherRevenue
-        },
-        expenseBreakdown: {
-          userPayouts,
-          bonuses,
-          referralCommissions,
-          spinPrizes,
-          taskPayments,
-          surveyPayments,
-          otherExpenses
-        }
+    return apiSuccess({
+      totalCompanyRevenue,
+      totalCompanyExpenses,
+      netProfit,
+      revenueBreakdown: {
+        activationFees,
+        unclaimedReferrals,
+        spinCosts,
+        contentPayments,
+        otherRevenue
+      },
+      expenseBreakdown: {
+        userPayouts,
+        bonuses,
+        referralCommissions,
+        spinPrizes,
+        taskPayments,
+        surveyPayments,
+        otherExpenses
       }
-    });
+    }, 'Financial breakdown retrieved successfully');
   } catch (error: any) {
     console.error('[v0] Breakdown stats error:', error);
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return apiServerError(error);
   }
 }
