@@ -142,60 +142,6 @@ export async function POST(request: NextRequest) {
 // attempts on 2FA codes. 2FA verification during login is now handled exclusively
 // through the credentials provider in auth.ts, which has rate limiting and session protection.
 
-/**
- * DELETE - Disable 2FA (requires authentication)
- */
-export async function DELETE(request: NextRequest) {
-  try {
-    // Get the authenticated user's session
-    // --- NextAuth v5/Auth.js change: Use auth() to get the session ---
-    const session = await auth();
-
-    if (!session || !session.user?.email) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in.' },
-        { status: 401 }
-      );
-    }
-
-    const userEmail = session.user.email;
-
-    // Connect to database
-    await connectToDatabase();
-
-    // Find and update the profile
-    const profile = await Profile.findOne({ email: userEmail });
-    
-    if (!profile) {
-      return NextResponse.json(
-        { error: 'User profile not found.' },
-        { status: 404 }
-      );
-    }
-
-    // Disable 2FA
-    profile.twoFAEnabled = false;
-    profile.twoFASecret = null;
-    profile.twoFASetupDate = null;
-    profile.twoFABackupCodes = [];
-    await profile.save();
-
-    console.log('2FA disabled successfully for user:', userEmail);
-
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Two-factor authentication has been successfully disabled for your account.',
-        twoFAEnabled: false,
-      },
-      { status: 200 }
-    );
-  } catch (error) {
-    console.error('Error disabling 2FA:', error);
-    return NextResponse.json(
-      { error: 'An error occurred while disabling 2FA.' },
-      { status: 500 }
-    );
-  }
-}
+// REMOVED: DELETE method - use /api/auth/2fa/enable DELETE instead for disabling 2FA
+// The enable endpoint now has password re-confirmation for security.
 
