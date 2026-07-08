@@ -1,20 +1,21 @@
 // app/api/admin/spin/analytics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { validateAdminAuth } from '../../middleware';
-import { connectToDatabase, SpinSettings } from '@/app/lib/models';
+import { auth } from '@/auth';
+import { connectToDatabase, Profile, SpinSettings } from '@/app/lib/models';
 
 export async function GET(request: NextRequest) {
   try {
-    // Validate admin access
-    const authResult = await validateAdminAuth();
-    if (!authResult.authorized) {
-      return NextResponse.json(
-        { success: false, message: authResult.error },
-        { status: authResult.status || 401 }
-      );
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
     await connectToDatabase();
+    const adminUser = await Profile.findOne({ email: session.user.email });
+    
+    if (!adminUser || adminUser.role !== 'admin') {
+      return NextResponse.json({ success: false, message: 'Admin access required' }, { status: 403 });
+    }
 
     const spinSettings = await SpinSettings.findOne({}).lean();
 

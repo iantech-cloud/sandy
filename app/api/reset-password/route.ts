@@ -5,7 +5,6 @@ import speakeasy from 'speakeasy';
 import { sendVerificationCodeEmail } from '@/app/actions/email';
 import { connectToDatabase } from '@/app/lib/mongoose';
 import { Profile, VerificationToken } from '@/app/lib/models';
-import { rateLimit } from '@/app/lib/rate-limit';
 
 // Generate 6-digit code
 function generateVerificationCode(): string {
@@ -52,22 +51,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // SECURITY: Rate limit forgot password requests to prevent user enumeration and spam
-      const { exceeded: forgotRateLimitExceeded } = rateLimit(
-        `pwreset:forgot:${email}`,
-        3,  // Max 3 forgot password attempts
-        30 * 60_000  // Per 30 minutes
-      );
-      if (forgotRateLimitExceeded) {
-        // Return generic message to prevent user enumeration
-        return NextResponse.json({
-          success: true,
-          needsVerification: true,
-          verificationMethod: 'email',
-          message: 'If this email exists, a verification code has been sent.'
-        });
-      }
-
       // Check if user exists
       const user = await Profile.findOne({ email }).select('+password +twoFASecret');
 
@@ -108,8 +91,6 @@ export async function POST(request: NextRequest) {
         });
 
         // Store in database
-        // SECURITY: Do NOT store plaintext password in metadata.
-        // We'll re-request and hash it after verification succeeds.
         const token = new VerificationToken({
           token: code,
           user_id: user._id,
@@ -117,6 +98,7 @@ export async function POST(request: NextRequest) {
           expires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
           metadata: {
             email,
+            new_password: newPassword,
             verification_method: method,
             type: 'forgot'
           }
@@ -151,33 +133,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Second request - verify code and reset password
-      // SECURITY: Rate limit code verification attempts to prevent brute-force
-      const { exceeded: codeVerifyRateLimitExceeded } = rateLimit(
-        `pwreset:code:${email}`,
-        3,  // Max 3 verification attempts
-        10 * 60_000  // Per 10 minutes
-      );
-      if (codeVerifyRateLimitExceeded) {
-        return NextResponse.json(
-          { error: 'Too many verification attempts. Please try again later.' },
-          { status: 429 }
-        );
-      }
-
-      if (!newPassword) {
-        return NextResponse.json(
-          { error: 'New password is required to complete password reset' },
-          { status: 400 }
-        );
-      }
-
-      if (newPassword.length < 8) {
-        return NextResponse.json(
-          { error: 'Password must be at least 8 characters long' },
-          { status: 400 }
-        );
-      }
-
       // Get the most recent valid token
       const storedToken = await VerificationToken.findOne({
         user_id: user._id,
@@ -216,8 +171,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Hash new password and update (password is now provided in the verification request)
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      // Hash new password and update
+      const hashedPassword = await bcrypt.hash(storedToken.metadata.new_password, 10);
       user.password = hashedPassword;
       await user.save();
 
@@ -309,8 +264,6 @@ export async function POST(request: NextRequest) {
       });
 
       // Store in database
-      // SECURITY: Do NOT store plaintext passwords in metadata.
-      // We verify currentPassword now, and will re-request newPassword after verification.
       const token = new VerificationToken({
         token: code,
         user_id: user._id,
@@ -318,6 +271,8 @@ export async function POST(request: NextRequest) {
         expires: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
         metadata: {
           email: userEmail,
+          current_password: currentPassword,
+          new_password: newPassword,
           verification_method: method,
           type: 'reset'
         }
@@ -352,33 +307,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Second request - verify code and change password
-    // SECURITY: Rate limit code verification attempts to prevent brute-force
-    const { exceeded: authenticatedCodeRateLimitExceeded } = rateLimit(
-      `pwreset:code:${userEmail}`,
-      3,  // Max 3 verification attempts
-      10 * 60_000  // Per 10 minutes
-    );
-    if (authenticatedCodeRateLimitExceeded) {
-      return NextResponse.json(
-        { error: 'Too many verification attempts. Please try again later.' },
-        { status: 429 }
-      );
-    }
-
-    if (!newPassword) {
-      return NextResponse.json(
-        { error: 'New password is required to complete password change' },
-        { status: 400 }
-      );
-    }
-
-    if (newPassword.length < 8) {
-      return NextResponse.json(
-        { error: 'Password must be at least 8 characters long' },
-        { status: 400 }
-      );
-    }
-
     // Get the most recent valid token
     const storedToken = await VerificationToken.findOne({
       user_id: user._id,
@@ -392,6 +320,20 @@ export async function POST(request: NextRequest) {
         { error: 'Verification code expired or invalid. Please try again.' },
         { status: 400 }
       );
+    }
+
+    // Verify current password again (security check)
+    if (storedToken.metadata.current_password) {
+      const isPasswordValid = await bcrypt.compare(
+        storedToken.metadata.current_password, 
+        user.password
+      );
+      if (!isPasswordValid) {
+        return NextResponse.json(
+          { error: 'Password verification failed. Please try again.' },
+          { status: 400 }
+        );
+      }
     }
 
     // Verify the code
@@ -417,8 +359,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash new password and update (password is now provided in the verification request)
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    // Hash new password and update
+    const hashedPassword = await bcrypt.hash(storedToken.metadata.new_password, 10);
     user.password = hashedPassword;
     await user.save();
 

@@ -200,8 +200,3 @@ export async function hasAnyRole(roles: string[]): Promise<boolean> {
   const user = await getCurrentUser();
   return user ? roles.includes(user.role) : false;
 }
-
-/**
- * Alias for protectAdmin - used by admin pages
- */
-export const protectAdminRoute = protectAdmin;
