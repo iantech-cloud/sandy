@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase, Profile, AuditLog } from '@/app/lib/models';
+import { connectToDatabase, Profile } from '@/app/lib/models';
 import {
   checkAdminAuth,
   applyAdminRateLimit,

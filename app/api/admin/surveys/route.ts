@@ -142,31 +142,34 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id || (session.user.role !== 'admin' && session.user.role !== 'super_admin')) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 403 }
-      );
+    // 1. Admin authorization
+    const authResult = await checkAdminAuth(request);
+    if (!authResult.authorized) {
+      return authResult.error;
     }
 
+    // 2. Rate limiting
+    const rateLimitResult = applyAdminRateLimit(request, authResult.userId);
+    if (rateLimitResult.limited) {
+      return rateLimitResult.response;
+    }
+
+    // 3. Validate request body
     const body = await request.json();
     const { title, description, reward_amount, questions } = body;
 
     if (!title || !description) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+      return adminError('Missing required fields: title and description', 400);
     }
 
+    // 4. Database connection
     await connectToDatabase();
 
     if (!Survey) {
       Survey = mongoose.models.Survey || mongoose.model('Survey', surveySchema);
     }
 
+    // 5. Create survey
     const survey = await Survey.create({
       title,
       description,
@@ -174,21 +177,38 @@ export async function POST(request: NextRequest) {
       questions: questions || [],
       question_count: questions?.length || 0,
       status: 'draft',
+      created_by: authResult.userId,
     });
 
-    return NextResponse.json(
+    // 6. Log the action
+    await logAdminAction(
+      authResult.userId,
+      authResult.name || authResult.email,
+      'SURVEY_CREATE',
+      'survey',
+      survey._id?.toString(),
+      { title, description, reward_amount },
+      'success'
+    );
+
+    return adminResponse(
       {
-        success: true,
         message: 'Survey created successfully',
-        data: survey,
+        survey: {
+          _id: survey._id?.toString(),
+          title,
+          description,
+          reward_amount,
+          status: 'draft',
+        },
       },
-      { status: 201 }
+      201
     );
   } catch (error) {
     console.error('[Admin] Surveys POST error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create survey' },
-      { status: 500 }
+    return adminError(
+      error instanceof Error ? error.message : 'Failed to create survey',
+      500
     );
   }
 }
