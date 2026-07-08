@@ -15,11 +15,10 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
     redirect('/auth/login?callbackUrl=/admin');
   }
 
-  // Check admin role from session JWT
+  // Check if user has admin role
   const userRole = session.user.role;
-  
   if (userRole !== 'admin' && userRole !== 'super_admin') {
-    redirect('/dashboard');
+    redirect('/unauthorized');
   }
 
   // Pass session to client component
