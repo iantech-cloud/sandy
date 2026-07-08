@@ -237,8 +237,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return { ...token, ...updateSession };
         }
 
-        // On initial sign in, populate token from user object
-        if (user && trigger === 'signIn') {
+        // On initial sign in with user data
+        if (user) {
           const userId = (user as any).id || (user as any).userId;
           const dashboardRoute = getDashboardRoute((user as any).role || 'user');
 
@@ -266,7 +266,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           };
         }
 
-        // For subsequent calls, ensure userId is always set
+        // For subsequent calls, ensure all required fields are preserved
         const userId = token.sub || token.userId || token.id;
         if (userId) {
           token.sub = userId;
@@ -283,32 +283,52 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     // ==================== SESSION CALLBACK ====================
     async session({ session, token }) {
-      if (!token || !token.userId) {
+      if (!token) {
         return session;
       }
 
-      const userId = token.userId;
+      // Ensure session.user exists
+      if (!session.user) {
+        session.user = {
+          id: '',
+          email: '',
+          role: 'user',
+          is_verified: false,
+          is_active: false,
+          is_approved: false,
+          approval_status: 'pending',
+          rank: 'Unactivated',
+          isActivationPaid: false,
+          status: 'inactive',
+          twoFAEnabled: false,
+          authMethod: 'credentials',
+        };
+      }
+
+      const userId = token.userId || token.sub || token.id;
+      if (userId) {
+        session.user.id = userId;
+      }
       
-      session.user.id = userId;
-      session.user.email = token.email as string || '';
-      session.user.name = token.name as string || '';
-      session.user.role = token.role as string || 'user';
-      session.user.is_verified = token.is_verified as boolean ?? false;
-      session.user.is_active = token.is_active as boolean ?? false;
-      session.user.is_approved = token.is_approved as boolean ?? false;
-      session.user.approval_status = token.approval_status as string || 'pending';
-      session.user.rank = token.rank as string || 'Unactivated';
+      session.user.email = (token.email as string) || '';
+      session.user.name = (token.name as string) || '';
+      session.user.role = (token.role as string) || 'user';
+      session.user.is_verified = (token.is_verified as boolean) ?? false;
+      session.user.is_active = (token.is_active as boolean) ?? false;
+      session.user.is_approved = (token.is_approved as boolean) ?? false;
+      session.user.approval_status = (token.approval_status as string) || 'pending';
+      session.user.rank = (token.rank as string) || 'Unactivated';
       session.user.activation_paid_at = token.activation_paid_at 
         ? new Date(token.activation_paid_at as any) 
         : undefined;
-      session.user.isActivationPaid = token.isActivationPaid as boolean ?? false;
-      session.user.status = token.status as string || 'inactive';
-      session.user.twoFAEnabled = token.twoFAEnabled as boolean ?? false;
-      session.user.authMethod = token.authMethod as string || 'credentials';
-      session.user.profile_completed = token.profile_completed as boolean ?? false;
-      session.user.phone_number = token.phone_number as string || null;
+      session.user.isActivationPaid = (token.isActivationPaid as boolean) ?? false;
+      session.user.status = (token.status as string) || 'inactive';
+      session.user.twoFAEnabled = (token.twoFAEnabled as boolean) ?? false;
+      session.user.authMethod = (token.authMethod as string) || 'credentials';
+      session.user.profile_completed = (token.profile_completed as boolean) ?? false;
+      session.user.phone_number = (token.phone_number as string) || null;
       
-      (session as any).dashboardRoute = token.dashboardRoute as string || '/dashboard';
+      (session as any).dashboardRoute = (token.dashboardRoute as string) || '/dashboard';
       
       return session;
     },
