@@ -378,10 +378,18 @@ export default function DashboardClient({ children }: DashboardClientProps) {
     <>
       <SessionMonitor />
       <div className="flex flex-col lg:flex-row min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-cyan-50/20 relative overflow-hidden">
-        <SideNav userName={user.name} onLogout={handleLogout} />
+        {/* Desktop Sidebar - hidden on mobile */}
+        <div className="hidden lg:block">
+          <SideNav userName={user.name} onLogout={handleLogout} />
+        </div>
+        
+        {/* Mobile Hamburger Menu - shown on mobile only */}
+        <div className="lg:hidden fixed top-4 left-4 z-50">
+          <HamburgerMenu userName={user.name} onLogout={handleLogout} />
+        </div>
         
         <main className="flex-1 p-4 md:p-8 pb-20 lg:pb-8 relative z-0 h-screen overflow-y-auto main-content-scrollbar">
-          <header className="relative z-50 flex justify-between items-center mb-6 bg-white/70 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-white/50">
+          <header className="relative z-40 flex justify-between items-center mb-6 bg-white/70 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-white/50">
             <div className="flex items-center space-x-3 flex-1">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
                 <Sparkles className="text-white w-5 h-5" />
@@ -399,6 +407,11 @@ export default function DashboardClient({ children }: DashboardClientProps) {
             {children}
           </DashboardProvider>
         </main>
+      </div>
+
+      {/* Mobile Bottom Navigation - shown on mobile only */}
+      <div className="fixed bottom-0 left-0 right-0 lg:hidden z-40 bg-white border-t border-gray-200">
+        <BottomNav userName={user.name} onLogout={handleLogout} />
       </div>
     </>
   );
