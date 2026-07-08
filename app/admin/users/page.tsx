@@ -1,19 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Filter, AlertCircle } from 'lucide-react';
+import { Search, AlertCircle, Trash2 } from 'lucide-react';
 
 interface User {
   _id: string;
   username: string;
   email: string;
-  phone_number: string;
-  is_active: boolean;
-  is_verified: boolean;
-  status: string;
-  rank: string;
-  createdAt: string;
-  is_approved: boolean;
+  role: 'user' | 'admin' | 'super_admin';
+  status: 'active' | 'inactive' | 'banned';
+  created_at: string;
+  last_login?: string;
+  account_balance: number;
 }
 
 interface UsersData {
@@ -24,6 +22,12 @@ interface UsersData {
     limit: number;
     pages: number;
   };
+  stats: {
+    totalUsers: number;
+    activeUsers: number;
+    admins: number;
+    totalBalance: number;
+  };
 }
 
 export default function UsersPage() {
@@ -32,11 +36,13 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [role, setRole] = useState('');
   const [status, setStatus] = useState('');
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadUsers();
-  }, [page, search, status]);
+  }, [page, search, role, status]);
 
   const loadUsers = async () => {
     try {
@@ -47,6 +53,7 @@ export default function UsersPage() {
         page: page.toString(),
         limit: '20',
         ...(search && { search }),
+        ...(role && { role }),
         ...(status && { status }),
       });
 
@@ -69,14 +76,67 @@ export default function UsersPage() {
     }
   };
 
-  const handleSearch = (value: string) => {
-    setSearch(value);
-    setPage(1);
+  const handleStatusChange = async (userId: string, newStatus: string) => {
+    try {
+      setProcessingId(userId);
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update user status');
+      }
+
+      await loadUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update user');
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  const handleStatusFilter = (value: string) => {
-    setStatus(value);
-    setPage(1);
+  const handleRoleChange = async (userId: string, newRole: string) => {
+    try {
+      setProcessingId(userId);
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update user role');
+      }
+
+      await loadUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update user');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDelete = async (userId: string) => {
+    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
+
+    try {
+      setProcessingId(userId);
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete user');
+      }
+
+      await loadUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete user');
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   if (loading) {
@@ -110,100 +170,184 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">User Management</h1>
-        <p className="text-slate-600 mt-1">
-          Total: {data?.pagination.total.toLocaleString()} users
-        </p>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-6 border border-slate-200">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-            <input
-              type="text"
-              placeholder="Search by username, email, or phone..."
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Filter size={20} className="text-slate-400" />
-            <select
-              value={status}
-              onChange={(e) => handleStatusFilter(e.target.value)}
-              className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="verified">Verified</option>
-            </select>
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Users Management</h1>
+          <p className="text-slate-600 mt-1">
+            Total: {data?.pagination.total.toLocaleString()} users
+          </p>
         </div>
       </div>
 
-      {/* Users Table */}
+      {/* Stats */}
+      {data && (
+        <div className="grid grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg shadow p-4 border border-slate-200">
+            <p className="text-slate-600 text-sm">Total Users</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{data.stats.totalUsers}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 border border-slate-200">
+            <p className="text-slate-600 text-sm">Active</p>
+            <p className="text-2xl font-bold text-green-600 mt-1">{data.stats.activeUsers}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 border border-slate-200">
+            <p className="text-slate-600 text-sm">Admins</p>
+            <p className="text-2xl font-bold text-blue-600 mt-1">{data.stats.admins}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 border border-slate-200">
+            <p className="text-slate-600 text-sm">Total Balance</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">KES {data.stats.totalBalance.toFixed(2)}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex gap-4">
+        <div className="flex-1 relative">
+          <Search size={18} className="absolute left-3 top-3 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search users by name or email..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <select
+          value={role}
+          onChange={(e) => {
+            setRole(e.target.value);
+            setPage(1);
+          }}
+          className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Roles</option>
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+          <option value="super_admin">Super Admin</option>
+        </select>
+        <select
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
+          className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="banned">Banned</option>
+        </select>
+      </div>
+
+      {/* Table */}
       <div className="bg-white rounded-lg shadow border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                   Username
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
-                  Phone
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  Role
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
-                  Rank
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  Balance (KES)
                 </th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
                   Joined
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody>
               {data?.users && data.users.length > 0 ? (
                 data.users.map((user) => (
-                  <tr key={user._id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                      {user.username}
+                  <tr
+                    key={user._id}
+                    className="border-b border-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      <p className="font-medium text-slate-900">{user.username}</p>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{user.email}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {user.phone_number || 'N/A'}
+                    <td className="px-6 py-4">
+                      <p className="text-slate-600 text-sm">{user.email}</p>
                     </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          user.is_active
-                            ? 'bg-green-100 text-green-700'
+                    <td className="px-6 py-4">
+                      <select
+                        value={user.role}
+                        onChange={(e) => handleRoleChange(user._id, e.target.value)}
+                        disabled={processingId === user._id}
+                        className={`px-2 py-1 rounded text-sm font-medium border-0 cursor-pointer ${
+                          user.role === 'super_admin'
+                            ? 'bg-purple-100 text-purple-700'
+                            : user.role === 'admin'
+                            ? 'bg-blue-100 text-blue-700'
                             : 'bg-slate-100 text-slate-700'
                         }`}
                       >
-                        {user.is_active ? 'Active' : 'Inactive'}
-                      </span>
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">Super Admin</option>
+                      </select>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{user.rank}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {new Date(user.createdAt).toLocaleDateString()}
+                    <td className="px-6 py-4">
+                      <select
+                        value={user.status}
+                        onChange={(e) => handleStatusChange(user._id, e.target.value)}
+                        disabled={processingId === user._id}
+                        className={`px-2 py-1 rounded text-sm font-medium border-0 cursor-pointer ${
+                          user.status === 'active'
+                            ? 'bg-green-100 text-green-700'
+                            : user.status === 'banned'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="banned">Banned</option>
+                      </select>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-medium text-slate-900">
+                        {user.account_balance?.toFixed(2) || '0.00'}
+                      </p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-slate-600 text-sm">
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleDelete(user._id)}
+                          disabled={processingId === user._id}
+                          className="p-2 hover:bg-slate-100 rounded transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 size={16} className="text-red-600" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-600">
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-600">
                     No users found
                   </td>
                 </tr>
@@ -217,22 +361,38 @@ export default function UsersPage() {
       {data && data.pagination.pages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-slate-600">
-            Page {data.pagination.page} of {data.pagination.pages}
+            Showing {data.users.length} of {data.pagination.total} users
           </p>
           <div className="flex gap-2">
             <button
               onClick={() => setPage(Math.max(1, page - 1))}
               disabled={page === 1}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               Previous
             </button>
+            <div className="flex items-center gap-2">
+              {Array.from({ length: Math.min(5, data.pagination.pages) }).map((_, i) => {
+                const pageNum = i + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                      page === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'border border-slate-300 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
             <button
-              onClick={() =>
-                setPage(Math.min(data.pagination.pages, page + 1))
-              }
+              onClick={() => setPage(Math.min(data.pagination.pages, page + 1))}
               disabled={page === data.pagination.pages}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               Next
             </button>
