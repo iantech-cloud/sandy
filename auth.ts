@@ -237,43 +237,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return { ...token, ...updateSession };
         }
 
-        // Only make database calls on initial sign in
-        if (user && (trigger === 'signIn' || !token.userId)) {
-          await connectToDatabase();
-          
-          const lookupQuery = user.id ? { _id: user.id } : { email: user.email };
-          const profile = await Profile.findOne(lookupQuery);
+        // On initial sign in, populate token from user object
+        if (user && trigger === 'signIn') {
+          const userId = (user as any).id || (user as any).userId;
+          const dashboardRoute = getDashboardRoute((user as any).role || 'user');
 
-          if (profile) {
-          const userId = profile._id.toString();
-            const dashboardRoute = getDashboardRoute(profile.role);
-
-            return {
-              ...token,
-              sub: userId,
-              id: userId,
-              userId: userId,
-              email: (profile.email || '').toLowerCase(),
-              name: profile.username || '',
-              role: profile.role || 'user',
-              dashboardRoute: dashboardRoute,
-              is_verified: profile.is_verified ?? false,
-              is_active: profile.is_active ?? false,
-              is_approved: profile.is_approved ?? false,
-              approval_status: profile.approval_status || 'pending',
-              rank: profile.rank || 'Unactivated',
-              activation_paid_at: profile.activation_paid_at || null,
-              isActivationPaid: !!profile.activation_paid_at,
-              status: profile.status || 'inactive',
-              twoFAEnabled: profile.twoFAEnabled || false,
-              profile_completed: profile.profile_completed || false,
-              phone_number: profile.phone_number || null,
-              authMethod: 'credentials',
-            };
-          }
+          return {
+            ...token,
+            sub: userId,
+            id: userId,
+            userId: userId,
+            email: (user.email || '').toLowerCase(),
+            name: user.name || '',
+            role: (user as any).role || 'user',
+            dashboardRoute: dashboardRoute,
+            is_verified: (user as any).is_verified ?? false,
+            is_active: (user as any).is_active ?? false,
+            is_approved: (user as any).is_approved ?? false,
+            approval_status: (user as any).approval_status || 'pending',
+            rank: (user as any).rank || 'Unactivated',
+            activation_paid_at: (user as any).activation_paid_at || null,
+            isActivationPaid: !!(user as any).activation_paid_at,
+            status: (user as any).status || 'inactive',
+            twoFAEnabled: (user as any).twoFAEnabled || false,
+            profile_completed: (user as any).profile_completed || false,
+            phone_number: (user as any).phone_number || null,
+            authMethod: 'credentials',
+          };
         }
 
-        // For subsequent calls, just return the existing token
+        // For subsequent calls, ensure userId is always set
         const userId = token.sub || token.userId || token.id;
         if (userId) {
           token.sub = userId;
