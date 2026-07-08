@@ -1,17 +1,25 @@
-import { auth } from '@/auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/app/lib/models';
 import mongoose from 'mongoose';
+import {
+  checkAdminAuth,
+  applyAdminRateLimit,
+  validatePagination,
+  adminResponse,
+  adminError,
+  logAdminAction,
+} from '@/app/lib/admin-middleware';
 
 const surveySchema = new mongoose.Schema(
   {
     title: String,
     description: String,
-    status: { type: String, default: 'draft' },
-    reward_amount: { type: Number, default: 0 },
-    total_responses: { type: Number, default: 0 },
-    question_count: { type: Number, default: 0 },
+    status: { type: String, enum: ['draft', 'active', 'inactive'], default: 'draft' },
+    reward_amount: { type: Number, default: 0, min: 0 },
+    total_responses: { type: Number, default: 0, min: 0 },
+    question_count: { type: Number, default: 0, min: 0 },
     questions: Array,
+    created_by: String,
   },
   { timestamps: true }
 );
@@ -20,31 +28,40 @@ let Survey: mongoose.Model<any>;
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-
-    if (!session?.user?.id || (session.user.role !== 'admin' && session.user.role !== 'super_admin')) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 403 }
-      );
+    // 1. Admin authorization
+    const authResult = await checkAdminAuth(request);
+    if (!authResult.authorized) {
+      return authResult.error;
     }
 
+    // 2. Rate limiting
+    const rateLimitResult = applyAdminRateLimit(request, authResult.userId);
+    if (rateLimitResult.limited) {
+      return rateLimitResult.response;
+    }
+
+    // 3. Database connection
     await connectToDatabase();
 
     if (!Survey) {
       Survey = mongoose.models.Survey || mongoose.model('Survey', surveySchema);
     }
 
-    const page = parseInt(request.nextUrl.searchParams.get('page') || '1');
-    const limit = parseInt(request.nextUrl.searchParams.get('limit') || '20');
+    // 4. Validate pagination
+    const pageParam = request.nextUrl.searchParams.get('page');
+    const limitParam = request.nextUrl.searchParams.get('limit');
+    const { page, limit, skip } = validatePagination(pageParam, limitParam);
+
     const search = request.nextUrl.searchParams.get('search') || '';
     const status = request.nextUrl.searchParams.get('status') || '';
-    const skip = (page - 1) * limit;
 
     const query: Record<string, any> = {};
 
     if (search) {
-      query.title = { $regex: search, $options: 'i' };
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
     }
 
     if (status) {
