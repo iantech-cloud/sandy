@@ -161,23 +161,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
           
           // SECURITY: Check account status before issuing session
-          // Only reject banned and suspended accounts
+          // Reject banned, suspended, inactive, or unapproved accounts
           if (user.status === 'banned' || user.status === 'suspended') {
             console.warn('[v0] Auth rejected: User account is ' + user.status, email);
             return null;
           }
 
-          // Allow inactive/unapproved users to login - they will be redirected to appropriate flow
-          // Admins bypass activation/approval checks
-          if (user.role !== 'admin' && user.role !== 'super_admin') {
-            // Regular users can still login even if inactive or unapproved
-            // The login flow will redirect them to activation or approval page
-            console.log('[v0] Auth: User account needs activation/approval', {
-              email,
-              is_active: user.is_active,
-              is_approved: user.is_approved,
-              status: user.status
-            });
+          if (!user.is_active) {
+            console.warn('[v0] Auth rejected: User account is inactive', email);
+            return null;
+          }
+
+          if (!user.is_approved) {
+            console.warn('[v0] Auth rejected: User account not approved', email);
+            return null;
           }
 
           // Update last login
@@ -237,36 +234,43 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return { ...token, ...updateSession };
         }
 
-        // On initial sign in with user data
-        if (user) {
-          const userId = (user as any).id || (user as any).userId;
-          const dashboardRoute = getDashboardRoute((user as any).role || 'user');
+        // Only make database calls on initial sign in
+        if (user && (trigger === 'signIn' || !token.userId)) {
+          await connectToDatabase();
+          
+          const lookupQuery = user.id ? { _id: user.id } : { email: user.email };
+          const profile = await Profile.findOne(lookupQuery);
 
-          return {
-            ...token,
-            sub: userId,
-            id: userId,
-            userId: userId,
-            email: (user.email || '').toLowerCase(),
-            name: user.name || '',
-            role: (user as any).role || 'user',
-            dashboardRoute: dashboardRoute,
-            is_verified: (user as any).is_verified ?? false,
-            is_active: (user as any).is_active ?? false,
-            is_approved: (user as any).is_approved ?? false,
-            approval_status: (user as any).approval_status || 'pending',
-            rank: (user as any).rank || 'Unactivated',
-            activation_paid_at: (user as any).activation_paid_at || null,
-            isActivationPaid: !!(user as any).activation_paid_at,
-            status: (user as any).status || 'inactive',
-            twoFAEnabled: (user as any).twoFAEnabled || false,
-            profile_completed: (user as any).profile_completed || false,
-            phone_number: (user as any).phone_number || null,
-            authMethod: 'credentials',
-          };
+          if (profile) {
+          const userId = profile._id.toString();
+            const dashboardRoute = getDashboardRoute(profile.role);
+
+            return {
+              ...token,
+              sub: userId,
+              id: userId,
+              userId: userId,
+              email: (profile.email || '').toLowerCase(),
+              name: profile.username || '',
+              role: profile.role || 'user',
+              dashboardRoute: dashboardRoute,
+              is_verified: profile.is_verified ?? false,
+              is_active: profile.is_active ?? false,
+              is_approved: profile.is_approved ?? false,
+              approval_status: profile.approval_status || 'pending',
+              rank: profile.rank || 'Unactivated',
+              activation_paid_at: profile.activation_paid_at || null,
+              isActivationPaid: !!profile.activation_paid_at,
+              status: profile.status || 'inactive',
+              twoFAEnabled: profile.twoFAEnabled || false,
+              profile_completed: profile.profile_completed || false,
+              phone_number: profile.phone_number || null,
+              authMethod: 'credentials',
+            };
+          }
         }
 
-        // For subsequent calls, ensure all required fields are preserved
+        // For subsequent calls, just return the existing token
         const userId = token.sub || token.userId || token.id;
         if (userId) {
           token.sub = userId;
@@ -283,52 +287,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     // ==================== SESSION CALLBACK ====================
     async session({ session, token }) {
-      if (!token) {
+      if (!token || !token.userId) {
         return session;
       }
 
-      // Ensure session.user exists
-      if (!session.user) {
-        session.user = {
-          id: '',
-          email: '',
-          role: 'user',
-          is_verified: false,
-          is_active: false,
-          is_approved: false,
-          approval_status: 'pending',
-          rank: 'Unactivated',
-          isActivationPaid: false,
-          status: 'inactive',
-          twoFAEnabled: false,
-          authMethod: 'credentials',
-        };
-      }
-
-      const userId = token.userId || token.sub || token.id;
-      if (userId) {
-        session.user.id = userId;
-      }
+      const userId = token.userId;
       
-      session.user.email = (token.email as string) || '';
-      session.user.name = (token.name as string) || '';
-      session.user.role = (token.role as string) || 'user';
-      session.user.is_verified = (token.is_verified as boolean) ?? false;
-      session.user.is_active = (token.is_active as boolean) ?? false;
-      session.user.is_approved = (token.is_approved as boolean) ?? false;
-      session.user.approval_status = (token.approval_status as string) || 'pending';
-      session.user.rank = (token.rank as string) || 'Unactivated';
+      session.user.id = userId;
+      session.user.email = token.email as string || '';
+      session.user.name = token.name as string || '';
+      session.user.role = token.role as string || 'user';
+      session.user.is_verified = token.is_verified as boolean ?? false;
+      session.user.is_active = token.is_active as boolean ?? false;
+      session.user.is_approved = token.is_approved as boolean ?? false;
+      session.user.approval_status = token.approval_status as string || 'pending';
+      session.user.rank = token.rank as string || 'Unactivated';
       session.user.activation_paid_at = token.activation_paid_at 
         ? new Date(token.activation_paid_at as any) 
         : undefined;
-      session.user.isActivationPaid = (token.isActivationPaid as boolean) ?? false;
-      session.user.status = (token.status as string) || 'inactive';
-      session.user.twoFAEnabled = (token.twoFAEnabled as boolean) ?? false;
-      session.user.authMethod = (token.authMethod as string) || 'credentials';
-      session.user.profile_completed = (token.profile_completed as boolean) ?? false;
-      session.user.phone_number = (token.phone_number as string) || null;
+      session.user.isActivationPaid = token.isActivationPaid as boolean ?? false;
+      session.user.status = token.status as string || 'inactive';
+      session.user.twoFAEnabled = token.twoFAEnabled as boolean ?? false;
+      session.user.authMethod = token.authMethod as string || 'credentials';
+      session.user.profile_completed = token.profile_completed as boolean ?? false;
+      session.user.phone_number = token.phone_number as string || null;
       
-      (session as any).dashboardRoute = (token.dashboardRoute as string) || '/dashboard';
+      (session as any).dashboardRoute = token.dashboardRoute as string || '/dashboard';
       
       return session;
     },
