@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import speakeasy from 'speakeasy';
 import { Profile, connectToDatabase } from '@/app/lib/models';
 import clientPromise from '@/app/lib/mongodb';
+import { rateLimit, API_RATE_LIMITS, rateLimitResponse } from '@/app/lib/rate-limit';
 
 // Environment validation
 // IMPORTANT: do NOT throw at module top-level. This module is imported
@@ -84,6 +85,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const email = (credentials.email as string).trim().toLowerCase();
           const password = credentials.password as string;
 
+          // SECURITY: Rate limit login attempts by email to prevent brute-force password attacks
+          const { exceeded: loginRateLimitExceeded } = rateLimit(
+            `auth:login:${email}`,
+            5,  // Max 5 attempts
+            5 * 60_000  // Per 5 minutes
+          );
+          if (loginRateLimitExceeded) {
+            console.warn('[v0] Auth rate limit exceeded for email:', email);
+            return null;
+          }
+
           // Ensure password is a string
           if (typeof password !== 'string' || password.length === 0) {
             console.warn('[v0] Auth attempt with invalid password format');
@@ -148,6 +160,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
           }
           
+          // SECURITY: Check account status before issuing session
+          // Reject banned, suspended, inactive, or unapproved accounts
+          if (user.status === 'banned' || user.status === 'suspended') {
+            console.warn('[v0] Auth rejected: User account is ' + user.status, email);
+            return null;
+          }
+
+          if (!user.is_active) {
+            console.warn('[v0] Auth rejected: User account is inactive', email);
+            return null;
+          }
+
+          if (!user.is_approved) {
+            console.warn('[v0] Auth rejected: User account not approved', email);
+            return null;
+          }
+
           // Update last login
           try {
             await Profile.updateOne({ _id: user._id }, { last_login: new Date() });
