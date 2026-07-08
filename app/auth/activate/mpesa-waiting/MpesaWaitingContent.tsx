@@ -130,6 +130,28 @@ export default function MpesaWaitingContent() {
         console.error('Account activation failed:', result.message);
         // Even if activation fails, we still show payment success
         // but log the error for debugging
+      } else {
+        console.log('[v0] Account activation successful, refreshing session...');
+        
+        // ✅ NEW: Refresh session after successful activation
+        // This ensures the JWT token is updated with new user status
+        try {
+          const refreshResponse = await fetch('/api/auth/refresh-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          
+          if (refreshResponse.ok) {
+            const refreshData = await refreshResponse.json();
+            console.log('[v0] Session refreshed successfully:', refreshData.session?.user);
+          } else {
+            console.warn('[v0] Session refresh returned non-OK status:', refreshResponse.status);
+          }
+        } catch (refreshError) {
+          console.error('[v0] Session refresh error (not critical):', refreshError);
+          // Don't fail the whole flow if session refresh fails
+          // User will eventually get refreshed token on next request
+        }
       }
     } catch (error) {
       console.error('Error activating account:', error);
