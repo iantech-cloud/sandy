@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, MessageSquare, DollarSign, TrendingUp, Award, Network } from 'lucide-react';
+import { Users, MessageSquare, DollarSign, TrendingUp, Award, Network, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 
 interface Analytics {
@@ -166,6 +166,15 @@ export default function AnalyticsDashboard() {
 
   return (
     <div className="p-6 space-y-8">
+      {/* API Limit Error Banner */}
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-4">
+        <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+        <div>
+          <h3 className="font-semibold text-red-900">API Limit Hit</h3>
+          <p className="text-red-700 text-sm mt-1">API limit hit from this IP, kindly upgrade to continue.</p>
+        </div>
+      </div>
+
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
         <p className="text-gray-600 mt-1">Chat Foreigners platform metrics and referral insights</p>
