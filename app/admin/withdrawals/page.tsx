@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 interface Withdrawal {
-  id: string;
+  _id: string;
   user_id: string;
   username: string;
   email: string;
@@ -39,6 +39,12 @@ export default function WithdrawalsPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState<Withdrawal | null>(null);
+  const [actionModal, setActionModal] = useState<'approve' | 'reject' | 'complete' | null>(null);
+  const [actionNote, setActionNote] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<'approve' | 'reject' | null>(null);
 
   useEffect(() => {
     loadWithdrawals();
@@ -77,6 +83,117 @@ export default function WithdrawalsPage() {
   const handleStatusFilter = (value: string) => {
     setStatus(value);
     setPage(1);
+  };
+
+  const toggleSelectWithdrawal = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (data?.withdrawals) {
+      if (selectedIds.size === data.withdrawals.length) {
+        setSelectedIds(new Set());
+      } else {
+        setSelectedIds(new Set(data.withdrawals.map(w => w._id)));
+      }
+    }
+  };
+
+  const handleApproveAction = async () => {
+    if (!selectedWithdrawal) return;
+    setActionLoading(true);
+    try {
+      const response = await fetch('/api/admin/withdrawals/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          withdrawalId: selectedWithdrawal._id,
+          notes: actionNote,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setActionModal(null);
+        setActionNote('');
+        setSelectedWithdrawal(null);
+        loadWithdrawals();
+      } else {
+        setError(result.message || 'Failed to approve withdrawal');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error approving withdrawal');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRejectAction = async () => {
+    if (!selectedWithdrawal || !actionNote.trim()) {
+      setError('Rejection reason is required');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const response = await fetch('/api/admin/withdrawals/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          withdrawalId: selectedWithdrawal._id,
+          reason: actionNote,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setActionModal(null);
+        setActionNote('');
+        setSelectedWithdrawal(null);
+        loadWithdrawals();
+      } else {
+        setError(result.message || 'Failed to reject withdrawal');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error rejecting withdrawal');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedIds.size === 0) {
+      setError('No withdrawals selected');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const response = await fetch('/api/admin/withdrawals/bulk-approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          withdrawalIds: Array.from(selectedIds),
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setSelectedIds(new Set());
+        setBulkAction(null);
+        loadWithdrawals();
+      } else {
+        setError(result.message || 'Bulk approval failed');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error in bulk approval');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -183,6 +300,14 @@ export default function WithdrawalsPage() {
           <table className="w-full">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700 w-12">
+                  <input
+                    type="checkbox"
+                    checked={data?.withdrawals ? selectedIds.size === data.withdrawals.length : false}
+                    onChange={toggleSelectAll}
+                    className="rounded border-slate-300"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
                   User
                 </th>
@@ -201,12 +326,24 @@ export default function WithdrawalsPage() {
                 <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
                   Completed
                 </th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {data?.withdrawals && data.withdrawals.length > 0 ? (
                 data.withdrawals.map((wd) => (
-                  <tr key={wd.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={wd._id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(wd._id)}
+                        onChange={() => toggleSelectWithdrawal(wd._id)}
+                        disabled={wd.status !== 'pending'}
+                        className="rounded border-slate-300 disabled:opacity-50"
+                      />
+                    </td>
                     <td className="px-6 py-4">
                       <div>
                         <p className="text-sm font-medium text-slate-900">{wd.username}</p>
@@ -214,7 +351,7 @@ export default function WithdrawalsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                      {formatCurrency(wd.amount)}
+                      {formatCurrency(wd.amount_cents)}
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <span
@@ -242,6 +379,32 @@ export default function WithdrawalsPage() {
                         ? new Date(wd.completed_at).toLocaleDateString()
                         : '-'}
                     </td>
+                    <td className="px-6 py-4 text-sm">
+                      {wd.status === 'pending' && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedWithdrawal(wd);
+                              setActionModal('approve');
+                              setActionNote('');
+                            }}
+                            className="px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded text-xs font-medium transition-colors"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedWithdrawal(wd);
+                              setActionModal('reject');
+                              setActionNote('');
+                            }}
+                            className="px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-xs font-medium transition-colors"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))
               ) : (
@@ -255,6 +418,156 @@ export default function WithdrawalsPage() {
           </table>
         </div>
       </div>
+
+      {/* Bulk Actions */}
+      {selectedIds.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+          <p className="text-blue-900 font-medium">
+            {selectedIds.size} withdrawal{selectedIds.size !== 1 ? 's' : ''} selected
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setBulkAction('approve');
+                setActionLoading(false);
+              }}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+            >
+              Bulk Approve
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-4 py-2 bg-slate-300 text-slate-700 rounded-lg hover:bg-slate-400 transition-colors text-sm font-medium"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Action Modal */}
+      {actionModal && selectedWithdrawal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">
+              {actionModal === 'approve' && 'Approve Withdrawal'}
+              {actionModal === 'reject' && 'Reject Withdrawal'}
+              {actionModal === 'complete' && 'Complete Withdrawal'}
+            </h2>
+
+            <div className="space-y-4">
+              <div className="bg-slate-50 p-4 rounded-lg">
+                <p className="text-sm text-slate-600">
+                  <span className="font-semibold">Amount:</span> {formatCurrency(selectedWithdrawal.amount_cents)}
+                </p>
+                <p className="text-sm text-slate-600">
+                  <span className="font-semibold">User:</span> {selectedWithdrawal.username}
+                </p>
+                <p className="text-sm text-slate-600">
+                  <span className="font-semibold">Account:</span> {selectedWithdrawal.bank_account || 'N/A'}
+                </p>
+              </div>
+
+              {(actionModal === 'reject' || actionModal === 'complete') && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    {actionModal === 'reject' ? 'Rejection Reason' : 'Transaction Code'}
+                  </label>
+                  <textarea
+                    value={actionNote}
+                    onChange={(e) => setActionNote(e.target.value)}
+                    placeholder={
+                      actionModal === 'reject'
+                        ? 'Enter reason for rejection (minimum 10 characters)...'
+                        : 'Enter M-Pesa transaction code...'
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setActionModal(null);
+                    setActionNote('');
+                    setSelectedWithdrawal(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (actionModal === 'approve') handleApproveAction();
+                    else if (actionModal === 'reject') handleRejectAction();
+                    else if (actionModal === 'complete') handleApproveAction();
+                  }}
+                  disabled={
+                    actionLoading ||
+                    (actionModal === 'reject' && actionNote.trim().length < 10) ||
+                    (actionModal === 'complete' && !actionNote.trim())
+                  }
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {actionModal === 'approve' && 'Approve'}
+                  {actionModal === 'reject' && 'Reject'}
+                  {actionModal === 'complete' && 'Complete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Approval Confirmation Modal */}
+      {bulkAction === 'approve' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-slate-900 mb-4">
+              Bulk Approve Withdrawals
+            </h2>
+
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-yellow-900">
+                You are about to approve <span className="font-bold">{selectedIds.size}</span> withdrawal{selectedIds.size !== 1 ? 's' : ''}.
+              </p>
+              <p className="text-sm text-yellow-900 mt-2">
+                Total amount: <span className="font-bold">
+                  {formatCurrency(
+                    Array.from(selectedIds).reduce((sum, id) => {
+                      const w = data?.withdrawals.find(wd => wd._id === id);
+                      return sum + (w?.amount_cents || 0);
+                    }, 0)
+                  )}
+                </span>
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setBulkAction(null);
+                  setSelectedIds(new Set());
+                }}
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkApprove}
+                disabled={actionLoading}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                {actionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Confirm Approval
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pagination */}
       {data && data.pagination.pages > 1 && (
