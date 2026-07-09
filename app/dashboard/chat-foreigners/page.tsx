@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MessageSquare, Users, Wallet, Coins, ArrowLeft } from 'lucide-react';
+import { MessageSquare, Users, Wallet, Coins, ArrowLeft, AlertTriangle } from 'lucide-react';
 
 // Country flag emoji map — nationality to flag
 const NATIONALITY_FLAGS: Record<string, string> = {
@@ -166,6 +166,15 @@ export default function ChatForeignersPage() {
           </Link>
         </div>
       </header>
+
+      {/* API Limit Error Banner */}
+      <div className="mx-4 mt-3 mb-4 bg-red-900/30 border border-red-700/50 rounded-xl p-4 flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+        <div>
+          <h3 className="font-semibold text-red-300 text-sm">API Limit Hit</h3>
+          <p className="text-red-200/80 text-xs mt-1">API limit hit from this IP, kindly upgrade to continue.</p>
+        </div>
+      </div>
 
       {/* Stats row */}
       <div className="px-4 pb-3 grid grid-cols-3 gap-3">

@@ -17,7 +17,7 @@ const navigation = [
 const chatForeignersNav = [
   { name: 'Bots', href: '/admin/chat-foreigners/bots', icon: '🤖' },
   { name: 'Users', href: '/admin/chat-foreigners/users', icon: '👤' },
-  { name: 'Analytics Dashboard', href: '/admin/chat-foreigners/dashboard', icon: '📈' },
+  // { name: 'Analytics Dashboard', href: '/admin/chat-foreigners/dashboard', icon: '📈' }, // DISABLED: API limit hit
 ];
 
 export default function AdminSidebar() {
