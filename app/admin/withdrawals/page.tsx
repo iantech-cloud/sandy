@@ -11,9 +11,10 @@ interface Withdrawal {
   amount: number;
   amount_cents: number;
   status: string;
-  bank_account: string;
+  phone_number: string;
   requested_at: string;
   completed_at: string | null;
+  approved_at: string | null;
 }
 
 interface WithdrawalsData {
@@ -196,8 +197,9 @@ export default function WithdrawalsPage() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return `KES ${(amount / 100).toLocaleString('en-KE', {
+  const formatCurrency = (amountCents: number) => {
+    const amountKES = amountCents / 100;
+    return `KES ${amountKES.toLocaleString('en-KE', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
@@ -318,7 +320,7 @@ export default function WithdrawalsPage() {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
-                  Bank Account
+                  Phone Number
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">
                   Requested
@@ -369,14 +371,26 @@ export default function WithdrawalsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600 font-mono text-xs">
-                      {wd.bank_account || 'N/A'}
+                      {wd.phone_number || 'N/A'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
-                      {new Date(wd.requested_at).toLocaleDateString()}
+                      {new Date(wd.requested_at).toLocaleDateString('en-KE', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
                       {wd.completed_at
-                        ? new Date(wd.completed_at).toLocaleDateString()
+                        ? new Date(wd.completed_at).toLocaleDateString('en-KE', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
                         : '-'}
                     </td>
                     <td className="px-6 py-4 text-sm">
@@ -464,7 +478,16 @@ export default function WithdrawalsPage() {
                   <span className="font-semibold">User:</span> {selectedWithdrawal.username}
                 </p>
                 <p className="text-sm text-slate-600">
-                  <span className="font-semibold">Account:</span> {selectedWithdrawal.bank_account || 'N/A'}
+                  <span className="font-semibold">Phone:</span> {selectedWithdrawal.phone_number || 'N/A'}
+                </p>
+                <p className="text-sm text-slate-600 mt-2">
+                  <span className="font-semibold">Requested:</span> {new Date(selectedWithdrawal.requested_at).toLocaleDateString('en-KE', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
                 </p>
               </div>
 
