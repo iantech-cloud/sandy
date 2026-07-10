@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MessageSquare, Users, Wallet, Coins, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { MessageSquare, Users, Wallet, Coins, ArrowLeft } from 'lucide-react';
 
 // Country flag emoji map — nationality to flag
 const NATIONALITY_FLAGS: Record<string, string> = {
@@ -87,77 +87,6 @@ interface Person {
 }
 
 export default function ChatForeignersPage() {
-  // const [persons, setPersons] = useState<Person[]>([]);
-  // const [userAccess, setUserAccess] = useState<Set<string>>(new Set());
-  // const [loading, setLoading] = useState(true);
-  // const [stats, setStats] = useState({ chats: 0, messages: 0, unlockCost: 100 });
-
-  // useEffect(() => {
-  //   const loadData = async () => {
-  //     try {
-  //       const [personsRes, accessRes] = await Promise.all([
-  //         fetch('/api/chat-foreigners/bots?type=list'),
-  //         fetch('/api/chat-foreigners/bots?type=access'),
-  //       ]);
-  //       const [personsData, accessData] = await Promise.all([
-  //         personsRes.json(),
-  //         accessRes.json(),
-  //       ]);
-
-  //       if (personsData.success) setPersons(personsData.data);
-  //       if (accessData.success) {
-  //         const accessSet = new Set<string>(accessData.data.map((a: any) => a.botId));
-  //         setUserAccess(accessSet);
-  //         setStats((s) => ({
-  //           ...s,
-  //           chats: accessData.data.length,
-  //           messages: accessData.data.reduce((sum: number, a: any) => sum + (a.messageCount || 0), 0),
-  //         }));
-  //       }
-  //     } catch (error) {
-  //       console.error('Error loading data:', error);
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
-  //   loadData();
-  // }, []);
-
-  // if (loading) {
-  //   return (
-  //     <div className="flex flex-col h-screen bg-[#0d0d14] items-center justify-center">
-  //       <div className="w-8 h-8 border-2 border-[#00c97a] border-t-transparent rounded-full animate-spin" />
-  //       <p className="text-zinc-500 mt-3 text-sm">Loading...</p>
-  //     </div>
-  //   );
-  // }
-
-  return (
-    <div className="flex flex-col min-h-screen bg-[#0d0d14] text-zinc-100 overflow-y-auto items-center justify-center">
-      {/* Error Message Banner */}
-      <div className="max-w-md w-full mx-4 p-6 bg-red-950/40 border border-red-800/60 rounded-lg flex flex-col items-center gap-4 text-center">
-        <div className="w-12 h-12 text-red-500 flex items-center justify-center">
-          <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-          </svg>
-        </div>
-        <div>
-          <h3 className="font-bold text-red-400 text-lg">API Limit Reached</h3>
-          <p className="text-red-300/80 text-sm mt-2">API limit hit from this IP. Kindly upgrade to continue.</p>
-        </div>
-        <Link
-          href="/dashboard"
-          className="mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
-        >
-          Back to Dashboard
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-/* Original implementation - disabled for temporary maintenance
-function ChatForeignersPageOriginal() {
   const [persons, setPersons] = useState<Person[]>([]);
   const [userAccess, setUserAccess] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -238,17 +167,8 @@ function ChatForeignersPageOriginal() {
         </div>
       </header>
 
-      {/* API Limit Error Banner */}
-      <div className="mx-4 mt-3 mb-4 bg-red-900/30 border border-red-700/50 rounded-xl p-4 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-        <div>
-          <h3 className="font-semibold text-red-300 text-sm">API Limit Hit</h3>
-          <p className="text-red-200/80 text-xs mt-1">API limit hit from this IP, kindly upgrade to continue.</p>
-        </div>
-      </div>
-
-      {/* Stats row - COMMENTED OUT */}
-      {/* <div className="px-4 pb-3 grid grid-cols-3 gap-3">
+      {/* Stats row */}
+      <div className="px-4 pb-3 grid grid-cols-3 gap-3">
         <div className="bg-[#161622] border border-zinc-800 rounded-xl p-3 text-center">
           <p className="text-2xl font-bold text-zinc-100">{stats.chats}</p>
           <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mt-0.5">Chats</p>
@@ -261,12 +181,12 @@ function ChatForeignersPageOriginal() {
           <p className="text-lg font-bold text-zinc-100">Ksh {stats.unlockCost}</p>
           <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mt-0.5">Unlock</p>
         </div>
-      </div> */}
+      </div>
 
-      {/* Section header - COMMENTED OUT */}
-      {/* <div className="mx-4 mb-3 bg-[#161622] border border-zinc-800 rounded-2xl overflow-hidden">
+      {/* Section header */}
+      <div className="mx-4 mb-3 bg-[#161622] border border-zinc-800 rounded-2xl overflow-hidden">
         {/* Rainbow top stripe */}
-        {/* <div className="h-0.5 w-full bg-gradient-to-r from-[#00c97a] via-purple-500 via-pink-500 to-amber-400" />
+        <div className="h-0.5 w-full bg-gradient-to-r from-[#00c97a] via-purple-500 via-pink-500 to-amber-400" />
         <div className="px-4 py-3 flex items-center gap-2">
           <span className="w-2.5 h-2.5 bg-[#00c97a] rounded-full animate-pulse" />
           <div>
@@ -276,7 +196,7 @@ function ChatForeignersPageOriginal() {
         </div>
 
         {/* Bot grid */}
-        {/* {persons.length === 0 ? (
+        {persons.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
             <MessageSquare className="w-10 h-10 mb-2 text-zinc-700" />
             <p className="text-sm">No personalities available yet</p>
@@ -295,7 +215,7 @@ function ChatForeignersPageOriginal() {
                   className="flex flex-col items-center bg-[#1c1c2e] rounded-2xl pt-4 pb-3 px-2 gap-2 hover:bg-[#212135] transition-colors active:scale-95 duration-150"
                 >
                   {/* Avatar */}
-                  {/* <div className="relative">
+                  <div className="relative">
                     <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#2a2a40] bg-zinc-800">
                       {person.avatar_url ? (
                         <img
@@ -313,7 +233,7 @@ function ChatForeignersPageOriginal() {
                       )}
                     </div>
                     {/* Online dot */}
-                    {/* <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-[#00c97a] rounded-full border-2 border-[#1c1c2e]" />
+                    <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-[#00c97a] rounded-full border-2 border-[#1c1c2e]" />
                     {unlocked && (
                       <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#00c97a] rounded-full border-2 border-[#1c1c2e] flex items-center justify-center">
                         <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -321,20 +241,20 @@ function ChatForeignersPageOriginal() {
                         </svg>
                       </span>
                     )}
-                  </div> */}
+                  </div>
 
                   {/* Name */}
-                  {/* <p className="text-xs font-bold text-zinc-100 text-center leading-tight">
+                  <p className="text-xs font-bold text-zinc-100 text-center leading-tight">
                     {person.name}
-                  </p> */}
+                  </p>
 
                   {/* Nationality + flag */}
-                  {/* <p className="text-[10px] text-zinc-400 text-center leading-none">
+                  <p className="text-[10px] text-zinc-400 text-center leading-none">
                     {flag} {nationalityLabel}
-                  </p> */}
+                  </p>
 
                   {/* Status badge or earn button */}
-                  {/* {unlocked ? (
+                  {unlocked ? (
                     <div className="w-full mt-0.5 bg-[#1a3a2a] border border-[#00c97a]/50 rounded-xl px-1 py-2 flex items-center justify-center gap-1 transition-colors">
                       <span className="w-1.5 h-1.5 bg-[#00c97a] rounded-full animate-pulse" />
                       <span className="text-[10px] font-bold text-[#00c97a] text-center leading-tight">
@@ -353,12 +273,11 @@ function ChatForeignersPageOriginal() {
               );
             })}
           </div>
-        )} */}
-      {/* </div> */}
+        )}
+      </div>
 
-      {/* Bottom padding - COMMENTED OUT */}
-      {/* <div className="h-6" /> */}
+      {/* Bottom padding */}
+      <div className="h-6" />
     </div>
   );
 }
-*/
