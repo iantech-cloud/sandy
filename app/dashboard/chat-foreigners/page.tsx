@@ -133,6 +133,77 @@ export default function ChatForeignersPage() {
   // }
 
   return (
+    <div className="flex flex-col min-h-screen bg-[#0d0d14] text-zinc-100 overflow-y-auto items-center justify-center">
+      {/* Error Message Banner */}
+      <div className="max-w-md w-full mx-4 p-6 bg-red-950/40 border border-red-800/60 rounded-lg flex flex-col items-center gap-4 text-center">
+        <div className="w-12 h-12 text-red-500 flex items-center justify-center">
+          <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="font-bold text-red-400 text-lg">API Limit Reached</h3>
+          <p className="text-red-300/80 text-sm mt-2">API limit hit from this IP. Kindly upgrade to continue.</p>
+        </div>
+        <Link
+          href="/dashboard"
+          className="mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
+        >
+          Back to Dashboard
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/* Original implementation - disabled for temporary maintenance
+function ChatForeignersPageOriginal() {
+  const [persons, setPersons] = useState<Person[]>([]);
+  const [userAccess, setUserAccess] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ chats: 0, messages: 0, unlockCost: 100 });
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [personsRes, accessRes] = await Promise.all([
+          fetch('/api/chat-foreigners/bots?type=list'),
+          fetch('/api/chat-foreigners/bots?type=access'),
+        ]);
+        const [personsData, accessData] = await Promise.all([
+          personsRes.json(),
+          accessRes.json(),
+        ]);
+
+        if (personsData.success) setPersons(personsData.data);
+        if (accessData.success) {
+          const accessSet = new Set<string>(accessData.data.map((a: any) => a.botId));
+          setUserAccess(accessSet);
+          setStats((s) => ({
+            ...s,
+            chats: accessData.data.length,
+            messages: accessData.data.reduce((sum: number, a: any) => sum + (a.messageCount || 0), 0),
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-screen bg-[#0d0d14] items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#00c97a] border-t-transparent rounded-full animate-spin" />
+        <p className="text-zinc-500 mt-3 text-sm">Loading...</p>
+      </div>
+    );
+  }
+
+  return (
     <div className="flex flex-col min-h-screen bg-[#0d0d14] text-zinc-100 overflow-y-auto">
       {/* Header */}
       <header className="px-4 pt-5 pb-3 flex items-center justify-between">
@@ -290,3 +361,4 @@ export default function ChatForeignersPage() {
     </div>
   );
 }
+*/
