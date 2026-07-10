@@ -734,11 +734,25 @@ async function pickUniqueIdentity(
 }
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    // Check admin authorization
+    const session = await (await import('@/auth')).auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
+    }
+
     await connectToDatabase();
+    
+    // Verify admin role
+    const { Profile } = await import('@/app/lib/models');
+    const adminUser = await Profile.findOne({ email: session.user.email }).select('role').lean();
+    if (adminUser?.role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 });
+    }
+
     const botId = params.id;
 
     const bot = await ChatForeignersBot.findById(botId);

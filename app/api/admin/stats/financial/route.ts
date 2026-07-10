@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { connectToDatabase } from '@/app/lib/mongoose';
+import { connectToDatabase, Profile, Transaction, Company, Withdrawal } from '@/app/lib/models';
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,23 +10,58 @@ export async function GET(req: NextRequest) {
     }
 
     await connectToDatabase();
+
+    // Verify admin access
+    const adminUser = await (Profile as any).findOne({ email: session.user.email }).select('role').lean();
+    if (adminUser?.role !== 'admin') {
+      return NextResponse.json({ success: false, message: 'Admin access required' }, { status: 403 });
+    }
     
-    // Get financial metrics (simplified for demo)
-    const companyWalletBalance = 1500000;
-    const totalCompanyRevenue = 2500000;
-    const totalCompanyExpenses = 850000;
-    const netProfit = totalCompanyRevenue - totalCompanyExpenses;
-    const totalUserBalances = 650000;
-    const pendingWithdrawalsAmount = 185000;
-    const pendingWithdrawalsCount = 45;
+    // Get or create company record
+    let company = await (Company as any).findOne({}).lean();
+    if (!company) {
+      company = {
+        wallet_balance_cents: 0,
+        total_revenue_cents: 0,
+        total_expenses_cents: 0
+      };
+    }
+
+    // Get all user balances (no hardcoded values)
+    const userBalancesAgg = await (Profile as any).aggregate([
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$balance_cents' } 
+        } 
+      }
+    ]);
+    
+    // Get pending withdrawals (real data)
+    const pendingWithdrawalsAgg = await (Withdrawal as any).aggregate([
+      { 
+        $match: { status: 'pending' } 
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: '$amount_cents' },
+          count: { $sum: 1 }
+        } 
+      }
+    ]);
+
+    const totalUserBalances = userBalancesAgg[0]?.total || 0;
+    const pendingWithdrawalsAmount = pendingWithdrawalsAgg[0]?.total || 0;
+    const pendingWithdrawalsCount = pendingWithdrawalsAgg[0]?.count || 0;
 
     return NextResponse.json({
       success: true,
       data: {
-        companyWalletBalance,
-        totalCompanyRevenue,
-        totalCompanyExpenses,
-        netProfit,
+        companyWalletBalance: company.wallet_balance_cents,
+        totalCompanyRevenue: company.total_revenue_cents || 0,
+        totalCompanyExpenses: company.total_expenses_cents || 0,
+        netProfit: (company.total_revenue_cents || 0) - (company.total_expenses_cents || 0),
         totalUserBalances,
         pendingWithdrawalsAmount,
         pendingWithdrawalsCount

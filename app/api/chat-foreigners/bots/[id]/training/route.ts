@@ -1,11 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase, ChatForeignersBot } from '@/app/lib/models';
+import { connectToDatabase, ChatForeignersBot, Profile } from '@/app/lib/models';
+import { auth } from '@/auth';
+
+async function checkAdminAccess() {
+  const session = await auth();
+  if (!session?.user?.email) {
+    return { authorized: false, error: 'Unauthorized' };
+  }
+
+  await connectToDatabase();
+  const adminUser = await Profile.findOne({ email: session.user.email }).select('role').lean();
+  if (adminUser?.role !== 'admin') {
+    return { authorized: false, error: 'Admin access required' };
+  }
+
+  return { authorized: true };
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const authCheck = await checkAdminAccess();
+    if (!authCheck.authorized) {
+      return NextResponse.json({ success: false, error: authCheck.error }, { status: 403 });
+    }
+
     await connectToDatabase();
     const botId = params.id;
 
@@ -52,6 +73,11 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const authCheck = await checkAdminAccess();
+    if (!authCheck.authorized) {
+      return NextResponse.json({ success: false, error: authCheck.error }, { status: 403 });
+    }
+
     await connectToDatabase();
     const botId = params.id;
     const body = await request.json();

@@ -5,12 +5,17 @@ import { auth } from '@/auth';
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
-    const role = (session?.user as any)?.role;
-    if (!session?.user || role !== 'admin') {
+    if (!session?.user?.email) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
     }
 
     await connectToDatabase();
+
+    // Verify admin access from database
+    const adminUser = await Profile.findOne({ email: session.user.email }).select('role').lean();
+    if (adminUser?.role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 });
+    }
 
     // Get all users
     const users = await Profile.find({}, '_id username email referred_by referral_id created_at is_active').lean();

@@ -40,7 +40,20 @@ export async function GET(request: NextRequest) {
 
     // Admin mode: include full access data for each person
     if (includeAccess) {
+      // Check if user is admin
+      if (!session?.user?.email) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
+      }
+
       await connectToDatabase();
+      
+      // Verify admin role
+      const { Profile } = await import('@/app/lib/models');
+      const adminUser = await Profile.findOne({ email: session.user.email }).select('role').lean();
+      if (adminUser?.role !== 'admin') {
+        return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 });
+      }
+
       const bots = await ChatForeignersBot.find({ isActive: true }).sort({ created_at: -1 }).lean();
       const allAccesses = await ChatForeignersBotAccess.find({}).lean();
 
@@ -89,6 +102,20 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
+    }
+
+    await connectToDatabase();
+    
+    // Verify admin role
+    const { Profile: ProfileModel } = await import('@/app/lib/models');
+    const adminUser = await ProfileModel.findOne({ email: session.user.email }).select('role').lean();
+    if (adminUser?.role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 });
+    }
+
     const body = await request.json();
     const result = await createChatForeignersBot(body);
     return NextResponse.json(result);
