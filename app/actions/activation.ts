@@ -376,9 +376,8 @@ export async function checkActivationStatus(): Promise<ApiResponse<ActivationSta
       return { success: false, message: 'User profile not found' };
     }
 
-    // ✅ FIXED: Check activation - use AND logic (both conditions must indicate activation)
-    // If approval_status === 'approved' AND rank !== 'Unactivated', user is activated
-    const isActivationPaid = userProfile.approval_status === 'approved' && userProfile.rank !== 'Unactivated';
+    // ✅ FIXED: Check activation based on approval_status and rank
+    const isActivationPaid = userProfile.approval_status !== 'pending' || userProfile.rank !== 'Unactivated';
 
     return {
       success: true,
@@ -438,8 +437,8 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       return { success: false, message: 'User profile not found' };
     }
 
-    // Check if already activated - use AND logic (both conditions must indicate activation)
-    const isActivationPaid = userProfile.approval_status === 'approved' && userProfile.rank !== 'Unactivated';
+    // Check if already activated
+    const isActivationPaid = userProfile.approval_status !== 'pending' || userProfile.rank !== 'Unactivated';
     if (isActivationPaid) {
       return { success: false, message: 'Account is already activated' };
     }
@@ -946,15 +945,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     userProfile.level = 1;
     userProfile.rank = 'Bronze'; // ✅ FIXED: Change rank from 'Unactivated' to 'Bronze'
     userProfile.activation_transaction_id = activationFeeTransaction._id;
-    userProfile.activation_paid_at = new Date(); // ✅ NEW: Track when activation was paid
     await userProfile.save();
-
-    console.log('[v0] User profile updated:', {
-      username: userProfile.username,
-      is_active: userProfile.is_active,
-      approval_status: userProfile.approval_status,
-      rank: userProfile.rank
-    });
 
     // =============================================================================
     // STEP 5.5: Send Referral Activation Notification to Referrer

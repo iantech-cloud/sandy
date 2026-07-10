@@ -205,56 +205,48 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return { ...token, ...updateSession };
         }
 
-        // Determine userId for database lookup
-        let userId = user?.id || token.userId || token.sub || token.id;
-        
-        // CRITICAL FIX: Always fetch fresh user data from database to catch activation changes
-        // This ensures JWT stays in sync with database after payment updates
-        if (userId) {
-          try {
-            await connectToDatabase();
-            
-            const profile = await Profile.findOne({ _id: userId });
-            
-            if (profile) {
-              const dashboardRoute = getDashboardRoute(profile.role);
-              
-              console.log('[v0] JWT callback refreshing user data:', {
-                userId: profile._id.toString(),
-                is_active: profile.is_active,
-                approval_status: profile.approval_status,
-                rank: profile.rank,
-                activation_paid_at: profile.activation_paid_at ? 'yes' : 'no'
-              });
+        // Only make database calls on initial sign in
+        if (user && (trigger === 'signIn' || !token.userId)) {
+          await connectToDatabase();
+          
+          const lookupQuery = user.id ? { _id: user.id } : { email: user.email };
+          const profile = await Profile.findOne(lookupQuery);
 
-              return {
-                ...token,
-                sub: profile._id.toString(),
-                id: profile._id.toString(),
-                userId: profile._id.toString(),
-                email: (profile.email || '').toLowerCase(),
-                name: profile.username || '',
-                role: profile.role || 'user',
-                dashboardRoute: dashboardRoute,
-                is_verified: profile.is_verified ?? false,
-                is_active: profile.is_active ?? false,
-                is_approved: profile.is_approved ?? false,
-                approval_status: profile.approval_status || 'pending',
-                rank: profile.rank || 'Unactivated',
-                activation_paid_at: profile.activation_paid_at || null,
-                isActivationPaid: !!profile.activation_paid_at,
-                status: profile.status || 'inactive',
-                twoFAEnabled: profile.twoFAEnabled || false,
-                profile_completed: profile.profile_completed || false,
-                phone_number: profile.phone_number || null,
-                authMethod: 'credentials',
-              };
-            }
-          } catch (dbError) {
-            console.error('[v0] JWT callback database error:', dbError);
-            // Fall back to existing token if database fails
-            return token;
+          if (profile) {
+          const userId = profile._id.toString();
+            const dashboardRoute = getDashboardRoute(profile.role);
+
+            return {
+              ...token,
+              sub: userId,
+              id: userId,
+              userId: userId,
+              email: (profile.email || '').toLowerCase(),
+              name: profile.username || '',
+              role: profile.role || 'user',
+              dashboardRoute: dashboardRoute,
+              is_verified: profile.is_verified ?? false,
+              is_active: profile.is_active ?? false,
+              is_approved: profile.is_approved ?? false,
+              approval_status: profile.approval_status || 'pending',
+              rank: profile.rank || 'Unactivated',
+              activation_paid_at: profile.activation_paid_at || null,
+              isActivationPaid: !!profile.activation_paid_at,
+              status: profile.status || 'inactive',
+              twoFAEnabled: profile.twoFAEnabled || false,
+              profile_completed: profile.profile_completed || false,
+              phone_number: profile.phone_number || null,
+              authMethod: 'credentials',
+            };
           }
+        }
+
+        // For subsequent calls, just return the existing token
+        const userId = token.sub || token.userId || token.id;
+        if (userId) {
+          token.sub = userId;
+          token.userId = userId;
+          token.id = userId;
         }
 
         return token;
@@ -292,13 +284,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.phone_number = token.phone_number as string || null;
       
       (session as any).dashboardRoute = token.dashboardRoute as string || '/dashboard';
-      
-      console.log('[v0] Session callback updated:', {
-        userId,
-        is_active: session.user.is_active,
-        approval_status: session.user.approval_status,
-        rank: session.user.rank
-      });
       
       return session;
     },
