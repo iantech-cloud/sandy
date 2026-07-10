@@ -70,8 +70,8 @@ export async function GET(request: NextRequest) {
     // Get total count
     const total = await WithdrawalModel.countDocuments(query);
 
-    // Get summary statistics ALWAYS across ALL withdrawals (never filtered by status)
-    const allStats = await WithdrawalModel.aggregate([
+    // Get summary statistics (across ALL withdrawals, not filtered by status)
+    const stats = await WithdrawalModel.aggregate([
       {
         $facet: {
           total: [
@@ -101,7 +101,62 @@ export async function GET(request: NextRequest) {
       },
     ]);
 
-    const statsData = allStats[0] || {};
+    // Remove status filter if applied, so stats are always total
+    if (query.status) {
+      const allStats = await WithdrawalModel.aggregate([
+        {
+          $facet: {
+            total: [
+              {
+                $group: {
+                  _id: null,
+                  totalAmount: { $sum: '$amount_cents' },
+                  count: { $sum: 1 },
+                },
+              },
+            ],
+            completed: [
+              { $match: { status: 'completed' } },
+              {
+                $group: {
+                  _id: null,
+                  completedAmount: { $sum: '$amount_cents' },
+                  count: { $sum: 1 },
+                },
+              },
+            ],
+            pending: [
+              { $match: { status: 'pending' } },
+              { $count: 'count' },
+            ],
+          },
+        },
+      ]);
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            withdrawals: enrichedWithdrawals,
+            pagination: {
+              total,
+              page,
+              limit,
+              pages: Math.ceil(total / limit),
+            },
+            stats: {
+              totalAmount: (allStats[0]?.total?.[0]?.totalAmount || 0) / 100,
+              totalWithdrawals: allStats[0]?.total?.[0]?.count || 0,
+              completedAmount: (allStats[0]?.completed?.[0]?.completedAmount || 0) / 100,
+              completedCount: allStats[0]?.completed?.[0]?.count || 0,
+              pendingCount: allStats[0]?.pending?.[0]?.count || 0,
+            },
+          },
+        },
+        { status: 200 }
+      );
+    }
+
+    const statsData = stats[0] || {};
 
     return NextResponse.json(
       {

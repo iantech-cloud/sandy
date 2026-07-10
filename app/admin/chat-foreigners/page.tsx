@@ -19,13 +19,13 @@ export default function ChatForeignersAdminPage() {
       icon: <Users className="w-8 h-8" />,
       color: 'bg-purple-500',
     },
-    // Analytics Dashboard disabled due to API limit - {
-    //   title: 'Analytics Dashboard',
-    //   description: 'View key metrics, revenue, user engagement, and personality performance',
-    //   href: '/admin/chat-foreigners/dashboard',
-    //   icon: <Settings className="w-8 h-8" />,
-    //   color: 'bg-green-500',
-    // },
+    {
+      title: 'Analytics Dashboard',
+      description: 'View key metrics, revenue, user engagement, and personality performance',
+      href: '/admin/chat-foreigners/dashboard',
+      icon: <Settings className="w-8 h-8" />,
+      color: 'bg-green-500',
+    },
   ];
 
   return (
