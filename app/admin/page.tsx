@@ -73,6 +73,7 @@ export default function AdminDashboard() {
   const [breakdownLoading, setBreakdownLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [spinWheelLoading, setSpinWheelLoading] = useState(false);
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [spinStatus, setSpinStatus] = useState<{ active: boolean; mode: string }>({ 
     active: false, 
     mode: 'scheduled' 
@@ -89,8 +90,12 @@ export default function AdminDashboard() {
       const statsResult = await getAdminStats();
       
       if (!statsResult.success) {
-        if (statsResult.message.includes('Unauthorized') || statsResult.message.includes('Admin access required')) {
+        if (statsResult.message.includes('Unauthorized')) {
+          setIsUnauthorized(true);
           redirect('/auth/login');
+        } else if (statsResult.message.includes('Admin access required')) {
+          setIsUnauthorized(true);
+          redirect('/dashboard');
         }
         setError(statsResult.message);
         return;
@@ -172,6 +177,17 @@ export default function AdminDashboard() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading admin dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isUnauthorized) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-center">
+          <AlertCircle className="text-red-500 mr-2" size={20} />
+          <p className="text-red-700">You do not have permission to access the admin dashboard.</p>
         </div>
       </div>
     );
