@@ -1,718 +1,387 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TablePagination,
-  Chip,
-  TextField,
-  InputAdornment,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
-  Grid,
-  Paper,
-  Alert,
-  CircularProgress,
-  IconButton,
-  Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Badge,
-} from '@mui/material';
-import {
-  Search,
-  FilterList,
-  Visibility,
-  Refresh,
-  AdminPanelSettings,
-  Person,
-  Security,
-  Payment,
-  AccountCircle,
-  Group,
-  Receipt,
-  Block,
-  CheckCircle,
-  PlayCircle,
-} from '@mui/icons-material';
-import { format, formatDistanceToNow } from 'date-fns';
+import { Search, AlertCircle, Filter, Download } from 'lucide-react';
 
-interface AuditLogActor {
+interface AuditLog {
   _id: string;
-  username: string;
-  email: string;
-}
-
-interface AdminAuditLog {
-  _id: string;
-  actor_id: AuditLogActor;
+  admin_id: string;
+  admin_name: string;
   action: string;
-  action_type: string;
-  target_type: string;
-  target_id: string;
-  resource_type: string;
+  resource: string;
   resource_id: string;
   changes: Record<string, any>;
-  metadata: Record<string, any>;
-  ip_address?: string;
-  user_agent?: string;
-  status: 'success' | 'failed' | 'pending';
-  created_at: string;
-  updated_at: string;
+  ip_address: string;
+  user_agent: string;
+  status: 'success' | 'failure';
+  createdAt: string;
 }
 
-interface PaginatedResponse {
-  logs: AdminAuditLog[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+interface AuditLogsData {
+  logs: AuditLog[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+  };
+  stats: {
+    totalLogs: number;
+    successCount: number;
+    failureCount: number;
+    uniqueAdmins: number;
+  };
 }
 
 export default function AuditLogsPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  
-  const [logs, setLogs] = useState<AdminAuditLog[]>([]);
+  const [data, setData] = useState<AuditLogsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [totalCount, setTotalCount] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [actionFilter, setActionFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedLog, setSelectedLog] = useState<AdminAuditLog | null>(null);
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('');
+  const [resource, setResource] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
-  // Check if user is admin
   useEffect(() => {
-    if (status === 'loading') return;
+    loadLogs();
+  }, [page, search, status, resource, dateFrom, dateTo]);
 
-    if (!session) {
-      router.push('/auth/signin');
-      return;
-    }
-
-    // Check user role - adjust this based on your session structure
-    const userRole = (session.user as any)?.role;
-    if (userRole !== 'admin' && userRole !== 'super_admin') {
-      router.push('/dashboard');
-      return;
-    }
-
-    fetchAuditLogs();
-  }, [session, status, router, page, rowsPerPage]);
-
-  const fetchAuditLogs = async () => {
+  const loadLogs = async () => {
     try {
       setLoading(true);
       setError(null);
 
       const params = new URLSearchParams({
-        page: (page + 1).toString(),
-        limit: rowsPerPage.toString(),
-        ...(searchTerm && { search: searchTerm }),
-        ...(actionFilter !== 'all' && { action: actionFilter }),
-        ...(statusFilter !== 'all' && { status: statusFilter }),
+        page: page.toString(),
+        limit: '20',
+        ...(search && { search }),
+        ...(status && { status }),
+        ...(resource && { resource }),
+        ...(dateFrom && { dateFrom }),
+        ...(dateTo && { dateTo }),
       });
 
       const response = await fetch(`/api/admin/audit-logs?${params}`);
-
       if (!response.ok) {
         throw new Error('Failed to fetch audit logs');
       }
 
-      const data: PaginatedResponse = await response.json();
-      setLogs(data.logs);
-      setTotalCount(data.total);
+      const result = await response.json();
+      if (result.success) {
+        setData(result.data);
+      } else {
+        setError('Failed to load audit logs');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load audit logs');
-      console.error('Error fetching audit logs:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      console.error('[Admin] Audit logs error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(event.target.value);
-  };
+  const handleExport = async () => {
+    try {
+      const response = await fetch(`/api/admin/audit-logs/export?format=csv`);
+      if (!response.ok) throw new Error('Export failed');
 
-  const handleSearchSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    setPage(0);
-    fetchAuditLogs();
-  };
-
-  const handleActionFilterChange = (event: any) => {
-    setActionFilter(event.target.value);
-    setPage(0);
-  };
-
-  const handleStatusFilterChange = (event: any) => {
-    setStatusFilter(event.target.value);
-    setPage(0);
-  };
-
-  const handleChangePage = (event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  const handleViewDetails = (log: AdminAuditLog) => {
-    setSelectedLog(log);
-    setDetailDialogOpen(true);
-  };
-
-  const handleCloseDetailDialog = () => {
-    setDetailDialogOpen(false);
-    setSelectedLog(null);
-  };
-
-  const getActionIcon = (action: string) => {
-    switch (action) {
-      case 'CREATE_USER':
-      case 'REGISTER_USER':
-        return <Person color="primary" />;
-      case 'UPDATE_USER':
-        return <AccountCircle color="info" />;
-      case 'ACTIVATE_USER':
-      case 'ACTIVATE_ACCOUNT':
-        return <CheckCircle color="success" />;
-      case 'DELETE_USER':
-      case 'BLOCK_USER':
-      case 'DEACTIVATE_USER':
-        return <Block color="error" />;
-      case 'CREATE_PAYMENT':
-      case 'PROCESS_PAYMENT':
-        return <Payment color="success" />;
-      case 'ADMIN_LOGIN':
-      case 'SUPER_ADMIN_ACTION':
-        return <Security color="warning" />;
-      case 'UPDATE_SETTINGS':
-      case 'SYSTEM_ACTION':
-        return <AdminPanelSettings color="secondary" />;
-      case 'CREATE_REFERRAL':
-      case 'PROCESS_REFERRAL_BONUS':
-        return <Group color="primary" />;
-      case 'CREATE_TRANSACTION':
-      case 'UPDATE_TRANSACTION':
-        return <Receipt color="action" />;
-      default:
-        return <PlayCircle color="disabled" />;
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-logs-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert('Failed to export logs');
     }
   };
 
-  const getActionColor = (action: string) => {
-    if (action.includes('CREATE') || action.includes('ACTIVATE') || action.includes('SUCCESS')) {
-      return 'success';
-    }
-    if (action.includes('UPDATE') || action.includes('PROCESS')) {
-      return 'info';
-    }
-    if (action.includes('DELETE') || action.includes('BLOCK') || action.includes('FAILED')) {
-      return 'error';
-    }
-    if (action.includes('ADMIN') || action.includes('SYSTEM')) {
-      return 'warning';
-    }
-    return 'default';
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'success':
-        return 'success';
-      case 'failed':
-        return 'error';
-      case 'pending':
-        return 'warning';
-      default:
-        return 'default';
-    }
-  };
-
-  const formatActionText = (action: string) => {
-    return action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
-  };
-
-  const getActionCategories = () => {
-    const actions = [...new Set(logs.map(log => log.action))];
-    return actions.sort();
-  };
-
-  // Add loading state
-  if (status === 'loading' || loading) {
+  if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto" />
+          <p className="mt-4 text-slate-600">Loading audit logs...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-center gap-2">
+          <AlertCircle size={20} className="text-red-600" />
+          <p className="text-red-700">{error}</p>
+        </div>
+        <button
+          onClick={loadLogs}
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
     );
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <div className="space-y-6">
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Audit Logs
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Monitor and track all administrative activities and system events
-        </Typography>
-      </Box>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Audit Logs</h1>
+          <p className="text-slate-600 mt-1">
+            Total: {data?.pagination.total.toLocaleString()} log entries
+          </p>
+        </div>
+        <button
+          onClick={handleExport}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+        >
+          <Download size={18} />
+          Export CSV
+        </button>
+      </div>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
+      {/* Stats */}
+      {data && (
+        <div className="grid grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg shadow p-4 border border-slate-200">
+            <p className="text-slate-600 text-sm">Total Logs</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{data.stats.totalLogs}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 border border-slate-200">
+            <p className="text-slate-600 text-sm">Success</p>
+            <p className="text-2xl font-bold text-green-600 mt-1">{data.stats.successCount}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 border border-slate-200">
+            <p className="text-slate-600 text-sm">Failures</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">{data.stats.failureCount}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4 border border-slate-200">
+            <p className="text-slate-600 text-sm">Admins</p>
+            <p className="text-2xl font-bold text-blue-600 mt-1">{data.stats.uniqueAdmins}</p>
+          </div>
+        </div>
       )}
 
-      {/* Filters and Search */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={4}>
-              <form onSubmit={handleSearchSubmit}>
-                <TextField
-                  fullWidth
-                  variant="outlined"
-                  placeholder="Search logs, users, actions..."
-                  value={searchTerm}
-                  onChange={handleSearch}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Search />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-              </form>
-            </Grid>
-            
-            <Grid item xs={12} md={3}>
-              <FormControl fullWidth variant="outlined">
-                <InputLabel>Action Type</InputLabel>
-                <Select
-                  value={actionFilter}
-                  onChange={handleActionFilterChange}
-                  label="Action Type"
-                  startAdornment={
-                    <InputAdornment position="start">
-                      <FilterList />
-                    </InputAdornment>
-                  }
-                >
-                  <MenuItem value="all">All Actions</MenuItem>
-                  {getActionCategories().map(action => (
-                    <MenuItem key={action} value={action}>
-                      {formatActionText(action)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow p-4 border border-slate-200">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Search
+            </label>
+            <div className="relative">
+              <Search size={18} className="absolute left-3 top-3 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
 
-            <Grid item xs={12} md={3}>
-              <FormControl fullWidth variant="outlined">
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={statusFilter}
-                  onChange={handleStatusFilterChange}
-                  label="Status"
-                >
-                  <MenuItem value="all">All Status</MenuItem>
-                  <MenuItem value="success">Success</MenuItem>
-                  <MenuItem value="failed">Failed</MenuItem>
-                  <MenuItem value="pending">Pending</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Status
+            </label>
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All</option>
+              <option value="success">Success</option>
+              <option value="failure">Failure</option>
+            </select>
+          </div>
 
-            <Grid item xs={12} md={2}>
-              <Tooltip title="Refresh logs">
-                <IconButton 
-                  onClick={fetchAuditLogs}
-                  sx={{ 
-                    bgcolor: 'primary.main', 
-                    color: 'white',
-                    '&:hover': {
-                      bgcolor: 'primary.dark',
-                    }
-                  }}
-                >
-                  <Refresh />
-                </IconButton>
-              </Tooltip>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Resource
+            </label>
+            <select
+              value={resource}
+              onChange={(e) => {
+                setResource(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Resources</option>
+              <option value="user">User</option>
+              <option value="blog">Blog</option>
+              <option value="survey">Survey</option>
+              <option value="transaction">Transaction</option>
+            </select>
+          </div>
 
-      {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" justifyContent="space-between">
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Total Logs
-                  </Typography>
-                  <Typography variant="h4">{totalCount.toLocaleString()}</Typography>
-                </Box>
-                <Badge badgeContent={logs.length} color="primary">
-                  <Receipt color="action" />
-                </Badge>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              From
+            </label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" justifyContent="space-between">
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Successful
-                  </Typography>
-                  <Typography variant="h4" color="success.main">
-                    {logs.filter(log => log.status === 'success').length.toLocaleString()}
-                  </Typography>
-                </Box>
-                <Chip label="Success" color="success" size="small" />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              To
+            </label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                setPage(1);
+              }}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      </div>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" justifyContent="space-between">
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Failed
-                  </Typography>
-                  <Typography variant="h4" color="error.main">
-                    {logs.filter(log => log.status === 'failed').length.toLocaleString()}
-                  </Typography>
-                </Box>
-                <Chip label="Failed" color="error" size="small" />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+      {/* Table */}
+      <div className="bg-white rounded-lg shadow border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  Admin
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  Action
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  Resource
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  IP Address
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                  Timestamp
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data?.logs && data.logs.length > 0 ? (
+                data.logs.map((log) => (
+                  <tr
+                    key={log._id}
+                    className="border-b border-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      <p className="font-medium text-slate-900">{log.admin_name}</p>
+                      <p className="text-slate-600 text-xs">{log.admin_id}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                        {log.action}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-slate-600 text-sm">{log.resource}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium ${
+                          log.status === 'success'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {log.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-slate-600 text-sm font-mono">{log.ip_address}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-slate-600 text-sm">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </p>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-600">
+                    No audit logs found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" justifyContent="space-between">
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="overline">
-                    Unique Actors
-                  </Typography>
-                  <Typography variant="h4" color="info.main">
-                    {new Set(logs.map(log => log.actor_id?._id)).size}
-                  </Typography>
-                </Box>
-                <Group color="action" />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Audit Logs Table */}
-      <Card>
-        <CardContent sx={{ p: 0 }}>
-          <TableContainer component={Paper} elevation={0}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Action</TableCell>
-                  <TableCell>Actor</TableCell>
-                  <TableCell>Target</TableCell>
-                  <TableCell>Changes</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Timestamp</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {logs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                      <Typography variant="body1" color="text.secondary">
-                        No audit logs found
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  logs.map((log) => (
-                    <TableRow key={log._id} hover>
-                      <TableCell>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          {getActionIcon(log.action)}
-                          <Box>
-                            <Typography variant="body2" fontWeight="medium">
-                              {formatActionText(log.action)}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {log.action_type}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2" fontWeight="medium">
-                            {log.actor_id?.username || 'Unknown'}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {log.actor_id?.email || 'N/A'}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={log.target_type} 
-                          variant="outlined" 
-                          size="small" 
-                          color={getActionColor(log.action) as any}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" noWrap>
-                          {Object.keys(log.changes || {}).length > 0 
-                            ? `${Object.keys(log.changes).length} changes`
-                            : 'No changes'
-                          }
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={log.status} 
-                          color={getStatusColor(log.status) as any}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="body2">
-                            {format(new Date(log.created_at), 'MMM dd, yyyy')}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {format(new Date(log.created_at), 'HH:mm:ss')}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Tooltip title="View Details">
-                          <IconButton 
-                            size="small" 
-                            onClick={() => handleViewDetails(log)}
-                            color="primary"
-                          >
-                            <Visibility />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-
-          {/* Pagination */}
-          <TablePagination
-            rowsPerPageOptions={[5, 10, 25, 50]}
-            component="div"
-            count={totalCount}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Detail Dialog */}
-      <Dialog 
-        open={detailDialogOpen} 
-        onClose={handleCloseDetailDialog}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>
-          Audit Log Details
-        </DialogTitle>
-        <DialogContent>
-          {selectedLog && (
-            <Box sx={{ mt: 2 }}>
-              <Grid container spacing={3}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Action
-                  </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {formatActionText(selectedLog.action)}
-                  </Typography>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Action Type
-                  </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {selectedLog.action_type}
-                  </Typography>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Actor
-                  </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {selectedLog.actor_id?.username || 'Unknown'} ({selectedLog.actor_id?.email || 'N/A'})
-                  </Typography>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Target Type
-                  </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {selectedLog.target_type}
-                  </Typography>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Resource Type
-                  </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {selectedLog.resource_type}
-                  </Typography>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Status
-                  </Typography>
-                  <Chip 
-                    label={selectedLog.status} 
-                    color={getStatusColor(selectedLog.status) as any}
-                    size="small"
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Timestamp
-                  </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {format(new Date(selectedLog.created_at), 'PPPPpp')}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDistanceToNow(new Date(selectedLog.created_at))} ago
-                  </Typography>
-                </Grid>
-
-                {selectedLog.ip_address && (
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      IP Address
-                    </Typography>
-                    <Typography variant="body1" fontFamily="monospace">
-                      {selectedLog.ip_address}
-                    </Typography>
-                  </Grid>
-                )}
-
-                {selectedLog.user_agent && (
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      User Agent
-                    </Typography>
-                    <Typography variant="body2" fontFamily="monospace" fontSize="0.75rem">
-                      {selectedLog.user_agent}
-                    </Typography>
-                  </Grid>
-                )}
-
-                {Object.keys(selectedLog.changes || {}).length > 0 && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      Changes Made
-                    </Typography>
-                    <Card variant="outlined">
-                      <CardContent>
-                        <pre style={{ 
-                          margin: 0, 
-                          fontSize: '0.75rem',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-all'
-                        }}>
-                          {JSON.stringify(selectedLog.changes, null, 2)}
-                        </pre>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                )}
-
-                {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      Additional Metadata
-                    </Typography>
-                    <Card variant="outlined">
-                      <CardContent>
-                        <pre style={{ 
-                          margin: 0, 
-                          fontSize: '0.75rem',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-all'
-                        }}>
-                          {JSON.stringify(selectedLog.metadata, null, 2)}
-                        </pre>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                )}
-              </Grid>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDetailDialog}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+      {/* Pagination */}
+      {data && data.pagination.pages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-slate-600">
+            Showing {data.logs.length} of {data.pagination.total} logs
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <div className="flex items-center gap-2">
+              {Array.from({ length: Math.min(5, data.pagination.pages) }).map((_, i) => {
+                const pageNum = i + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                      page === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'border border-slate-300 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setPage(Math.min(data.pagination.pages, page + 1))}
+              disabled={page === data.pagination.pages}
+              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
