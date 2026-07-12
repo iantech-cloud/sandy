@@ -438,9 +438,14 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       return { success: false, message: 'User profile not found' };
     }
 
-    // Check if already activated - use AND logic (both conditions must indicate activation)
+    // Check if already activated - use AND logic (BOTH must indicate activation)
     const isActivationPaid = userProfile.approval_status === 'approved' && userProfile.rank !== 'Unactivated';
     if (isActivationPaid) {
+      console.log('[v0] User already activated, refusing duplicate payment:', {
+        username: userProfile.username,
+        approval_status: userProfile.approval_status,
+        rank: userProfile.rank
+      });
       return { success: false, message: 'Account is already activated' };
     }
 
@@ -645,9 +650,14 @@ export async function completeActivationAfterPayment(activationPaymentId: string
       return { success: false, message: 'User profile not found' };
     }
 
-    // ✅ FIXED: Check if already activated using correct fields
-    const isActivationPaid = userProfile.approval_status !== 'pending' || userProfile.rank !== 'Unactivated';
+    // ✅ FIXED: Check if already activated using correct fields (both must indicate activation)
+    const isActivationPaid = userProfile.approval_status === 'approved' && userProfile.rank !== 'Unactivated';
     if (isActivationPaid) {
+      console.log('[v0] Account already activated:', {
+        username: userProfile.username,
+        approval_status: userProfile.approval_status,
+        rank: userProfile.rank
+      });
       return { 
         success: true, 
         message: 'Account already activated',
@@ -1065,8 +1075,36 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     };
 
   } catch (error) {
-    console.error('💥 Complete activation error:', error);
-    return { success: false, message: 'Failed to complete activation' };
+    console.error('💥 CRITICAL: Complete activation error:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : '',
+      activationPaymentId: activationPaymentId,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Log the activation failure for audit purposes
+    try {
+      await (ActivationLog as any).create({
+        user_id: null,
+        action: 'failed',
+        status: 'error',
+        error_message: error instanceof Error ? error.message : String(error),
+        metadata: {
+          activation_payment_id: activationPaymentId,
+          error_type: error instanceof Error ? error.constructor.name : 'UnknownError',
+          error_stack: error instanceof Error ? error.stack : '',
+          failed_at: new Date().toISOString()
+        }
+      });
+    } catch (logError) {
+      console.error('Failed to log activation error:', logError);
+    }
+    
+    return { 
+      success: false, 
+      message: error instanceof Error ? error.message : 'Failed to complete activation',
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
 }
 

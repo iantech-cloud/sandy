@@ -8,6 +8,7 @@ import {
   SpinWallet,
   Transaction,
   ChatForeignersMpesaTransaction,
+  ChatForeignersBotAccess,
 } from '@/app/lib/models';
 import { CoopBankService } from '@/app/lib/services/coop-bank';
 import mongoose from 'mongoose';
@@ -324,23 +325,81 @@ export async function POST(request: NextRequest) {
 
           const activationPaymentId = activationPayment._id.toString();
 
-          // Fire-and-forget: do NOT block the callback response on activation.
-          // completeActivationAfterPayment is idempotent (it no-ops if the
-          // account is already active), so the recovery job is safe to re-run.
-          void completeActivationAfterPayment(activationPaymentId).catch(
-            (activationError) => {
+          console.log('[CoopCallback] Payment confirmed - IMMEDIATELY completing activation:', {
+            activationPaymentId,
+            messageReference,
+            userId: activationPayment.user_id,
+            amount: activationPayment.amount_cents / 100,
+            timestamp: new Date().toISOString()
+          });
+
+          // ✅ FIX: Complete activation SYNCHRONOUSLY (not fire-and-forget)
+          // This ensures the user is ALWAYS activated when payment is confirmed.
+          // If activation fails, we still return success to the bank and let the
+          // recovery job handle any orphaned records (but this should rarely happen).
+          try {
+            const activationResult = await completeActivationAfterPayment(activationPaymentId);
+            
+            if (activationResult.success) {
+              console.log(
+                '[CoopCallback] ✅ Activation COMPLETED SUCCESSFULLY:',
+                {
+                  activationPaymentId,
+                  userId: activationPayment.user_id,
+                  username: activationResult.data?.username,
+                  rank: activationResult.data?.rank
+                }
+              );
+            } else {
               console.error(
-                '[CoopCallback] Background activation error (recovery job will retry):',
+                '[CoopCallback] ❌ Activation FAILED - recovery job must retry:',
+                {
+                  activationPaymentId,
+                  error: activationResult.message,
+                  userId: activationPayment.user_id
+                }
+              );
+              
+              // Mark for recovery
+              await (ActivationPayment as any).findByIdAndUpdate(
                 activationPaymentId,
-                activationError
+                {
+                  $set: {
+                    'metadata.activation_attempt_failed': true,
+                    'metadata.activation_failed_at': new Date().toISOString(),
+                    'metadata.activation_error': activationResult.message
+                  }
+                }
               );
             }
-          );
+          } catch (activationError) {
+            console.error(
+              '[CoopCallback] ❌ CRITICAL: Activation threw exception (recovery must retry):',
+              {
+                activationPaymentId,
+                error: activationError instanceof Error ? activationError.message : String(activationError),
+                userId: activationPayment.user_id,
+                stack: activationError instanceof Error ? activationError.stack : ''
+              }
+            );
+            
+            // Mark for recovery
+            await (ActivationPayment as any).findByIdAndUpdate(
+              activationPaymentId,
+              {
+                $set: {
+                  'metadata.activation_attempt_failed': true,
+                  'metadata.activation_failed_at': new Date().toISOString(),
+                  'metadata.activation_error': activationError instanceof Error ? activationError.message : 'Unknown error'
+                }
+              }
+            );
+          }
 
           return NextResponse.json({
             success: true,
-            data: { status: paymentStatus, messageReference, activation: 'pending' },
-            message: 'Payment confirmed. Activation is being processed.',
+            data: { status: paymentStatus, messageReference },
+            message: 'Payment confirmed and user account activated.',
           });
         }
       }
