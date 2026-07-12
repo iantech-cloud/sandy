@@ -84,19 +84,41 @@ async function runRecovery() {
 
   for (const payment of paidNotActivated) {
     try {
+      console.log(`[Recover] Attempting to activate payment ${payment._id}:`, {
+        userId: payment.user_id,
+        amount: payment.amount_cents / 100,
+        paidAt: payment.paid_at,
+        processedBySystem: payment.processed_by_system
+      });
+      
       const result = await completeActivationAfterPayment(payment._id.toString());
       if (result.success) {
         summary.activations_recovered++;
-        console.log(`[Recover] Activated payment ${payment._id}`);
+        console.log(`[Recover] ✅ Successfully activated payment ${payment._id}:`, {
+          username: result.data?.username,
+          rank: result.data?.rank,
+          approvalStatus: result.data?.approval_status
+        });
       } else {
         summary.activations_failed++;
-        summary.errors.push(`activation ${payment._id}: ${result.message}`);
+        const errorMsg = `activation ${payment._id}: ${result.message}`;
+        summary.errors.push(errorMsg);
+        console.error(`[Recover] ❌ Failed to activate payment ${payment._id}:`, {
+          error: result.message,
+          userId: payment.user_id,
+          recoveryRetryRecommended: true
+        });
       }
     } catch (err) {
       summary.activations_failed++;
-      summary.errors.push(
-        `activation ${payment._id}: ${err instanceof Error ? err.message : 'unknown error'}`
-      );
+      const errorMsg = `activation ${payment._id}: ${err instanceof Error ? err.message : 'unknown error'}`;
+      summary.errors.push(errorMsg);
+      console.error(`[Recover] ❌ CRITICAL: Activation error for payment ${payment._id}:`, {
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : '',
+        userId: payment.user_id,
+        requiresManualIntervention: true
+      });
     }
   }
 
