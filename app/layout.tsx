@@ -8,7 +8,6 @@ import { ThemeProvider } from './providers/ThemeProvider';
 import Script from 'next/script';
 import { auth } from '@/auth';
 import { Analytics } from "@vercel/analytics/next"
-import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://hustlehubafrica.com'),
@@ -220,12 +219,6 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-        
-        {/* HashBack Payment Button */}
-        <Script 
-          src="https://pay.hashback.co.ke/hashpay.js" 
-          strategy="lazyOnload"
-        />
       </head>
       <body className={`${timesNewRoman.className} antialiased`} suppressHydrationWarning>
         <ThemeProvider>
