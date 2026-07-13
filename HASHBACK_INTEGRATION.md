@@ -1,72 +1,100 @@
-# HashBack Payment Integration - Simplified Guide
+# HashBack Payment Button Integration
 
 **Version:** 1.0  
 **Status:** Production Ready  
-**Last Updated:** 2026-07-13
+**Date:** 2026-07-13
 
 ---
 
-## Quick Start
+## Overview
 
-### Setup (2 minutes)
+Sandy uses HashBack's **Payment Button** - a drop-in M-Pesa popup that requires only the public Account ID. No secret API keys are exposed to the browser.
 
-1. **Get HashBack Credentials:**
-   - Sign up at https://hashback.co.ke/
-   - Go to Settings → Generate API Key & Account ID
-   - Copy credentials to `.env.local`
-
-2. **Environment Variables:**
-   ```
-   HASHBACK_API_KEY=your-api-key
-   HASHBACK_ACCOUNT_ID=your-account-id
-   HASHBACK_WEBHOOK_SECRET=your-webhook-secret
-   ```
-
-3. **Webhook URL (HashBack Settings):**
-   ```
-   https://your-domain.com/api/hashback/webhook
-   ```
+**Key Point:** Only ACCOUNT_ID needed (public key) - works client-side with webhooks for confirmation.
 
 ---
 
-## System Overview
+## Setup (3 Steps)
 
-### Withdrawable Wallets (Only These)
+### 1. Get Account ID
 
-1. **Chat Foreigners Earnings Wallet**
-   - User earns: KES 0.10 per message (capped KES 100/day)
-   - Withdrawable to M-Pesa via HashBack B2C
-   - Min withdrawal: KES 10 | Max: KES 50,000
-   - Withdrawal fee: 10%
+1. Sign up at https://hashback.co.ke/
+2. Go to Dashboard → Settings
+3. Copy your public ACCOUNT_ID (e.g., `HP945692`)
+4. Add to `.env.local`:
 
-2. **Spin Wallet**
-   - Deposit: KES 30 only via HashBack STK
-   - Spins cost: KES 30 each
-   - Company keeps: 20% of deposits (KES 6)
-   - Cashout to Chat Foreigners wallet (free transfer)
+```
+NEXT_PUBLIC_HASHBACK_ACCOUNT_ID=your-public-account-id
+HASHBACK_WEBHOOK_SECRET=your-webhook-secret
+```
 
-### Non-Withdrawable (Use Only for Gaming)
+### 2. Configure Webhook
 
-- **Aviator Wallet** - 50% house edge, play-only
-- **Casino Wallet** - 50% house edge, play-only
-- **Referral Earnings** - Lock in main wallet, use for activation/bot unlock
+In HashBack Settings, add webhook URL:
+```
+https://your-domain.com/api/webhooks/hashback
+```
+
+### 3. Add Script to Layout
+
+```tsx
+// app/layout.tsx
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <head>
+        <script src="https://pay.hashback.co.ke/hashpay.js" />
+      </head>
+      <body>{children}</body>
+    </html>
+  )
+}
+```
 
 ---
 
-## Payment Flows
+## How It Works
 
-### Flow 1: Activation Payment (KES 95)
+Three simple steps:
+
+1. **Setup** - Load script, call `HashPay.setup()` with Account ID + amount
+2. **Payment** - User enters phone, M-Pesa STK sent, user enters PIN
+3. **Webhook** - Payment confirmed, server updates database, callback fires
+
+---
+
+## Wallet System
+
+### Non-Withdrawable (Deposit Only)
+
+| Wallet | Deposit | Company Revenue | Status |
+|--------|---------|-----------------|--------|
+| Spin Wallet | KES 30 | 20% (KES 6) | Non-withdrawable |
+| Chat Foreigners Earnings | KES 0.10/msg, max KES 100/day | N/A | Non-withdrawable |
+| Aviator | KES 50-1,000 | 50% (house edge) | Non-withdrawable, play-only |
+| Casino | KES 50-1,000 | 50% (house edge) | Non-withdrawable, play-only |
+| Referral Earnings | From bot unlocks | N/A | Non-withdrawable, locked |
+
+---
+
+## Payment Button Flows
+
+### Flow 1: Account Activation (KES 95)
 
 ```
 User clicks "Activate Account"
          ↓
-Choose payment: HashBack or Co-op Bank
+HashBack Payment Button opens
          ↓
-HashBack STK → User enters PIN
+User enters phone + confirms
          ↓
-Payment confirmed → Webhook received
+M-Pesa STK → User enters PIN
          ↓
-Account activated + credited as referral earning
+Webhook received: payment.success
+         ↓
+Account activated
+         ↓
+Referrer credited: KES 65
          ↓
 Ready to earn from Chat Foreigners
 ```
@@ -74,380 +102,396 @@ Ready to earn from Chat Foreigners
 ### Flow 2: Bot Unlock (KES 100)
 
 ```
-User unlocks Bot for lifetime chat
+User clicks "Unlock Chat Foreigners Bot"
          ↓
-Choose payment: HashBack or Co-op Bank
+HashBack Payment Button opens
          ↓
-Payment success → Revenue split:
-  - L1 Referrer: KES 70 (referral earning)
-  - L2 Grandparent: KES 10 (referral earning)
+User enters phone + confirms
+         ↓
+M-Pesa STK → User enters PIN
+         ↓
+Webhook received: payment.success
+         ↓
+Bot unlocked (lifetime access)
+         ↓
+Revenue split:
+  - L1 Referrer: KES 70
+  - L2 Grandparent: KES 10
   - Company: KES 20
          ↓
-Bot access granted immediately
+User can chat immediately
 ```
 
-### Flow 3: Chat Foreigners Message Earning
-
-```
-User chats with bot
-         ↓
-Each message: +KES 0.10 to Chat Foreigners wallet
-         ↓
-Daily limit: KES 100 (1,000 messages max)
-         ↓
-Balance updates real-time
-         ↓
-User can withdraw anytime (min KES 10)
-```
-
-### Flow 4: Spin Wallet Deposit (KES 30)
+### Flow 3: Spin Wallet Deposit (KES 30)
 
 ```
 User clicks "Top-up Spin Wallet"
          ↓
-HashBack STK → User enters PIN
+HashBack Payment Button opens (KES 30)
          ↓
-KES 30 received in Spin Wallet
+User enters phone + confirms
          ↓
-Company gets KES 6 (20% of deposit)
+M-Pesa STK → User enters PIN
          ↓
-Ready to spin (KES 30 per spin)
+Webhook received: payment.success
+         ↓
+KES 30 added to Spin Wallet
+         ↓
+Company gets: KES 6 (20%)
+         ↓
+Ready to spin (cost: KES 30 per spin)
+         ↓
+NOTE: Balance is non-withdrawable
 ```
 
-### Flow 5: Withdraw to M-Pesa
+### Flow 4: Aviator Deposit (KES 50-1,000)
 
 ```
-User clicks "Withdraw" in Chat Foreigners wallet
+User selects amount (50, 100, 250, 500, 1000)
          ↓
-Enter amount (KES 10-50,000)
+HashBack Payment Button opens
          ↓
-Confirm phone number
+User enters phone + confirms
          ↓
-HashBack B2C withdrawal initiated
+M-Pesa STK → User enters PIN
          ↓
-10% fee deducted
+Webhook received: payment.success
          ↓
-M-Pesa arrives in 10-30 seconds
+Amount added to Aviator Wallet
+         ↓
+Company gets: 50% (house edge)
+         ↓
+Ready to play
+         ↓
+NOTE: Non-withdrawable, play-only balance
+```
+
+### Flow 5: Casino Deposit (KES 50-1,000)
+
+```
+User selects game (Slots/Blackjack/Roulette/Dice/Baccarat)
+         ↓
+User selects amount (50, 100, 250, 500, 1000)
+         ↓
+HashBack Payment Button opens
+         ↓
+User enters phone + confirms
+         ↓
+M-Pesa STK → User enters PIN
+         ↓
+Webhook received: payment.success
+         ↓
+Amount added to Casino Wallet
+         ↓
+Company gets: 50% (house edge)
+         ↓
+Game auto-launches
+         ↓
+NOTE: Non-withdrawable, play-only balance
 ```
 
 ---
 
-## Revenue Model
+## Payment Button Component
 
-### Monthly Expected Revenue
+```tsx
+// app/components/hashback-payment-button.tsx
+'use client'
 
-| Source | Amount | Frequency |
-|--------|--------|-----------|
-| Activation (KES 95 × 500 users) | KES 47,500 | Per month |
-| Bot Unlocks - Company share (KES 20 × 1,000) | KES 20,000 | Per month |
-| Spin Wallet revenue (KES 6 × 5,000 deposits) | KES 30,000 | Per month |
-| Aviator house edge (50% of KES 10M bets) | KES 5,000,000 | Per month |
-| Casino house edge (50% of KES 10M bets) | KES 5,000,000 | Per month |
-| **Total** | **KES 10,097,500** | **Per month** |
+import { useState } from 'react'
+
+export function HashBackPaymentButton({
+  amount,
+  reference,
+  onSuccess,
+  onCancel,
+  onError,
+  label = 'Pay Now'
+}: {
+  amount: number // KES
+  reference: string // unique order ID
+  onSuccess: (txn: any) => void
+  onCancel: () => void
+  onError: (error: any) => void
+  label?: string
+}) {
+  const [loading, setLoading] = useState(false)
+  const accountId = process.env.NEXT_PUBLIC_HASHBACK_ACCOUNT_ID
+
+  const handlePay = () => {
+    if (!window.HashPay) {
+      onError(new Error('HashPay not loaded'))
+      return
+    }
+
+    setLoading(true)
+
+    const handler = window.HashPay.setup({
+      account: accountId,
+      amount: amount,
+      reference: reference,
+      onSuccess: (txn: any) => {
+        setLoading(false)
+        // Validate amount on server before fulfilling
+        onSuccess(txn)
+      },
+      onCancel: () => {
+        setLoading(false)
+        onCancel()
+      },
+      onError: (error: any) => {
+        setLoading(false)
+        onError(error)
+      }
+    })
+
+    handler.openIframe()
+  }
+
+  return (
+    <button
+      onClick={handlePay}
+      disabled={loading}
+      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+    >
+      {loading ? 'Processing...' : label}
+    </button>
+  )
+}
+```
 
 ---
 
-## Database Changes Required
+## Webhook Handler
 
-### New Collections
+Only endpoint needed for payment confirmation.
 
-#### HashBackTransaction
 ```typescript
-{
-  _id: ObjectId,
-  user_id: ObjectId,
+// app/api/webhooks/hashback/route.ts
+import crypto from 'crypto'
+
+export async function POST(request: Request) {
+  const rawBody = await request.text()
+  const signature = request.headers.get('x-hashpay-signature')
   
-  // Transaction details
-  type: 'activation' | 'bot_unlock' | 'spin_deposit' | 'withdrawal',
-  amount_cents: number,
-  provider: 'hashback' | 'coop_bank',
+  // Verify signature (CRITICAL)
+  if (!verifySignature(rawBody, signature)) {
+    return new Response('Invalid signature', { status: 401 })
+  }
+
+  const payload = JSON.parse(rawBody)
+
+  if (payload.event !== 'payment.success') {
+    return new Response('OK', { status: 200 })
+  }
+
+  const {
+    TransactionID,
+    TransactionAmount,
+    TransactionReference,
+    TransactionReceipt
+  } = payload
+
+  // Parse reference to get transaction type
+  const [type, userId, orderId] = TransactionReference.split('_')
+
+  // Verify amount
+  const expectedAmount = getExpectedAmount(type)
+  if (TransactionAmount !== expectedAmount) {
+    console.error('Amount mismatch')
+    return new Response('Invalid amount', { status: 400 })
+  }
+
+  // Process transaction
+  try {
+    switch (type) {
+      case 'activation':
+        await processActivation(userId)
+        break
+      case 'bot_unlock':
+        await processBotUnlock(userId)
+        break
+      case 'spin_deposit':
+        await processSpinDeposit(userId, TransactionAmount)
+        break
+      case 'aviator_deposit':
+        await processAviatorDeposit(userId, TransactionAmount)
+        break
+      case 'casino_deposit':
+        await processCasinoDeposit(userId, TransactionAmount)
+        break
+    }
+  } catch (error) {
+    console.error('[Webhook] Processing error:', error)
+    return new Response('Error', { status: 500 })
+  }
+
+  return new Response('OK', { status: 200 })
+}
+
+function verifySignature(rawBody: string, signature: string | null): boolean {
+  if (!signature) return false
   
-  // HashBack response
-  checkout_id: string,
-  receipt: string,
-  transaction_id: string,
+  const secret = process.env.HASHBACK_WEBHOOK_SECRET
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret!)
+    .update(rawBody)
+    .digest('hex')
   
-  // Status tracking
-  status: 'pending' | 'completed' | 'failed',
-  created_at: Date,
-  completed_at?: Date
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(signature)
+  )
+}
+
+function getExpectedAmount(type: string): number {
+  const amounts: Record<string, number> = {
+    activation: 9500,    // KES 95
+    bot_unlock: 10000,   // KES 100
+    spin_deposit: 3000   // KES 30
+  }
+  return amounts[type] || 0
+}
+
+async function processActivation(userId: string) {
+  // Mark account as activated
+  // Credit referrer KES 65
+}
+
+async function processBotUnlock(userId: string) {
+  // Grant bot access
+  // Credit referrer KES 70, grandparent KES 10
+}
+
+async function processSpinDeposit(userId: string, amountCents: number) {
+  // Add to spin wallet
+  // Company gets 20%
+}
+
+async function processAviatorDeposit(userId: string, amountCents: number) {
+  // Add to aviator wallet
+  // Company gets 50%
+}
+
+async function processCasinoDeposit(userId: string, amountCents: number) {
+  // Add to casino wallet
+  // Company gets 50%
 }
 ```
 
-#### ChatForeignersWallet
-```typescript
-{
-  _id: ObjectId,
-  user_id: ObjectId,
-  
-  balance_cents: number,
-  total_earned_cents: number,
-  
-  transaction_history: [{
-    message_count: number,
-    earned_cents: number,
-    date: Date
-  }],
-  
-  withdrawal_history: [{
-    amount_cents: number,
-    fee_cents: number,
-    receipt: string,
-    withdrawn_at: Date
-  }]
-}
-```
+---
 
-#### SpinWallet (Update to include HashBack)
+## Database Updates Required
+
+### SpinWallet
 ```typescript
 {
-  _id: ObjectId,
   user_id: ObjectId,
-  
   balance_cents: number,
-  
   deposits: [{
     amount_cents: number,
-    provider: 'hashback' | 'coop_bank',
-    receipt: string,
-    company_revenue_cents: number,  // 20% of amount
+    provider: 'hashback',
+    company_revenue_cents: number,  // 20%
     deposit_at: Date
-  }],
-  
-  spins: [{
-    result: 'win' | 'try_again',
-    spent_cents: number,
-    spun_at: Date
+  }]
+}
+```
+
+### AviatorWallet
+```typescript
+{
+  user_id: ObjectId,
+  balance_cents: number,
+  deposits: [{
+    amount_cents: number,
+    provider: 'hashback',
+    deposit_at: Date
+  }]
+}
+```
+
+### CasinoWallet
+```typescript
+{
+  user_id: ObjectId,
+  balance_cents: number,
+  deposits: [{
+    amount_cents: number,
+    provider: 'hashback',
+    deposit_at: Date
   }]
 }
 ```
 
 ---
 
-## API Endpoints Needed
+## Security Checklist
 
-### 1. HashBack Webhook
-```
-POST /api/hashback/webhook
-
-Headers:
-  X-Hashpay-Signature: sha256=<hex>
-  Content-Type: application/json
-
-Body:
-  {
-    event: 'payment.success',
-    TransactionID: 'UEC496402X',
-    TransactionAmount: 95,
-    TransactionReference: 'order_123',
-    Msisdn: 254701234567
-  }
-
-Response: 200 OK
-```
-
-### 2. Initiate Payment
-```
-POST /api/hashback/payment/initiate
-
-Body:
-  {
-    amount_cents: 9500,  // KES 95
-    type: 'activation',
-    description: 'Account Activation'
-  }
-
-Response:
-  {
-    checkout_id: 'ws_CO_...',
-    account_id: 'HP945692'
-  }
-```
-
-### 3. Initiate Withdrawal
-```
-POST /api/hashback/withdrawal
-
-Body:
-  {
-    amount_cents: 50000,  // KES 500
-    msisdn: '254701234567',
-    wallet_type: 'chat_foreigners'
-  }
-
-Response:
-  {
-    success: true,
-    transaction_id: 'UEC496402X',
-    fee_cents: 5000,
-    net_amount_cents: 45000
-  }
-```
-
-### 4. Check Balance
-```
-GET /api/hashback/balance
-
-Response:
-  {
-    chat_foreigners_balance_cents: 150000,
-    spin_wallet_balance_cents: 0,
-    withdrawable_cents: 150000
-  }
-```
+- [ ] Webhook signature verification (CRITICAL)
+- [ ] Server-side amount validation (CRITICAL)
+- [ ] ACCOUNT_ID is public (safe to expose)
+- [ ] WEBHOOK_SECRET never exposed to client
+- [ ] Use timing-safe comparison for signatures
+- [ ] Validate phone numbers before payment
+- [ ] Log all transactions for audit
 
 ---
 
-## Security
+## Implementation Steps
 
-### Webhook Verification (CRITICAL)
+1. **Add environment variable:**
+   ```
+   NEXT_PUBLIC_HASHBACK_ACCOUNT_ID=your-account-id
+   HASHBACK_WEBHOOK_SECRET=your-secret
+   ```
 
-```typescript
-// Every webhook MUST be verified before processing
-import crypto from 'crypto';
+2. **Add script to layout:** (see Setup section)
 
-function verifyHashBackWebhook(rawBody: string, signature: string): boolean {
-  const secret = process.env.HASHBACK_WEBHOOK_SECRET;
-  const expected = 'sha256=' + crypto
-    .createHmac('sha256', secret)
-    .update(rawBody)
-    .digest('hex');
-  
-  return crypto.timingSafeEqual(expected, signature);
-}
-```
+3. **Create Payment Button component:** (see above)
 
-### Amount Validation
+4. **Create webhook handler:** (see above)
 
-Always validate amounts on server-side before processing:
-```typescript
-if (amount < 1000) {  // Min KES 10
-  throw new Error('Amount too small');
-}
-if (amount > 5000000) {  // Max KES 50,000
-  throw new Error('Amount too large');
-}
-```
+5. **Update databases:** Add SpinWallet, AviatorWallet, CasinoWallet
 
----
+6. **Add buttons to:**
+   - Activation page (KES 95)
+   - Bot unlock page (KES 100)
+   - Spin wallet page (KES 30)
+   - Aviator game (KES 50-1,000)
+   - Casino games (KES 50-1,000)
 
-## Rate Limiting
-
-HashBack enforces:
-- 100 requests per minute per API key
-- 10 decode requests per 5 seconds
-
-Implement exponential backoff:
-```typescript
-async function callHashBack(fn: () => Promise<any>) {
-  let retries = 0;
-  while (retries < 3) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (error.status === 429) {
-        await delay(Math.pow(2, retries) * 1000);
-        retries++;
-      } else {
-        throw error;
-      }
-    }
-  }
-}
-```
-
----
-
-## Error Handling
-
-### Fallback to Co-op Bank
-
-If HashBack fails with any error:
-1. Log the error
-2. Retry once after 1 second
-3. If still fails, use Co-op Bank as fallback
-4. Notify admin for investigation
-
-```typescript
-async function initiatePayment(amount: number) {
-  try {
-    return await hashback.initiateSTK(amount);
-  } catch (error) {
-    console.error('[HashBack Error]', error);
-    // Fallback to Co-op Bank
-    return await coopBank.initiateSTK(amount);
-  }
-}
-```
-
----
-
-## Testing Checklist
-
-- [ ] Webhook signature verification
-- [ ] Payment flow with HashBack STK
-- [ ] Payment flow with Co-op Bank fallback
-- [ ] Chat Foreigners earning (KES 0.10 per message)
-- [ ] Daily earning cap (KES 100)
-- [ ] Spin wallet deposit and spins
-- [ ] Withdrawal with 10% fee
-- [ ] Withdrawal minimum (KES 10)
-- [ ] Withdrawal maximum (KES 50,000)
-- [ ] Admin dashboard shows correct revenue
-- [ ] Transaction history accuracy
-- [ ] Rate limiting & exponential backoff
-- [ ] Error handling & fallback logic
-
----
-
-## Files to Create
-
-1. `/app/lib/services/hashback.ts` - API client
-2. `/app/api/hashback/webhook/route.ts` - Webhook handler
-3. `/app/api/hashback/payment/initiate/route.ts` - Payment init
-4. `/app/api/hashback/withdrawal/route.ts` - Withdrawal handler
-5. `/app/api/hashback/balance/route.ts` - Balance check
-6. `/app/actions/chat-foreigners-wallet.ts` - Wallet actions
-7. `/app/components/chat-foreigners-earnings.tsx` - Earnings display
-8. `/app/components/withdraw-button.tsx` - Withdrawal UI
-
----
-
-## Files to Modify
-
-1. `.env.local` - Add HashBack credentials
-2. `app/lib/models.ts` - Add new collections
-3. `app/actions/chat-foreigners/payments.ts` - Use HashBack
-4. `app/actions/activation.ts` - Use HashBack
-5. Dashboard components - Show Chat Foreigners balance
+7. **Test:**
+   - Payment button displays correctly
+   - Webhook receives confirmations
+   - Database updates after payment
+   - User balance reflects deposit
 
 ---
 
 ## FAQ
 
-**Q: Can users withdraw Aviator/Casino winnings?**
-A: No. Only Chat Foreigners earnings and Spin wallet can be withdrawn. Gaming is for entertainment only.
+**Q: Can users withdraw from Spin/Chat wallets?**
+A: No. All wallets are non-withdrawable. Spin and Chat are deposit-only.
 
-**Q: What's the 50% house edge?**
-A: On every Aviator/Casino bet, 50% goes to company, 50% stays as player payout. Mathematically, users lose over time.
+**Q: Do we need API keys for payments?**
+A: No. Only ACCOUNT_ID (public). No secret keys in browser.
 
-**Q: How fast are withdrawals?**
-A: 10-30 seconds to M-Pesa via HashBack B2C.
+**Q: What if payment fails?**
+A: Webhook won't arrive, transaction won't be recorded. User can retry.
 
-**Q: What if HashBack is down?**
-A: Automatic fallback to Co-op Bank. Users won't notice any difference.
+**Q: How long until M-Pesa arrives?**
+A: Instant when user enters PIN. Webhook confirmation in <1 second.
 
-**Q: Can earnings be paused or reset?**
-A: No. Chat Foreigners earnings accumulate daily up to KES 100 and carry over.
+**Q: Is the webhook secure?**
+A: Yes. Verify X-Hashpay-Signature header (HMAC-SHA256) on every request.
 
 ---
 
 ## Monitoring
 
-Check these daily:
-1. HashBack webhook success rate (should be 99.9%+)
-2. Withdrawal completion time (should be <30s avg)
-3. Failed payment retries (should be <1%)
-4. Chat Foreigners earnings are updating correctly
-5. Admin revenue dashboard accuracy
+- HashBack webhook success rate (should be 99%+)
+- Payment confirmation time (should be <2 seconds)
+- Failed payments count
+- Transaction volume daily
+- Revenue by deposit type
 
