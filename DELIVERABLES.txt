@@ -1,0 +1,284 @@
+================================================================================
+HASHBACK INTEGRATION - COMPLETE DELIVERABLES
+================================================================================
+
+Date: 2026-07-13
+Status: Ready for Development
+
+================================================================================
+DOCUMENTATION FILES CREATED
+================================================================================
+
+1. HASHBACK_INTEGRATION.md (453 lines)
+   - Production-ready implementation guide
+   - All 5 payment flows documented
+   - Database schema changes
+   - API endpoints specifications
+   - Security best practices
+   - Error handling & fallback logic
+   - Testing checklist
+   - FAQ section
+
+2. IMPLEMENTATION_SUMMARY.md (161 lines)
+   - Executive summary of changes
+   - What changed vs old plan
+   - Key decisions documented
+   - Timeline for implementation
+   - Next steps checklist
+
+3. QUICK_REFERENCE.md (153 lines)
+   - Copy-paste environment setup
+   - Wallet comparison table
+   - Revenue breakdown
+   - Critical code snippets
+   - Testing commands
+   - Deployment checklist
+   - Common issues & fixes
+
+4. .env.example (UPDATED)
+   - Added HashBack credentials section
+   - Marked as PRIMARY payment
+   - Co-op Bank as FALLBACK
+   - Clear instructions
+
+================================================================================
+KEY CHANGES FROM PREVIOUS VERSION
+================================================================================
+
+SIMPLIFIED AUTHENTICATION:
+  Old: Complex multi-endpoint auth
+  New: Only 3 env variables (API_KEY, ACCOUNT_ID, WEBHOOK_SECRET)
+
+WITHDRAWABLE WALLETS (ONLY 2):
+  ✅ Chat Foreigners Earnings Wallet
+     - Source: KES 0.10 per message (max 100/day)
+     - Withdrawable to M-Pesa
+     - Min: KES 10, Max: KES 50,000
+     - Fee: 10%
+
+  ✅ Spin Wallet
+     - Source: KES 30 deposits
+     - Can transfer back to Chat Foreigners (free)
+     - Can re-spend on spins
+
+  ❌ Aviator Wallet (NOT withdrawable)
+     - 50% house edge, gaming only
+
+  ❌ Casino Wallet (NOT withdrawable)
+     - 50% house edge, gaming only
+
+  ❌ Referral Earnings (NOT withdrawable)
+     - Locked in main wallet
+
+REVENUE MODEL (MONTHLY):
+  - Activation (500 users): KES 47,500
+  - Bot Unlocks (1,000): KES 20,000
+  - Spin Revenue (5,000 deposits): KES 30,000
+  - Aviator (50% house edge): KES 5,000,000
+  - Casino (50% house edge): KES 5,000,000
+  TOTAL: KES 10,097,500+ per month
+
+================================================================================
+FILES TO CREATE (8 TOTAL)
+================================================================================
+
+SERVICES (1):
+  /app/lib/services/hashback.ts
+    - API client wrapper
+    - Payment initiation
+    - Withdrawal handling
+    - Balance checking
+
+API ROUTES (4):
+  /app/api/hashback/webhook/route.ts
+    - Webhook handler
+    - Signature verification
+    - Transaction processing
+
+  /app/api/hashback/payment/initiate/route.ts
+    - Payment initialization
+    - Amount validation
+    - Reference generation
+
+  /app/api/hashback/withdrawal/route.ts
+    - Withdrawal processing
+    - Fee calculation
+    - M-Pesa delivery
+
+  /app/api/hashback/balance/route.ts
+    - Balance retrieval
+    - Multi-wallet support
+
+SERVER ACTIONS (1):
+  /app/actions/chat-foreigners-wallet.ts
+    - Earnings tracking
+    - Withdrawal requests
+    - Transaction history
+
+COMPONENTS (2):
+  /app/components/chat-foreigners-earnings.tsx
+    - Real-time earnings display
+    - Daily cap indicator
+    - Withdrawal button
+
+  /app/components/withdraw-button.tsx
+    - Withdrawal form
+    - Amount validation
+    - Confirmation dialog
+
+================================================================================
+FILES TO MODIFY (5 TOTAL)
+================================================================================
+
+.env.local
+  - Add HASHBACK_API_KEY
+  - Add HASHBACK_ACCOUNT_ID
+  - Add HASHBACK_WEBHOOK_SECRET
+
+app/lib/models.ts
+  - Add HashBackTransaction collection
+  - Add ChatForeignersWallet collection
+  - Update SpinWallet for HashBack support
+
+app/actions/chat-foreigners/payments.ts
+  - Update to use HashBack for deposits
+  - Add earnings tracking logic
+  - Add withdrawal handling
+
+app/actions/activation.ts
+  - Update to use HashBack payment
+  - Add fallback to Co-op Bank
+  - Verify webhook processing
+
+Dashboard Components
+  - Display Chat Foreigners balance
+  - Show withdrawal history
+  - Real-time earnings update
+
+================================================================================
+IMPLEMENTATION TIMELINE
+================================================================================
+
+WEEK 1: Infrastructure
+  - Create 4 API route files
+  - Create HashBack service
+  - Update database models
+  - Configure webhooks
+  - Test signature verification
+
+WEEK 2: Business Logic & UI
+  - Create 3 remaining files
+  - Implement server actions
+  - Create UI components
+  - Add earning calculations
+  - Implement withdrawal flow
+
+WEEK 3: Testing & Deployment
+  - Unit tests for all endpoints
+  - Integration testing
+  - Security audit
+  - Load testing
+  - Production deployment
+
+================================================================================
+SECURITY MEASURES
+================================================================================
+
+✅ HMAC-SHA256 webhook signature verification (MANDATORY)
+✅ Server-side amount validation (no client-side trust)
+✅ Exponential backoff for rate limiting
+✅ Phone number format validation
+✅ Daily withdrawal limits enforcement
+✅ Automatic fallback to Co-op Bank
+✅ Transaction audit logging
+✅ Admin reconciliation reports
+
+================================================================================
+TESTING REQUIREMENTS
+================================================================================
+
+UNIT TESTS:
+  - Webhook signature verification
+  - Amount validation
+  - Fee calculations
+  - Rate limiting logic
+
+INTEGRATION TESTS:
+  - Full payment flow (HashBack)
+  - Full payment flow (Co-op fallback)
+  - Chat earnings accumulation
+  - Withdrawal to M-Pesa
+  - Error handling & retries
+
+LOAD TESTS:
+  - 100 concurrent payments
+  - 1000 concurrent earnings updates
+  - Rate limit handling
+
+MANUAL TESTS:
+  - Test payments with real M-Pesa
+  - Test withdrawals with real M-Pesa
+  - Test webhook delivery
+  - Verify admin dashboard
+
+================================================================================
+NEXT STEPS FOR DEVELOPMENT TEAM
+================================================================================
+
+1. Read HASHBACK_INTEGRATION.md (primary reference)
+2. Review QUICK_REFERENCE.md for code snippets
+3. Create the 8 new files (use snippets as templates)
+4. Modify the 5 existing files
+5. Set up HashBack account at https://hashback.co.ke/
+6. Add credentials to .env.local
+7. Implement webhook handler (critical)
+8. Run test suite
+9. Deploy to staging
+10. Run load tests
+11. Deploy to production
+
+================================================================================
+RESOURCES
+================================================================================
+
+HashBack Official:
+  - Website: https://hashback.co.ke/
+  - API Docs: https://api.hashback.co.ke/
+  - Support: hashbacksolutions@gmail.com
+  - WhatsApp: Developer support group (link in dashboard)
+
+Sandy Platform:
+  - Implementation Guide: HASHBACK_INTEGRATION.md
+  - Quick Reference: QUICK_REFERENCE.md
+  - Summary: IMPLEMENTATION_SUMMARY.md
+
+================================================================================
+FINAL NOTES
+================================================================================
+
+This integration is production-ready and can be implemented immediately.
+
+Key advantages over previous plan:
+- Simplified to only 3 environment variables
+- Clear distinction of withdrawable vs gaming wallets
+- Chat Foreigners earnings are now withdrawable
+- Spin wallet is withdrawable (can transfer back)
+- All documentation is in ONE primary file (HASHBACK_INTEGRATION.md)
+
+HashBack handles:
+- Payment collection (STK Push)
+- Instant confirmation (webhooks)
+- B2C withdrawals to M-Pesa
+- Rate limiting
+- Transaction reconciliation
+
+Sandy handles:
+- User earnings tracking
+- Wallet management
+- Revenue tracking
+- Admin dashboard
+- User support
+
+================================================================================
+END OF DELIVERABLES
+================================================================================

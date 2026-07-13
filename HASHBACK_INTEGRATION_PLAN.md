@@ -1,8 +1,12 @@
-# HashBack Integration Plan - Complete
+# HashBack Integration Plan - Complete (ARCHIVED)
 ## Sandy Platform - Full Payment System Migration
 
+⚠️ **DEPRECATED:** This document has been replaced by `HASHBACK_INTEGRATION.md`
+
+**Use HASHBACK_INTEGRATION.md instead** - It contains the simplified, production-ready guide.
+
 **Version:** 2.0  
-**Status:** Ready for Implementation  
+**Status:** Archived (Reference only)  
 **Last Updated:** 2026-07-13  
 **Author:** v0 AI
 
