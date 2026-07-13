@@ -26,6 +26,80 @@
 
 ---
 
+## At a Glance - Complete Plan Summary
+
+### What's Being Implemented
+
+**4 Gaming Wallets** with HashBack as primary payment provider:
+1. **Main Wallet** - User earnings (chat, referrals, game winnings)
+2. **Spin Wallet** - KES 30 deposits, 20% company revenue
+3. **Aviator Wallet** - KES 50-1,000 deposits, 50% house edge
+4. **Casino Wallet** - KES 50-1,000 deposits, 50% house edge (5 games)
+
+### 50% House Edge Policy (CRITICAL)
+
+Both Aviator and Casino operate with **uniform 50% house edge** to cover:
+- Infrastructure & hosting (40% of revenue)
+- Operations & support (28% of revenue)
+- Development (20% of revenue)
+- Legal & compliance (8% of revenue)
+- Profit margin (4% of revenue)
+
+**Example:** User bets KES 1,000 and wins 5x → receives KES 2,500 (50% of KES 5,000 payout), company keeps KES 2,500
+
+### Revenue Model - Monthly Example
+
+| Source | Monthly Revenue |
+|--------|-----------------|
+| Bot Unlocks (1,000/mo) | KES 20,000 |
+| Spin Deposits (5,000/mo) | KES 30,000 |
+| Aviator Bets (10K × KES 1,000 avg) | KES 500,000 |
+| Casino Bets (5K × KES 2,000 avg) | KES 500,000 |
+| **Total Monthly Revenue** | **KES 1,050,000+** |
+
+### Files Being Created - 20 New Files
+
+**Services & APIs (6):** HashBack client, webhooks, payment routes, wallet ops, transactions  
+**Server Actions (4):** HashBack actions, Aviator logic, Casino logic, Spin wallet  
+**Components (10):** Payment buttons, wallet dashboard, game UIs, stats pages
+
+### Files Being Modified - 5 Existing
+
+`.env.local`, `lib/models.ts`, `actions/activation.ts`, `actions/chat-foreigners/payments.ts`, payment UI components
+
+### Implementation Timeline
+
+- **Week 1:** Core infrastructure (services, APIs, webhooks, schemas)
+- **Week 2:** Business logic & UI (actions, components, pages)
+- **Week 3:** Testing, QA, production deployment
+
+### Payment Flows - At a Glance
+
+| Flow | Amount | Provider | Speed | Activation |
+|------|--------|----------|-------|------------|
+| Activation | KES 95 | HashBack/Co-op | <1s | Immediate |
+| Bot Unlock | KES 100 | HashBack/Co-op | <1s | Instant |
+| Spin Deposit | KES 30 | HashBack | <1s | Instant |
+| Aviator Deposit | KES 50-1,000 | HashBack | <1s | Instant |
+| Casino Deposit | KES 50-1,000 | HashBack | <1s | Instant |
+| Withdrawal | Any | HashBack B2C | <30s | Instant |
+
+### User Outcomes (50% House Edge)
+
+**Monthly Scenario:**
+- User deposits: KES 3,000
+- Expected result: Break-even to -20% (realistic)
+- User retention: Via VIP rakeback (2-5% loss recovery), leaderboards, social features
+
+**User Protection:**
+- Daily deposit limit: KES 50,000
+- Daily loss limit: KES 100,000
+- Session timeout: 2 hours
+- Self-exclusion available
+- Mandatory responsible gaming warnings
+
+---
+
 ## Executive Summary
 
 Sandy requires a complete payment system overhaul to integrate HashBack as the primary payment provider while maintaining Co-op Bank as a fallback. HashBack provides:
