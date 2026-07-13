@@ -9,6 +9,7 @@ import { useDashboard } from '../../dashboard/DashboardContext';
 import { processWithdrawal } from '@/app/actions/transactions';
 import { getUserBalance } from '@/app/actions/deposit';
 import { formatPhoneNumber, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
+import { HashBackPaymentButton } from '@/app/components/HashBackPaymentButton';
 
 const MIN_WITHDRAWAL = 200;
 
@@ -177,23 +178,32 @@ export default function WalletPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Deposit via M-Pesa — temporarily disabled */}
+        {/* Deposit via M-Pesa with HashBack */}
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h4 className="font-semibold text-lg text-gray-700 flex items-center gap-2 mb-4">
-            <DollarSign size={20} className="text-gray-400" />
+            <DollarSign size={20} className="text-green-600" />
             Deposit via M-Pesa
           </h4>
 
-          <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-center text-gray-500 text-sm mb-4">
-            Deposits via M-Pesa are temporarily unavailable. Please check back soon.
+          <div className="rounded-lg bg-green-50 border border-green-200 p-4 text-center text-green-700 text-sm mb-4">
+            Deposit funds instantly to your wallet using M-Pesa
           </div>
 
-          <button
-            disabled
-            className="w-full py-3 bg-gray-300 text-gray-500 font-semibold rounded-lg cursor-not-allowed"
-          >
-            Deposit via M-Pesa (Coming Soon)
-          </button>
+          <HashBackPaymentButton
+            amount={3000}
+            type="spin_deposit"
+            label="Deposit KES 30 via M-Pesa"
+            onSuccess={() => {
+              setMessage('Deposit successful! Your wallet has been updated.');
+              setMessageType('success');
+              fetchWalletData();
+            }}
+            onError={(error) => {
+              setMessage('Deposit failed. Please try again.');
+              setMessageType('error');
+            }}
+            className="w-full py-3 rounded-lg"
+          />
         </div>
 
         {/* Withdrawal Section */}

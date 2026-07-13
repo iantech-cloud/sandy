@@ -9,7 +9,7 @@ import {
   Sparkles, Info,
 } from 'lucide-react';
 import { checkBotUnlockPaymentStatus } from '@/app/actions/chat-foreigners/payments';
-import { HashBackPaymentButton } from '@/app/admin/components/HashBackPaymentButton';
+import { HashBackPaymentButton } from '@/app/components/HashBackPaymentButton';
 
 interface Person {
   id: string;

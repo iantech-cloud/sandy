@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Phone, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { checkActivationStatus, initiateActivationPayment } from '@/app/actions/activation';
 import Link from 'next/link';
+import { HashBackPaymentButton } from '@/app/components/HashBackPaymentButton';
 
 export default function ActivateComponent() {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -179,45 +180,26 @@ export default function ActivateComponent() {
           </ul>
         </div>
 
-        <form onSubmit={handlePayment}>
-          <div className="mb-6">
-            <label className="block font-medium mb-2 text-gray-700">
-              Phone Number (Co-op Bank M-Pesa)
-            </label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="tel"
-                value={phoneNumber}
-                onChange={handlePhoneChange}
-                placeholder="07XXXXXXXX or 2547XXXXXXXX"
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                required
-                maxLength={12}
-              />
-            </div>
-            {phoneNumber && (
-              <p className="text-sm text-gray-500 mt-1">
-                {formatPhoneForDisplay(phoneNumber)}
-              </p>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading || !isValidPhone(phoneNumber)}
-            className="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition duration-150 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="animate-spin w-5 h-5 mr-2" />
-                Processing...
-              </>
-            ) : (
-              'Pay via Co-op Bank M-Pesa'
-            )}
-          </button>
-        </form>
+        <HashBackPaymentButton
+          amount={9500}
+          type="activation"
+          label="Activate Account (KES 95)"
+          onSuccess={() => {
+            setMessageType('success');
+            setMessage('Payment successful! Your account is now activated. Redirecting...');
+            setTimeout(() => router.push('/dashboard'), 2000);
+          }}
+          onCancel={() => {
+            setMessageType('info');
+            setMessage('Payment cancelled. You can try again when ready.');
+          }}
+          onError={(error) => {
+            setMessageType('error');
+            setMessage('Payment failed. Please try again.');
+            console.error('Payment error:', error);
+          }}
+          className="w-full py-3 rounded-lg"
+        />
 
         <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
           <h4 className="font-semibold text-blue-800 mb-2">Payment Process:</h4>
