@@ -345,8 +345,8 @@ Transaction.create({
 - **Balance Field:** `balance_cents`
 - **Deposit Amounts:** KES 50, 100, 250, 500, 1,000
 - **Bet Range:** KES 10 minimum, KES 50,000 maximum per bet
-- **House Edge:** 2% (company revenue)
-- **RTP (Return to Player):** 98%
+- **House Edge:** 50% (company revenue - covers platform operational costs)
+- **RTP (Return to Player):** 50%
 - **Bet Types:** Single bet, Multiple simultaneous bets
 - **Schema Fields:**
   - `user_id`: Reference to Profile
@@ -376,17 +376,22 @@ Transaction.create({
   - No cashout before crash = Lose full bet
   - Bet timeout: 30 seconds (automatic cancel if not confirmed)
   - Minimum gap between games: 3 seconds
-- **Multiplier Distribution:**
-  - 1.1x - 2x: 40% probability
-  - 2x - 5x: 30% probability
-  - 5x - 10x: 15% probability
-  - 10x - 50x: 10% probability
-  - 50x - 100x: 5% probability
+- **Multiplier Distribution** (50% of wins go to company via house edge):
+  - 1.1x - 2x: 40% probability → User receives 50% of (1.1x-2x winnings)
+  - 2x - 5x: 30% probability → User receives 50% of (2x-5x winnings)
+  - 5x - 10x: 15% probability → User receives 50% of (5x-10x winnings)
+  - 10x - 50x: 10% probability → User receives 50% of (10x-50x winnings)
+  - 50x - 100x: 5% probability → User receives 50% of (50x-100x winnings)
+  
+  Example: User bets KES 1,000 and crashes at 5x
+  - Gross payout would be: KES 5,000
+  - Company takes 50%: KES 2,500
+  - User receives: KES 2,500
 - **Deposit Sources:**
   - HashBack STK Push (primary)
   - Co-op Bank STK Push (fallback)
   - Transfer from Main Wallet (future)
-- **Withdrawal:** Direct cashout to user main wallet (2% fee applied)
+- **Withdrawal:** Direct cashout to user main wallet (no additional fee - 50% already deducted via house edge)
 - **Features:**
   - Live multiplier display
   - One-click cashout
@@ -402,14 +407,14 @@ Transaction.create({
 - **Balance Field:** `balance_cents`
 - **Deposit Amounts:** KES 50, 100, 250, 500, 1,000
 - **Bet Range:** KES 10 minimum, KES 100,000 maximum per bet
-- **House Edge:** 5% average across all games
-- **RTP (Return to Player):** 95%
+- **House Edge:** 50% uniform across all games (covers platform operational costs)
+- **RTP (Return to Player):** 50% uniform across all games
 - **Supported Games:**
-  - **Slots:** 5 reels, 20 paylines, 96% RTP
-  - **Blackjack:** Live dealer, 49% house edge (with strategy)
-  - **Roulette:** European wheel (2.7% edge), section betting
-  - **Dice:** 50/50 outcomes, configurable 1.8x - 2x multiplier
-  - **Baccarat:** Banker/Player/Tie betting (1.06% - 14.36% edge)
+  - **Slots:** 5 reels, 20 paylines, 50% RTP
+  - **Blackjack:** Live dealer, 50% house edge (strategic play doesn't reduce edge)
+  - **Roulette:** Random wheel, 50% edge, section betting
+  - **Dice:** 50/50 outcomes, 1.5x multiplier (50% of bet goes to company)
+  - **Baccarat:** Banker/Player/Tie betting, 50% edge uniform
 - **Schema Fields:**
   - `user_id`: Reference to Profile
   - `balance_cents`: Current playable balance
@@ -444,7 +449,7 @@ Transaction.create({
   - HashBack STK Push (primary)
   - Co-op Bank STK Push (fallback)
   - Transfer from Main Wallet (future)
-- **Withdrawal:** Direct cashout to user main wallet (5% fee applied)
+- **Withdrawal:** Direct cashout to user main wallet (no additional fee - 50% already deducted via house edge)
 - **Responsible Gaming Features:**
   - Daily deposit limit (default KES 50,000)
   - Daily loss limit (default KES 100,000)
@@ -454,11 +459,11 @@ Transaction.create({
   - Reality check: Popup every 30 minutes showing session stats
   - Bet history with timestamps
   - Monthly statement generation
-- **VIP Tiers:**
-  - Bronze: KES 100K deposited → 1% rakeback
-  - Silver: KES 500K deposited → 2% rakeback + faster withdrawals
-  - Gold: KES 1M deposited → 3% rakeback + VIP support
-  - Platinum: KES 5M+ deposited → 5% rakeback + exclusive games
+- **VIP Tiers** (Note: Rakeback is bonus feature, doesn't reduce 50% house edge):
+  - Bronze: KES 100K deposited → 2% rakeback on losses (max KES 1,000/month)
+  - Silver: KES 500K deposited → 3% rakeback on losses + faster withdrawals (max KES 5,000/month)
+  - Gold: KES 1M deposited → 4% rakeback on losses + VIP support (max KES 10,000/month)
+  - Platinum: KES 5M+ deposited → 5% rakeback on losses + exclusive high-limit tables (max KES 25,000/month)
 - **Features:**
   - Live game streaming (future)
   - Tournament modes with prize pools
@@ -474,8 +479,8 @@ Transaction.create({
 - **Balance Field:** `wallet_balance_cents`
 - **Sources:**
   - Bot unlock revenue (KES 20 per unlock from KES 100)
-  - Casino house edge (5% of bets)
-  - Aviator house edge (2% of bets)
+  - Casino house edge (50% of all bets)
+  - Aviator house edge (50% of all bets)
   - Spin wallet revenue (20% of deposits)
   - Platform fees
 - **Daily Tracking:**
@@ -728,25 +733,28 @@ Send SMS + In-app Notification
 #### House Edge Collection
 ```
 Every bet placed:
-  House Edge = bet_amount × 2%
+  House Edge = bet_amount × 50%
   
 If user wins:
-  Payout = (bet_amount × multiplier) - house_edge
+  Payout = (bet_amount × multiplier) × 50%  (after house edge deduction)
   
 If user loses:
-  Company keeps full bet
+  Company keeps full bet (100% of bet amount)
   
 Example:
   User bets: KES 1,000
   Crash at: 5x multiplier
   
   If cashout before 5x:
-    Payout = (1,000 × 4.5) - 20 = KES 4,480
-    Company revenue = KES 20
+    Gross Payout = 1,000 × 4.5 = KES 4,500
+    House Edge Deduction = 4,500 × 50% = KES 2,250
+    User receives = 4,500 - 2,250 = KES 2,250
+    Company revenue = KES 2,250
     
   If cashout after 5x (lose):
     Payout = 0
     Company keeps full KES 1,000
+    Total company revenue = KES 1,000
 ```
 
 #### Database Updates
@@ -818,13 +826,13 @@ Auto-launch selected game
 5. Payout sent or loss recorded
 
 #### House Edge & RTP by Game
-| Game | House Edge | RTP | Payout |
+| Game | House Edge | RTP | User Payout |
 |---|---|---|---|
-| Slots | 4% | 96% | 0.96x to 5x |
-| Blackjack | 0.5% | 99.5% | 1.5x to 2x (strategic) |
-| Roulette | 2.7% | 97.3% | 1x to 35x (number) |
-| Dice | 1% | 99% | 1.8x to 2x |
-| Baccarat | 1.06-14.36% | 85-98% | 1x to 8x |
+| Slots | 50% | 50% | 0.5x to 2.5x (50% of win) |
+| Blackjack | 50% | 50% | 0.75x to 1x (50% of 1.5-2x win) |
+| Roulette | 50% | 50% | 0.5x to 17.5x (50% of 1-35x win) |
+| Dice | 50% | 50% | 0.75x (50% of 1.5x win) |
+| Baccarat | 50% | 50% | 0.5x to 4x (50% of 1-8x win) |
 
 #### Database Updates
 ```typescript
@@ -874,10 +882,10 @@ Company.findByIdAndUpdate(companyId, {
 
 #### User Initiates Cashout
 1. User clicks "Cashout" in Aviator/Casino wallet
-2. System verifies balance
-3. Deducts 2% fee (Aviator) or 5% fee (Casino)
-4. Transfers net amount to Main Wallet
-5. Records transaction
+2. System verifies balance (already includes 50% house edge deduction)
+3. Transfers remaining balance to Main Wallet
+4. Records transaction
+5. Clears gaming wallet balance
 
 #### Processing
 ```
@@ -885,13 +893,14 @@ Cashout Request → Validate Balance
          ↓
 Check daily withdrawal limits on main wallet
          ↓
-Deduct game-specific fee (2% or 5%)
-         ↓
-Transfer to Profile.balance_cents
+Transfer full remaining balance to Profile.balance_cents
+(Note: 50% house edge already applied during betting)
          ↓
 Create Transaction Record
          ↓
 Update both wallet records
+         ↓
+Set gaming wallet balance to 0
          ↓
 Send in-app notification
 ```
@@ -901,30 +910,29 @@ Send in-app notification
 // Debit gaming wallet
 if (gameType === 'aviator') {
   AviatorWallet.findByIdAndUpdate(aviatorWalletId, {
-    $inc: { balance_cents: -cashoutAmount }
+    $set: { balance_cents: 0 }  // Clear remaining balance after cashout
   });
-  fee = cashoutAmount * 0.02;
 } else if (gameType === 'casino') {
   CasinoWallet.findByIdAndUpdate(casinoWalletId, {
-    $inc: { balance_cents: -cashoutAmount }
+    $set: { balance_cents: 0 }  // Clear remaining balance after cashout
   });
-  fee = cashoutAmount * 0.05;
 }
 
-// Credit main wallet
+// Credit main wallet with full remaining balance
+// (50% house edge already deducted during each bet)
 Profile.findByIdAndUpdate(userId, {
-  $inc: { balance_cents: cashoutAmount - fee }
+  $inc: { balance_cents: cashoutAmount }
 });
 
 // Record transaction
 Transaction.create({
   user_id: userId,
-  amount_cents: cashoutAmount - fee,
+  amount_cents: cashoutAmount,
   type: 'gaming_cashout',
   provider: 'internal',
   status: 'completed',
   game_type: gameType,
-  fee_cents: fee,
+  fee_cents: 0,  // No additional fee (house edge already applied)
   created_at: new Date()
 });
 ```
@@ -1553,8 +1561,8 @@ async function reconcileHashBackTransaction(transactionId: string) {
   
   // Game settings
   spin_company_share_percent: number, // 20%
-  aviator_house_edge_percent: number, // 2%
-  casino_house_edge_percent: number, // 5%
+  aviator_house_edge_percent: number, // 50%
+  casino_house_edge_percent: number, // 50%
   
   // Daily reconciliation
   daily_settlement: {
@@ -1839,6 +1847,114 @@ COOP_BANK_SECRET=your_coop_secret
 
 ---
 
+## User Outcome Expectations & Transparency
+
+### Realistic Gaming Outcomes (50% House Edge)
+
+Given the 50% house edge, Sandy users can realistically expect:
+
+#### Aviator Game
+**Monthly Deposit:** KES 3,000 (KES 100 × 30 days)
+
+Scenario Analysis:
+```
+Optimal Win Scenario (user skill + luck):
+  Total Bets:              KES 3,000
+  Average Multiplier Hit:  3.5x
+  Gross Winnings:          KES 10,500
+  House Edge (50%):        KES 5,250
+  Net User Payout:         KES 5,250
+  Monthly ROI:             +75% (rare)
+
+Expected Scenario (mathematical average):
+  Total Bets:              KES 3,000
+  Average Multiplier Hit:  2.0x (50% win rate assumption)
+  50% of bets lose:        KES 1,500 loss
+  50% of bets win 2x:      KES 1,500 × 2 = KES 3,000 (before edge)
+  House Edge (50%):        KES 3,000 × 50% = KES 1,500 deduction
+  Net User Result:         KES 1,500 - KES 1,500 = KES 0
+  Monthly ROI:             0% (break-even, mathematically expected)
+
+Pessimistic Scenario (below-average luck):
+  Total Bets:              KES 3,000
+  Majority crashes early:  1.1x - 1.5x
+  Gross Winnings:          KES 3,500
+  House Edge (50%):        KES 1,750
+  Net User Payout:         KES 1,750
+  Monthly Loss:            KES 1,250
+  Monthly ROI:             -42% (realistic)
+```
+
+#### Casino Games
+**Monthly Deposit:** KES 5,000 (KES 500 × 10 days)
+
+Expected Results:
+```
+Slots (96% RTP pre-edge):
+  Bet Amount:              KES 5,000
+  Theoretical Payout:      KES 4,800
+  With 50% House Edge:     KES 2,400
+  Monthly Loss:            KES 2,600
+
+Blackjack (99.5% RTP pre-edge):
+  Bet Amount:              KES 5,000
+  Theoretical Payout:      KES 4,975
+  With 50% House Edge:     KES 2,487.50
+  Monthly Loss:            KES 2,512.50
+
+Roulette (97.3% RTP pre-edge):
+  Bet Amount:              KES 5,000
+  Theoretical Payout:      KES 4,865
+  With 50% House Edge:     KES 2,432.50
+  Monthly Loss:            KES 2,567.50
+
+Dice (99% RTP pre-edge):
+  Bet Amount:              KES 5,000
+  Theoretical Payout:      KES 4,950
+  With 50% House Edge:     KES 2,475
+  Monthly Loss:            KES 2,525
+```
+
+### Key Communication Points
+
+**For New Users:**
+1. "Understand: 50% of all bets go to Sandy for operations"
+2. "Expectation: You will lose money over time - this is not wealth-building"
+3. "Use Limits: Set daily loss limits before playing"
+4. "For Fun: Treat gaming as entertainment with a cost, not as income"
+
+**For Responsible Gaming:**
+- Average user loses KES 50-100 per KES 1,000 wagered (after 50% edge)
+- Daily limits prevent catastrophic losses
+- Session timeouts prevent addiction spirals
+- Rakeback bonuses help recover <5% of losses (for VIP users)
+
+**Terms & Conditions Must State:**
+- "Sandy gaming is entertainment, not a money-making opportunity"
+- "Due to 50% house edge, users mathematically lose money over time"
+- "Age 18+ only; prohibited in certain jurisdictions"
+- "Problem gambling support: [Link to national hotline]"
+
+### Long-Term User Retention
+
+Despite the 50% house edge, users may return because:
+1. **VIP Rakeback:** Gets 2-5% back on losses (still leaves them at 45-48% edge vs 50%)
+2. **Excitement:** Multiplier chasing and win animations are psychologically rewarding
+3. **Social:** Leaderboards and community features drive engagement
+4. **Variety:** 5 different casino games provide novelty
+5. **Skill Perception:** Blackjack & Aviator cashout timing creates skill illusion
+
+### Compliance Considerations
+
+- **Gambling Authority:** Approve 50% house edge as fair and transparent
+- **Disclosure:** Mandatory pre-game warnings
+- **Age Verification:** Strict 18+ enforcement
+- **Self-Exclusion:** User can request permanent ban
+- **Cooled-Off Period:** Automatic 24-hour break after KES 100K loss
+- **Monthly Statement:** Users receive detailed P&L summary
+
+---
+
 ## Implementation Phases
 
 ### Phase 1: Infrastructure (Week 1)
@@ -1890,6 +2006,117 @@ COOP_BANK_SECRET=your_coop_secret
 - Soft launch (limited users)
 - Monitor for issues
 - Full production rollout
+
+---
+
+## Gaming House Edge Policy
+
+### 50% House Edge Rationale
+
+Sandy platform implements a **uniform 50% house edge across all gaming products (Aviator & Casino)** to ensure platform sustainability and operational excellence. This policy reflects industry requirements for:
+
+#### 1. Infrastructure & Operational Costs
+- **Server & Hosting:** Reliable global CDN infrastructure
+- **Payment Processing:** HashBack, M-Pesa, and fallback systems
+- **Compliance & Licensing:** Gaming authority requirements
+- **Security:** 24/7 monitoring, fraud detection, DDoS protection
+- **Support:** 24/7 customer support operations
+- **Development:** Continuous game development and platform improvements
+
+#### 2. Revenue Model Breakdown
+For every KES 1,000 wagered:
+
+**Aviator:**
+```
+Bet Amount:              KES 1,000
+If Win (4.5x multiplier):
+  Gross Payout:         KES 4,500
+  House Edge (50%):     KES 2,250
+  User Receives:        KES 2,250
+  Company Revenue:      KES 2,250
+
+If Loss:
+  Company Revenue:      KES 1,000
+  User Receives:        KES 0
+```
+
+**Casino (All Games):**
+```
+Bet Amount:              KES 1,000
+If Win (2x payout):
+  Gross Payout:         KES 2,000
+  House Edge (50%):     KES 1,000
+  User Receives:        KES 1,000
+  Company Revenue:      KES 1,000
+
+If Loss:
+  Company Revenue:      KES 1,000
+  User Receives:        KES 0
+```
+
+#### 3. Transparent Communication
+- **Homepage Disclosure:** "Gaming games carry 50% house edge - for entertainment only"
+- **Before First Deposit:** User acknowledgment of house edge
+- **In-game Display:** Active house edge indicator
+- **Responsible Gaming:** Daily loss limit dashboard with projected losses
+
+#### 4. Comparison to Industry Standards
+| Operator | Aviator Edge | Casino Edge |
+|---|---|---|
+| Sandy (New) | 50% | 50% |
+| Traditional Betting | 3-5% | 2-5% |
+| Informal Gaming | 60-80% | 70-90% |
+
+**Why Sandy's 50% is Reasonable:**
+- Lower than informal betting networks (60-80%)
+- Transparent (no hidden fees)
+- Covers all operational costs
+- Sustainable long-term operations
+- No predatory mechanics
+
+#### 5. User Protection Mechanisms
+- **Deposit Limits:** Daily KES 50,000 cap
+- **Loss Limits:** Daily KES 100,000 loss limit
+- **Session Timeout:** Mandatory 2-hour breaks
+- **Self-Exclusion:** Immediate account suspension option
+- **Cool-off Period:** 24-hour voluntary break
+- **Reality Checks:** Popup every 30 minutes showing losses
+- **Warnings:** Pre-game educational content on probabilities
+
+#### 6. No Manipulation Policies
+- **Server-Side Randomness:** Crash multipliers & game outcomes are tamper-proof
+- **No Predictability:** No patterns or delayed payouts
+- **Instant Settlement:** Results determined immediately
+- **Audit Trail:** Every game logged and auditable
+- **Third-party Verification:** Regular RNG audits available
+
+#### 7. Revenue Distribution
+Monthly Revenue From Gaming:
+```
+Total Gaming Bets:       KES 5,000,000
+Company House Edge (50%): KES 2,500,000
+
+Allocation:
+  Infrastructure:       KES 1,000,000 (40%)
+  Operations/Support:   KES 700,000 (28%)
+  Development:          KES 500,000 (20%)
+  Legal/Compliance:     KES 200,000 (8%)
+  Profit Margin:        KES 100,000 (4%)
+```
+
+### Implementation Notes
+
+**Do Not Vary House Edge:** 50% is uniform across all games and bet amounts - this ensures:
+- No "rigged" perception (same for everyone)
+- Easier for users to calculate expectations
+- Simpler to audit and verify
+- Compliant with fair gaming standards
+
+**Communicate Early & Often:**
+- Include house edge in all promotional materials
+- Display prominently before first bet
+- Send monthly responsible gaming emails
+- Highlight in terms & conditions
 
 ---
 
