@@ -9,6 +9,7 @@ import {
   Sparkles, Info,
 } from 'lucide-react';
 import { checkBotUnlockPaymentStatus } from '@/app/actions/chat-foreigners/payments';
+import { HashBackPaymentButton } from '@/app/components/HashBackPaymentButton';
 
 interface Person {
   id: string;
@@ -511,74 +512,27 @@ export default function UnlockPage() {
               ))}
             </div>
 
-            {status === 'polling' ? (
-              <div className="flex flex-col items-center py-5 gap-3">
-                <Loader2 className="animate-spin text-[#00c97a]" size={32} />
-                <p className="font-semibold text-zinc-200 text-sm">Waiting for M-Pesa payment...</p>
-                <p className="text-xs text-zinc-500 text-center">Enter your PIN on the Co-op Bank prompt sent to your phone. Do not close this page.</p>
-                <p className="text-[10px] text-zinc-600">Checking... ({pollCount}/{MAX_POLLING_ATTEMPTS})</p>
-                <button
-                  onClick={() => { setStatus('idle'); setPollCount(0); setMessageReference(''); }}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mt-1"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : status === 'cancelled' ? (
-              <div className="flex flex-col items-center py-5 gap-3">
-                <XCircle className="text-amber-400" size={32} />
-                <p className="font-semibold text-amber-300 text-sm">Payment Cancelled</p>
-                <p className="text-xs text-zinc-400 text-center">{resultDesc || 'You cancelled the M-Pesa prompt.'}</p>
-                <button
-                  onClick={() => { setStatus('idle'); setPollCount(0); setMessageReference(''); setError(''); setResultDesc(''); }}
-                  className="mt-2 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-full transition-colors"
-                >
-                  Try Again
-                </button>
-              </div>
-            ) : status === 'timeout' ? (
-              <div className="flex flex-col items-center py-5 gap-3">
-                <XCircle className="text-red-400" size={32} />
-                <p className="font-semibold text-red-300 text-sm">Payment Timed Out</p>
-                <p className="text-xs text-zinc-400 text-center">No response received. Check your M-Pesa history — if debited, contact support.</p>
-              </div>
-            ) : (
-              <form onSubmit={handleUnlock} className="space-y-3">
-                {error && (
-                  <div className="bg-red-950/50 border border-red-900/50 text-red-400 px-3 py-2.5 rounded-xl text-xs">
-                    {error}
-                  </div>
-                )}
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-zinc-400">M-Pesa Number</label>
-                  <input
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="e.g. 0712345678"
-                    className="w-full bg-[#0d0d14] border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-[#00c97a]/50 focus:ring-1 focus:ring-[#00c97a]/20 text-sm"
-                    autoComplete="tel"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={status === 'pending'}
-                  className="w-full bg-[#00c97a] hover:bg-[#00b06a] text-white font-bold h-12 rounded-full transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {status === 'pending' ? (
-                    <>
-                      <Loader2 size={17} className="animate-spin" />
-                      Sending prompt...
-                    </>
-                  ) : (
-                    <>
-                      <Lock size={16} />
-                      Pay KES {unlockPrice} via M-Pesa
-                    </>
-                  )}
-                </button>
-              </form>
-            )}
+            <HashBackPaymentButton
+              amount={unlockPrice * 100}
+              type="bot_unlock"
+              label={`Pay KES ${unlockPrice} via M-Pesa`}
+              onSuccess={(txn) => {
+                console.log('[v0] Bot unlock payment success:', txn);
+                setStatus('success');
+                setTimeout(() => router.push(`/dashboard/chat-foreigners/chat/${personId}`), 2000);
+              }}
+              onCancel={() => {
+                console.log('[v0] Bot unlock payment cancelled');
+                setStatus('idle');
+                setError('Payment cancelled. Please try again.');
+              }}
+              onError={(error) => {
+                console.error('[v0] Bot unlock payment error:', error);
+                setStatus('failed');
+                setError('Payment failed. Please try again or contact support.');
+              }}
+              className="w-full h-12 rounded-full bg-[#00c97a] hover:bg-[#00b06a]"
+            />
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowLeft, Wallet, TrendingUp, Users, MessageSquare, Plus, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import DepositModal from '../components/DepositModal';
+import { HashBackPaymentButton } from '@/app/components/HashBackPaymentButton';
 
 interface Transaction {
   id: string;
@@ -248,13 +249,18 @@ export default function WalletPage() {
               <Wallet size={20} className="text-[#00c97a]" />
             </div>
           </div>
-          <button
-            onClick={() => setShowDepositModal(true)}
-            className="w-full bg-[#00c97a] hover:bg-[#00b56c] text-black font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 text-sm"
-          >
-            <Plus size={17} />
-            Deposit Funds
-          </button>
+          <HashBackPaymentButton
+            amount={0}
+            type="spin_deposit"
+            label={`Top-up Balance (KES 30)`}
+            onSuccess={() => {
+              load(true);
+            }}
+            onError={(error) => {
+              console.error('Deposit error:', error);
+            }}
+            className="w-full py-3 rounded-xl text-sm flex items-center justify-center gap-2"
+          />
         </div>
 
         {/* Stat row */}
