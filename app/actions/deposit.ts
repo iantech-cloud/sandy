@@ -252,6 +252,29 @@ export async function processMpesaDeposit(depositData: {
     phoneNumber: string;
 }): Promise<ProcessDepositResponse> {
     try {
+        // TEMPORARY: Block all payments - Co-op Bank is disabled
+        return { 
+            success: false, 
+            message: 'DEBIT ACCOUNT AUTHORIZATION FAILURE',
+            data: {
+                error: 'Payment processing is temporarily unavailable. Please try again later.'
+            }
+        };
+    } catch (error) {
+        console.error('[Deposit] processMpesaDeposit blocked:', error);
+        return { 
+            success: false, 
+            message: 'DEBIT ACCOUNT AUTHORIZATION FAILURE',
+            data: { error: 'Payment processing is temporarily unavailable.' }
+        };
+    }
+}
+
+export async function processMpesaDeposit_OLD(depositData: {
+    amount: number;
+    phoneNumber: string;
+}): Promise<ProcessDepositResponse> {
+    try {
         const session = await auth();
 
         if (!isValidSession(session)) {
