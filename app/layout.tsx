@@ -225,12 +225,6 @@ export default async function RootLayout({
         <Script 
           src="https://pay.hashback.co.ke/hashpay.js" 
           strategy="lazyOnload"
-          onLoad={() => {
-            console.log('[v0] HashPay script loaded successfully')
-          }}
-          onError={() => {
-            console.error('[v0] Failed to load HashPay script')
-          }}
         />
       </head>
       <body className={`${timesNewRoman.className} antialiased`} suppressHydrationWarning>
