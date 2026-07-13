@@ -258,24 +258,231 @@ Transaction.create({
 
 ---
 
-## Wallet Management
+## Wallet Management - Complete Platform Architecture
 
-### Wallet Types
+### Primary Wallets
 
-#### 1. User Wallet
+#### 1. Main User Wallet
+- **Model:** `Profile.balance_cents`
 - **Balance:** Total KES available
-- **Source:** Activation fees, referrals, message earnings
-- **Usage:** Withdraw to phone
+- **Sources:**
+  - Activation income (referral earnings)
+  - Chat Foreigners message earnings (KES 0.10/msg, capped at KES 100/day)
+  - Referral bonuses (L1: KES 65 activation, KES 70 bot unlock | L2: KES 10 bot unlock)
+  - Casino/Aviator game winnings
+  - Platform rewards
+- **Usage:**
+  - Pay for activation (KES 95)
+  - Unlock Chat Foreigners bots (KES 100)
+  - Deposit to Spin/Aviator/Casino wallets
+  - Withdraw to M-Pesa (10% fee)
+  - Min withdrawal: KES 10 | Max per txn: KES 50,000 | Daily limit: KES 100,000
+- **Withdrawal Fee:** 10%
 
 #### 2. Company Wallet
-- **Balance:** Revenue from bot unlocks + platform fees
-- **Source:** Bot unlock payments (KES 20 per unlock)
-- **Usage:** Company operations, topups
+- **Model:** `Company.wallet_balance_cents`
+- **Balance:** Total company revenue
+- **Sources:**
+  - Bot unlock payments (KES 20 per unlock from KES 100 payment)
+  - Casino/Aviator house edge (5% casino, 2% aviator)
+  - Spin wallet deposits (company retains 20% as revenue)
+  - Platform fees
+- **Usage:**
+  - Top up HashBack merchant wallet
+  - Operational expenses
+  - Payouts to vendors
+  - System maintenance
+- **Tracking:** `total_revenue_cents`, `total_expenses_cents`
 
 #### 3. Referrer Wallets
-- **Balance:** Referral commissions
-- **Source:** L1 (KES 65 per activate, KES 70 per bot unlock) + L2 (KES 10 per bot unlock)
-- **Usage:** Withdraw to phone
+- **Model:** `Profile.referral_earnings_cents`
+- **Balance:** Lifetime referral commissions
+- **L1 Earnings:**
+  - Per activation: KES 65 (referrer receives when user activates)
+  - Per bot unlock: KES 70 (referrer receives when user unlocks bot)
+- **L2 Earnings:**
+  - Per bot unlock: KES 10 (grandparent receives when grandchild unlocks bot)
+- **Usage:** Withdraw to M-Pesa (10% fee)
+
+### Gaming Wallets (NEW)
+
+#### 3. Spin Wallet (Existing - Enhanced with HashBack)
+- **Model:** `SpinWallet` collection
+- **Balance Field:** `balance_cents`
+- **Deposit Amount:** KES 30 only
+- **Cost per Spin:** KES 30
+- **Min/Max Spin Cost:** KES 30 - KES 70,000 (future scalability)
+- **Spin Results (Current):**
+  - Try Again: 100% (no actual prize payout)
+- **Spin Results (Future):**
+  - KES 50, KES 100, KES 200, KES 500, KES 1,000, KES 2,500, KES 5,000, KES 10,000
+  - Free Spin
+- **Schema Fields:**
+  - `user_id`: Reference to Profile
+  - `balance_cents`: Current spendable balance
+  - `total_deposited_cents`: Lifetime deposits tracking
+  - `total_used_cents`: Total spent on spins
+  - `total_spins`: Spin count
+  - `total_wins_cents`: Total winnings (future)
+  - `deposits`: Array of deposit history with timestamps
+  - `spin_history`: Array of spin results with timestamps
+  - `win_streak`: Current consecutive wins (future)
+  - `last_spin_at`: Timestamp of last spin
+- **Deposit Sources:**
+  - Co-op Bank STK Push (legacy, KES 30)
+  - HashBack STK Push (new, KES 30)
+  - Transfer from Main Wallet (future)
+- **Company Revenue:** 20% of deposit amount (recorded on deposit, not on spin)
+- **Features:**
+  - Real-time spin wheel animation
+  - Prize history tracking
+  - Daily spin limits (configurable)
+  - Cool-down period between spins (5 seconds)
+  - Sound effects & haptic feedback
+
+#### 4. Aviator Wallet (NEW - Gaming)
+- **Model:** `AviatorWallet` collection
+- **Balance Field:** `balance_cents`
+- **Deposit Amounts:** KES 50, 100, 250, 500, 1,000
+- **Bet Range:** KES 10 minimum, KES 50,000 maximum per bet
+- **House Edge:** 2% (company revenue)
+- **RTP (Return to Player):** 98%
+- **Bet Types:** Single bet, Multiple simultaneous bets
+- **Schema Fields:**
+  - `user_id`: Reference to Profile
+  - `balance_cents`: Current playable balance
+  - `total_deposited_cents`: Lifetime deposits
+  - `total_bet_cents`: Total amount wagered
+  - `total_winnings_cents`: Total amount won
+  - `total_losses_cents`: Total amount lost
+  - `current_session`: Active game object
+    - `bet_amount_cents`: Current bet
+    - `started_at`: Bet timestamp
+    - `cashout_at`: Cashout time (if cashed out)
+    - `crash_multiplier`: Actual crash value (1.1x - 100x)
+    - `status`: 'active' | 'won' | 'lost'
+  - `game_history`: Array of completed games with results
+  - `deposit_history`: Array of deposits
+  - `session_stats`: Daily/weekly stats
+  - `last_game_at`: Timestamp of last game
+  - `win_streak`: Current consecutive wins
+  - `loss_streak`: Current consecutive losses
+  - `daily_profit_loss`: Current day P&L
+- **Game Mechanics:**
+  - Random crash multiplier: 1.1x to 100x
+  - Server-side calculation (tamper-proof)
+  - Auto-cashout option (if multiplier reached)
+  - Manual cashout before crash = Win bet × multiplier
+  - No cashout before crash = Lose full bet
+  - Bet timeout: 30 seconds (automatic cancel if not confirmed)
+  - Minimum gap between games: 3 seconds
+- **Multiplier Distribution:**
+  - 1.1x - 2x: 40% probability
+  - 2x - 5x: 30% probability
+  - 5x - 10x: 15% probability
+  - 10x - 50x: 10% probability
+  - 50x - 100x: 5% probability
+- **Deposit Sources:**
+  - HashBack STK Push (primary)
+  - Co-op Bank STK Push (fallback)
+  - Transfer from Main Wallet (future)
+- **Withdrawal:** Direct cashout to user main wallet (2% fee applied)
+- **Features:**
+  - Live multiplier display
+  - One-click cashout
+  - Auto-cashout at multiplier
+  - Bet history with graphs
+  - Leaderboard (daily/weekly/monthly)
+  - Notification alerts on crash
+  - Sound effects & animations
+  - Responsible gaming controls
+
+#### 5. Casino Wallet (NEW - Gaming)
+- **Model:** `CasinoWallet` collection
+- **Balance Field:** `balance_cents`
+- **Deposit Amounts:** KES 50, 100, 250, 500, 1,000
+- **Bet Range:** KES 10 minimum, KES 100,000 maximum per bet
+- **House Edge:** 5% average across all games
+- **RTP (Return to Player):** 95%
+- **Supported Games:**
+  - **Slots:** 5 reels, 20 paylines, 96% RTP
+  - **Blackjack:** Live dealer, 49% house edge (with strategy)
+  - **Roulette:** European wheel (2.7% edge), section betting
+  - **Dice:** 50/50 outcomes, configurable 1.8x - 2x multiplier
+  - **Baccarat:** Banker/Player/Tie betting (1.06% - 14.36% edge)
+- **Schema Fields:**
+  - `user_id`: Reference to Profile
+  - `balance_cents`: Current playable balance
+  - `total_deposited_cents`: Lifetime deposits
+  - `total_bet_cents`: Total amount wagered
+  - `total_winnings_cents`: Total amount won
+  - `total_losses_cents`: Total amount lost
+  - `net_profit_loss_cents`: Total P&L
+  - `current_session`: Active game object
+    - `game_type`: 'slots' | 'blackjack' | 'roulette' | 'dice' | 'baccarat'
+    - `bet_amount_cents`: Wager amount
+    - `started_at`: Game start timestamp
+    - `ended_at`: Game end timestamp
+    - `result`: Win/loss/push details
+    - `payout_cents`: Amount won
+  - `game_history`: Array of all games played
+  - `deposit_history`: Array of deposits with provider
+  - `withdrawal_history`: Array of cashouts
+  - `game_preferences`: Favorite games, auto-play settings
+  - `responsible_gaming`: Settings and limits
+    - `daily_deposit_limit_cents`: Default 5,000,000 (KES 50,000)
+    - `daily_loss_limit_cents`: Default 10,000,000 (KES 100,000)
+    - `session_timeout_minutes`: Default 120 minutes
+    - `self_exclusion`: Suspension status
+    - `cooloff_until`: Date if on cool-off period
+  - `daily_stats`: { date, bets_placed, amount_wagered, amount_won, net_result }
+  - `monthly_stats`: Aggregated monthly performance
+  - `vip_tier`: 'bronze' | 'silver' | 'gold' | 'platinum' (based on deposits)
+  - `last_game_at`: Timestamp
+  - `session_start_at`: Current session start
+- **Deposit Sources:**
+  - HashBack STK Push (primary)
+  - Co-op Bank STK Push (fallback)
+  - Transfer from Main Wallet (future)
+- **Withdrawal:** Direct cashout to user main wallet (5% fee applied)
+- **Responsible Gaming Features:**
+  - Daily deposit limit (default KES 50,000)
+  - Daily loss limit (default KES 100,000)
+  - Session duration limit (default 2 hours)
+  - Cool-off period: 24 hours (on request)
+  - Self-exclusion: Permanent freeze (30/90/180 days or permanent)
+  - Reality check: Popup every 30 minutes showing session stats
+  - Bet history with timestamps
+  - Monthly statement generation
+- **VIP Tiers:**
+  - Bronze: KES 100K deposited → 1% rakeback
+  - Silver: KES 500K deposited → 2% rakeback + faster withdrawals
+  - Gold: KES 1M deposited → 3% rakeback + VIP support
+  - Platinum: KES 5M+ deposited → 5% rakeback + exclusive games
+- **Features:**
+  - Live game streaming (future)
+  - Tournament modes with prize pools
+  - Achievement/badge system
+  - Social betting (see other players)
+  - Referral boost: KES 10 per friend signup
+  - Instant notifications on big wins
+  - Replay/history of games
+  - Responsible gaming dashboard
+
+### Company Wallet
+- **Model:** `Company` collection (singleton)
+- **Balance Field:** `wallet_balance_cents`
+- **Sources:**
+  - Bot unlock revenue (KES 20 per unlock from KES 100)
+  - Casino house edge (5% of bets)
+  - Aviator house edge (2% of bets)
+  - Spin wallet revenue (20% of deposits)
+  - Platform fees
+- **Daily Tracking:**
+  - Total revenue by source
+  - Total payouts (referrals, withdrawals)
+  - Net daily profit
+- **Reconciliation:** HashBack PULL API for daily settlement
 
 ### Wallet Operations
 
@@ -426,6 +633,300 @@ Withdrawal.create({
   created_at: new Date(),
   completed_at: new Date()
 })
+```
+
+---
+
+## Gaming Wallet Payment Flows
+
+### Flow 4: Spin Wallet Deposit (KES 30)
+
+#### User Deposits via HashBack
+1. User clicks "Top-up" on Spin Wallet
+2. App shows deposit options (KES 30 only)
+3. User confirms amount
+4. HashBack STK push initiated
+5. User enters M-Pesa PIN
+6. Payment confirmed → Webhook received
+
+#### Processing
+```
+Payment Success → Webhook → Verify HMAC-SHA256 Signature
+         ↓
+Create MpesaTransaction with deposit_type='spin_wallet'
+         ↓
+Credit SpinWallet.balance_cents += 3000
+         ↓
+Record company revenue_cents += 600 (20% of KES 30)
+         ↓
+Create DepositHistory entry
+         ↓
+Send SMS confirmation
+```
+
+#### Database Updates
+```typescript
+SpinWallet.findByIdAndUpdate(spinWalletId, {
+  $inc: { 
+    balance_cents: 3000,
+    total_deposited_cents: 3000 
+  },
+  $push: {
+    deposits: {
+      amount_cents: 3000,
+      provider: 'hashback',
+      payment_reference: receipt,
+      deposit_at: new Date(),
+      company_revenue_cents: 600
+    }
+  }
+});
+
+Company.findByIdAndUpdate(companyId, {
+  $inc: { 
+    'revenue_breakdown.spin_revenue_cents': 600,
+    total_revenue_cents: 600,
+    wallet_balance_cents: 600
+  }
+});
+```
+
+### Flow 5: Aviator Game Deposit (KES 50-1,000)
+
+#### User Deposits via HashBack
+1. User selects deposit amount (KES 50, 100, 250, 500, 1,000)
+2. System shows Aviator game overview
+3. User confirms HashBack payment
+4. STK push sent to phone
+5. User enters M-Pesa PIN
+6. Payment confirmed → Webhook received
+
+#### Processing
+```
+Payment Success → Webhook Verification
+         ↓
+Create MpesaTransaction with deposit_type='aviator_wallet'
+         ↓
+Credit AviatorWallet.balance_cents += amount
+         ↓
+Update total_deposited_cents
+         ↓
+Create DepositHistory entry
+         ↓
+Emit Event: "aviator_deposit_ready"
+         ↓
+Send SMS + In-app Notification
+```
+
+#### Bet Placement
+1. User places bet (KES 10 - KES 50,000)
+2. Server generates crash multiplier (1.1x - 100x) - Server-side, never exposed
+3. Multiplier animates upward (1.0x → crash)
+4. User must cashout BEFORE crash
+5. Result: Win (bet × multiplier) or Loss (bet forfeited)
+
+#### House Edge Collection
+```
+Every bet placed:
+  House Edge = bet_amount × 2%
+  
+If user wins:
+  Payout = (bet_amount × multiplier) - house_edge
+  
+If user loses:
+  Company keeps full bet
+  
+Example:
+  User bets: KES 1,000
+  Crash at: 5x multiplier
+  
+  If cashout before 5x:
+    Payout = (1,000 × 4.5) - 20 = KES 4,480
+    Company revenue = KES 20
+    
+  If cashout after 5x (lose):
+    Payout = 0
+    Company keeps full KES 1,000
+```
+
+#### Database Updates
+```typescript
+AviatorWallet.findByIdAndUpdate(aviatorWalletId, {
+  $inc: {
+    total_bet_cents: betAmount,
+    balance_cents: betResult === 'won' ? payoutCents : -betAmount,
+    total_winnings_cents: payoutCents // If won
+  },
+  $push: {
+    game_history: {
+      bet_amount_cents: betAmount,
+      crash_multiplier: multiplier,
+      cashout_multiplier: userCashout,
+      result: betResult,
+      payout_cents: payoutCents,
+      played_at: new Date()
+    }
+  }
+});
+
+Company.findByIdAndUpdate(companyId, {
+  $inc: {
+    'revenue_breakdown.aviator_revenue_cents': houseEdge,
+    total_revenue_cents: houseEdge,
+    wallet_balance_cents: houseEdge
+  }
+});
+```
+
+### Flow 6: Casino Game Deposit (KES 50-1,000)
+
+#### User Deposits via HashBack
+1. User selects game (Slots, Blackjack, Roulette, Dice, Baccarat)
+2. Selects deposit amount (KES 50-1,000)
+3. Confirms HashBack payment
+4. STK push sent
+5. User enters M-Pesa PIN
+6. Payment confirmed → Webhook
+
+#### Processing
+```
+Payment Success → Webhook Verification
+         ↓
+Create MpesaTransaction with deposit_type='casino_wallet'
+         ↓
+Credit CasinoWallet.balance_cents += amount
+         ↓
+Check responsible gaming limits
+         ↓
+Update daily_deposit_limit tracking
+         ↓
+Create DepositHistory entry
+         ↓
+Emit Event: "casino_ready_to_play"
+         ↓
+Auto-launch selected game
+```
+
+#### Bet & Game Flow (All Games)
+1. User places bet (KES 10 - KES 100,000)
+2. Responsible gaming check:
+   - Verify daily deposit not exceeded
+   - Verify daily loss not exceeded
+   - Verify session time not exceeded
+3. Game executes (server-side)
+4. Result calculated with house edge
+5. Payout sent or loss recorded
+
+#### House Edge & RTP by Game
+| Game | House Edge | RTP | Payout |
+|---|---|---|---|
+| Slots | 4% | 96% | 0.96x to 5x |
+| Blackjack | 0.5% | 99.5% | 1.5x to 2x (strategic) |
+| Roulette | 2.7% | 97.3% | 1x to 35x (number) |
+| Dice | 1% | 99% | 1.8x to 2x |
+| Baccarat | 1.06-14.36% | 85-98% | 1x to 8x |
+
+#### Database Updates
+```typescript
+CasinoWallet.findByIdAndUpdate(casinoWalletId, {
+  $inc: {
+    total_bet_cents: betAmount,
+    balance_cents: payoutCents - betAmount,
+    total_winnings_cents: payoutCents // If won
+  },
+  $push: {
+    game_history: {
+      game_type: gameType,
+      bet_amount_cents: betAmount,
+      payout_cents: payoutCents,
+      result: result,
+      rtp_used: rtpPercentage,
+      played_at: new Date()
+    }
+  },
+  'last_game_at': new Date()
+});
+
+// Update daily stats
+CasinoWallet.updateOne(
+  { user_id: userId },
+  {
+    $inc: {
+      'daily_stats.$.bets_placed': 1,
+      'daily_stats.$.amount_wagered_cents': betAmount,
+      'daily_stats.$.amount_won_cents': payoutCents,
+      'daily_stats.$.net_result_cents': payoutCents - betAmount
+    }
+  }
+);
+
+// Company revenue (5% house edge average)
+Company.findByIdAndUpdate(companyId, {
+  $inc: {
+    'revenue_breakdown.casino_revenue_cents': houseEdgeAmount,
+    total_revenue_cents: houseEdgeAmount,
+    wallet_balance_cents: houseEdgeAmount
+  }
+});
+```
+
+### Flow 7: Gaming Wallet Cashout to Main Wallet
+
+#### User Initiates Cashout
+1. User clicks "Cashout" in Aviator/Casino wallet
+2. System verifies balance
+3. Deducts 2% fee (Aviator) or 5% fee (Casino)
+4. Transfers net amount to Main Wallet
+5. Records transaction
+
+#### Processing
+```
+Cashout Request → Validate Balance
+         ↓
+Check daily withdrawal limits on main wallet
+         ↓
+Deduct game-specific fee (2% or 5%)
+         ↓
+Transfer to Profile.balance_cents
+         ↓
+Create Transaction Record
+         ↓
+Update both wallet records
+         ↓
+Send in-app notification
+```
+
+#### Database Updates
+```typescript
+// Debit gaming wallet
+if (gameType === 'aviator') {
+  AviatorWallet.findByIdAndUpdate(aviatorWalletId, {
+    $inc: { balance_cents: -cashoutAmount }
+  });
+  fee = cashoutAmount * 0.02;
+} else if (gameType === 'casino') {
+  CasinoWallet.findByIdAndUpdate(casinoWalletId, {
+    $inc: { balance_cents: -cashoutAmount }
+  });
+  fee = cashoutAmount * 0.05;
+}
+
+// Credit main wallet
+Profile.findByIdAndUpdate(userId, {
+  $inc: { balance_cents: cashoutAmount - fee }
+});
+
+// Record transaction
+Transaction.create({
+  user_id: userId,
+  amount_cents: cashoutAmount - fee,
+  type: 'gaming_cashout',
+  provider: 'internal',
+  status: 'completed',
+  game_type: gameType,
+  fee_cents: fee,
+  created_at: new Date()
+});
 ```
 
 ---
@@ -785,33 +1286,290 @@ async function reconcileHashBackTransaction(transactionId: string) {
 }
 ```
 
-#### 5. Company Model (New)
+#### 5. AviatorWallet Model (New)
+```typescript
+{
+  _id: ObjectId,
+  user_id: ObjectId, // Reference to Profile
+  
+  // Balance
+  balance_cents: number,
+  
+  // Lifetime stats
+  total_deposited_cents: number,
+  total_bet_cents: number,
+  total_winnings_cents: number,
+  total_losses_cents: number,
+  net_profit_loss_cents: number,
+  
+  // Current session
+  current_session: {
+    bet_amount_cents: number,
+    started_at: Date,
+    cashout_at?: Date,
+    crash_multiplier: number, // Final multiplier (1.1 - 100)
+    status: 'active' | 'won' | 'lost',
+    payout_cents: number
+  } | null,
+  
+  // History
+  game_history: [{
+    _id: ObjectId,
+    bet_amount_cents: number,
+    crash_multiplier: number,
+    cashout_multiplier?: number, // If user cashed out before crash
+    result: 'won' | 'lost',
+    payout_cents: number,
+    played_at: Date
+  }],
+  
+  deposit_history: [{
+    _id: ObjectId,
+    amount_cents: number,
+    provider: 'hashback' | 'coop-bank',
+    payment_reference: string,
+    deposit_at: Date
+  }],
+  
+  // Streaks
+  win_streak: number,
+  loss_streak: number,
+  best_win_streak: number,
+  
+  // Daily tracking
+  daily_profit_loss: number,
+  daily_bets_placed: number,
+  daily_total_wagered_cents: number,
+  
+  last_game_at: Date,
+  created_at: Date,
+  updated_at: Date
+}
+```
+
+#### 6. CasinoWallet Model (New)
+```typescript
+{
+  _id: ObjectId,
+  user_id: ObjectId, // Reference to Profile
+  
+  // Balance
+  balance_cents: number,
+  
+  // Lifetime stats
+  total_deposited_cents: number,
+  total_bet_cents: number,
+  total_winnings_cents: number,
+  total_losses_cents: number,
+  net_profit_loss_cents: number,
+  
+  // Current session
+  current_session: {
+    game_type: 'slots' | 'blackjack' | 'roulette' | 'dice' | 'baccarat',
+    bet_amount_cents: number,
+    started_at: Date,
+    result?: {
+      outcome: 'win' | 'loss' | 'push',
+      payout_cents: number
+    }
+  } | null,
+  
+  // Game history
+  game_history: [{
+    _id: ObjectId,
+    game_type: 'slots' | 'blackjack' | 'roulette' | 'dice' | 'baccarat',
+    bet_amount_cents: number,
+    payout_cents: number,
+    result: 'win' | 'loss' | 'push',
+    rtp_used: number, // Actual RTP for this game
+    played_at: Date
+  }],
+  
+  // Deposits & Withdrawals
+  deposit_history: [{
+    _id: ObjectId,
+    amount_cents: number,
+    provider: 'hashback' | 'coop-bank',
+    payment_reference: string,
+    deposit_at: Date
+  }],
+  
+  withdrawal_history: [{
+    _id: ObjectId,
+    amount_cents: number,
+    fee_cents: number,
+    net_amount_cents: number,
+    status: 'completed' | 'pending' | 'failed',
+    withdrawn_at: Date
+  }],
+  
+  // Game preferences
+  game_preferences: {
+    favorite_games: string[],
+    auto_play_enabled: boolean,
+    auto_play_rounds?: number,
+    sound_enabled: boolean,
+    notifications_enabled: boolean
+  },
+  
+  // Responsible gaming
+  responsible_gaming: {
+    daily_deposit_limit_cents: number, // 5,000,000 (KES 50,000)
+    daily_loss_limit_cents: number, // 10,000,000 (KES 100,000)
+    session_timeout_minutes: number, // 120 (2 hours)
+    self_exclusion: boolean,
+    cooloff_until?: Date,
+    last_reality_check: Date
+  },
+  
+  // Streaks & Achievements
+  win_streak: number,
+  loss_streak: number,
+  best_win_streak: number,
+  achievements: string[], // 'first_win', 'big_win_10x', 'millionaire', etc.
+  
+  // VIP Tier
+  vip_tier: 'bronze' | 'silver' | 'gold' | 'platinum',
+  vip_rakeback_percent: number, // 1%, 2%, 3%, 5%
+  
+  // Daily stats
+  daily_stats: {
+    date: Date,
+    bets_placed: number,
+    amount_wagered_cents: number,
+    amount_won_cents: number,
+    net_result_cents: number
+  }[],
+  
+  // Monthly aggregates
+  monthly_stats: {
+    month: string, // 'YYYY-MM'
+    total_wagered_cents: number,
+    total_won_cents: number,
+    net_result_cents: number,
+    games_played: number,
+    win_rate: number // percentage
+  }[],
+  
+  // Tracking
+  last_game_at: Date,
+  session_start_at?: Date,
+  created_at: Date,
+  updated_at: Date
+}
+```
+
+#### 7. SpinWallet Model (Enhanced)
+```typescript
+{
+  _id: ObjectId,
+  user_id: ObjectId, // Reference to Profile
+  
+  // Balance
+  balance_cents: number,
+  
+  // Lifetime tracking
+  total_deposited_cents: number,
+  total_used_cents: number,
+  total_spins: number,
+  total_wins_cents: number,
+  
+  // Deposits history
+  deposits: [{
+    _id: ObjectId,
+    amount_cents: number,
+    provider: 'hashback' | 'coop-bank',
+    mpesa_checkout_request_id: string,
+    mpesa_transaction_id?: ObjectId,
+    status: 'completed' | 'failed',
+    deposit_at: Date,
+    company_revenue_cents: number // 20% of deposit
+  }],
+  
+  // Spin history
+  spin_history: [{
+    _id: ObjectId,
+    amount_cents: number,
+    prize_type: 'KES_50' | 'KES_100' | 'KES_200' | 'KES_500' | 'KES_1000' | 'KES_2500' | 'KES_5000' | 'KES_10000' | 'FREE_SPIN' | 'ZERO',
+    prize_value_cents: number,
+    result: 'win' | 'try_again',
+    spun_at: Date,
+    outcome?: {
+      claimed: boolean,
+      claimed_at?: Date,
+      credited_to_wallet?: boolean
+    }
+  }],
+  
+  // Streaks
+  win_streak: number,
+  best_win_streak: number,
+  
+  // Session tracking
+  daily_spins_count: number,
+  daily_total_spent_cents: number,
+  last_spin_at: Date,
+  
+  created_at: Date,
+  updated_at: Date
+}
+```
+
+#### 8. Company Model (Enhanced)
 ```typescript
 {
   _id: ObjectId,
   name: 'Sandy Inc',
   
-  // Wallet
+  // Main wallet
   wallet_balance_cents: number,
   wallet_status: 'active' | 'suspended',
   
-  // Revenue tracking
+  // Revenue tracking by source
+  revenue_breakdown: {
+    bot_unlock_revenue_cents: number,
+    spin_revenue_cents: number,
+    aviator_revenue_cents: number,
+    casino_revenue_cents: number,
+    referral_fees_cents: number
+  },
+  
+  // Overall tracking
   total_revenue_cents: number,
   total_expenses_cents: number,
-  total_payouts_cents: number,
+  total_payouts_cents: number, // Withdrawals to users
+  net_profit_cents: number,
   
   // HashBack integration
   hashback_account_id: string,
   hashback_wallet_id: string,
+  hashback_last_sync: Date,
   
-  // Settings
+  // Settings & Limits
   withdrawal_fee_percent: number, // 10%
   min_withdrawal_cents: number, // 1,000 (KES 10)
   max_withdrawal_cents: number, // 5,000,000 (KES 50,000)
   daily_withdrawal_limit_cents: number, // 10,000,000 (KES 100,000)
   
+  // Game settings
+  spin_company_share_percent: number, // 20%
+  aviator_house_edge_percent: number, // 2%
+  casino_house_edge_percent: number, // 5%
+  
+  // Daily reconciliation
+  daily_settlement: {
+    date: Date,
+    revenue_cents: number,
+    payouts_cents: number,
+    net_profit_cents: number,
+    reconciled: boolean,
+    reconciled_at?: Date
+  }[],
+  
+  // Audit
   created_at: Date,
-  updated_at: Date
+  updated_at: Date,
+  last_updated_by: string // Admin ID
 }
 ```
 
@@ -882,7 +1640,42 @@ async function reconcileHashBackTransaction(transactionId: string) {
 - `handleHashBackWebhook()` - Process webhook data
 - `syncHashBackWallet()` - Sync wallet from HashBack
 
-#### 8. `/app/components/payments/hashback-payment-button.tsx`
+#### 8. `/app/actions/aviator.ts`
+**Purpose:** Aviator game logic and betting  
+**Functions:**
+- `initiatAviatorDeposit(amount)` - Start aviator deposit via HashBack
+- `placeBet(betAmount)` - Place a new bet
+- `cashoutBet(currentMultiplier)` - Cashout before crash
+- `getGameResult()` - Simulate crash and determine winner
+- `getAviatorGameHistory()` - Retrieve user's game history
+- `getAviatorStats()` - Get user stats (streak, wins, etc)
+- `verifyServerSideHash()` - Verify game randomness
+
+#### 9. `/app/actions/casino.ts`
+**Purpose:** Casino game logic across all game types  
+**Functions:**
+- `initiatCasinoDeposit(amount)` - Start casino deposit via HashBack
+- `playSlots(betAmount, lines)` - Play slot machine
+- `playBlackjack(betAmount, action)` - Play blackjack (hit/stand/double)
+- `playRoulette(betAmount, betType, number)` - Place roulette bet
+- `playDice(betAmount, prediction)` - Play dice game
+- `playBaccarat(betAmount, betType)` - Place baccarat bet
+- `getRespGamingStatus()` - Get responsible gaming limits
+- `setRespGamingLimits()` - Update daily/session limits
+- `requestSelfExclusion(days)` - Initiate self-exclusion
+- `getCasinoGameHistory()` - Retrieve user's game history
+- `getCasinoStats()` - Get aggregated stats
+- `verifyGameRandomness()` - Server-side random verification
+
+#### 10. `/app/actions/spin-wallet-hashback.ts`
+**Purpose:** Spin wallet integration with HashBack  
+**Functions:**
+- `initiatSpinDepositHashBack(amount)` - Deposit via HashBack (replaces Co-op)
+- `syncSpinWalletBalance()` - Sync balance from database
+- `getSpinWalletStats()` - Get spin statistics
+- `transferMainToSpinWallet(amount)` - Transfer from main wallet (future)
+
+#### 11. `/app/components/payments/hashback-payment-button.tsx`
 **Purpose:** Reusable payment button component  
 **Props:**
 - `amount` - Amount in KES
@@ -892,13 +1685,107 @@ async function reconcileHashBackTransaction(transactionId: string) {
 - `onError` - Error callback
 - `variant` - Button style
 
-#### 9. `/app/components/wallet/hashback-wallet.tsx`
-**Purpose:** User wallet dashboard  
+#### 12. `/app/components/payments/aviator-payment-button.tsx`
+**Purpose:** Aviator game deposit button  
+**Props:**
+- `amount` - Amount in KES
+- `onSuccess` - Success callback
+- `onDeposited` - Deposit confirmed callback
 **Features:**
-- Display balance
-- Withdrawal form
-- Transaction history
-- P2P verification
+- HashBack deposit trigger
+- Amount validation (KES 50-1000)
+- Instant wallet credit
+
+#### 13. `/app/components/payments/casino-payment-button.tsx`
+**Purpose:** Casino game deposit button  
+**Props:**
+- `amount` - Amount in KES
+- `gameType` - Game to start after deposit
+- `onSuccess` - Success callback
+**Features:**
+- HashBack deposit trigger
+- Amount validation (KES 50-1000)
+- Auto-launch selected game
+
+#### 14. `/app/components/wallet/hashback-wallet.tsx`
+**Purpose:** Main user wallet dashboard  
+**Features:**
+- Display balance (main wallet, earned, pending)
+- Withdrawal form with limits validation
+- Transaction history with filters
+- P2P verification for referrals
+- Daily earnings breakdown
+
+#### 15. `/app/components/games/aviator-game.tsx`
+**Purpose:** Aviator game UI and interactions  
+**Features:**
+- Live multiplier display (1.1x - 100x)
+- Bet placement form
+- Cashout button (dynamic)
+- Auto-cashout settings
+- Bet history sidebar
+- Leaderboard display
+- Sound effects & animations
+- Win/loss notifications
+
+#### 16. `/app/components/games/casino-game.tsx`
+**Purpose:** Casino game manager component  
+**Props:**
+- `gameType` - 'slots' | 'blackjack' | 'roulette' | 'dice' | 'baccarat'
+- `initialBal` - Starting balance
+**Sub-components:**
+- `SlotsGame` - 5-reel slot machine
+- `BlackjackGame` - Live blackjack with dealer
+- `RouletteGame` - European roulette wheel
+- `DiceGame` - 50/50 dice rolling
+- `BaccaratGame` - Banker/Player/Tie betting
+**Shared Features:**
+- Bet placement
+- Auto-play options
+- Sound effects
+- Responsible gaming alerts
+- Win animations
+- Payout display
+
+#### 17. `/app/dashboard/games/aviator/page.tsx`
+**Purpose:** Aviator game page  
+**Features:**
+- Game interface
+- Wallet display (side panel)
+- Deposit button
+- Game statistics
+- Leaderboard
+- Withdrawal button
+
+#### 18. `/app/dashboard/games/casino/page.tsx`
+**Purpose:** Casino games hub  
+**Features:**
+- Game selection tabs (Slots/Blackjack/Roulette/Dice/Baccarat)
+- Active game display
+- Wallet panel (real-time balance)
+- Deposit buttons (separate for each game)
+- Responsible gaming dashboard
+- History & statistics
+- VIP tier display
+
+#### 19. `/app/dashboard/wallet/games/aviator-stats.tsx`
+**Purpose:** Aviator game statistics component  
+**Displays:**
+- Lifetime stats (wins, losses, ROI)
+- Best multiplier
+- Streak info
+- Daily/weekly/monthly charts
+- Bet distribution
+
+#### 20. `/app/dashboard/wallet/games/casino-stats.tsx`
+**Purpose:** Casino game statistics component  
+**Displays:**
+- Game-by-game breakdown
+- Lifetime P&L
+- Monthly trends
+- VIP tier progress
+- Responsible gaming summary
+- Achievement badges
 
 ### Modified Files
 
