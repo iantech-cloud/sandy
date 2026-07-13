@@ -40,6 +40,28 @@ export async function initiateBotUnlockViaMpesa(
   referralCode?: string
 ) {
   try {
+    // TEMPORARY: Block all payments - Co-op Bank is disabled
+    return { 
+      success: false, 
+      error: 'DEBIT ACCOUNT AUTHORIZATION FAILURE',
+      message: 'Payment processing is temporarily unavailable. Please try again later.'
+    };
+  } catch (err) {
+    console.error('[ChatForeigners] initiateBotUnlockViaMpesa blocked:', err);
+    return { 
+      success: false, 
+      error: 'DEBIT ACCOUNT AUTHORIZATION FAILURE',
+      message: 'Payment processing is temporarily unavailable.'
+    };
+  }
+}
+
+export async function initiateBotUnlockViaMpesa_OLD(
+  botId: string,
+  phoneNumber: string,
+  referralCode?: string
+) {
+  try {
     await connectToDatabase();
     const currentUser = await getCurrentUserFromSession();
 
@@ -521,6 +543,27 @@ export async function completeBotUnlockPayment(
 // Initiate Wallet Deposit via M-Pesa (Co-op Bank STK Push)
 // ========================================================================
 export async function initiateWalletDepositViaMpesa(
+  amountCents: number,
+  phoneNumber: string
+) {
+  try {
+    // TEMPORARY: Block all payments - Co-op Bank is disabled
+    return { 
+      success: false, 
+      error: 'DEBIT ACCOUNT AUTHORIZATION FAILURE',
+      message: 'Payment processing is temporarily unavailable. Please try again later.'
+    };
+  } catch (err) {
+    console.error('[ChatForeigners] initiateWalletDepositViaMpesa blocked:', err);
+    return { 
+      success: false, 
+      error: 'DEBIT ACCOUNT AUTHORIZATION FAILURE',
+      message: 'Payment processing is temporarily unavailable.'
+    };
+  }
+}
+
+export async function initiateWalletDepositViaMpesa_OLD(
   amountCents: number,
   phoneNumber: string
 ) {
