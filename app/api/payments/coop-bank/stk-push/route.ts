@@ -53,8 +53,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate prefix based on deposit type
+    // ✅ ACT for activation, CHAT for chat foreigners, SPINDY for spin wallet
+    let prefix: string;
+    if (depositType === 'activation') {
+      prefix = 'ACT';
+    } else if (depositType === 'wallet') {
+      prefix = 'CHAT';
+    } else if (depositType === 'spin_wallet') {
+      prefix = 'SPINDY';
+    } else {
+      prefix = 'CHAT'; // Default to CHAT for 'deposit' and other wallet types
+    }
+
     // Generate message reference — used as idempotency key and callback lookup key
-    const messageReference = `SANDY${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const messageReference = `${prefix}_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
     // Create CoopBank service
     const coopBank = createCoopBankService();
@@ -80,7 +93,7 @@ export async function POST(request: NextRequest) {
       user_id: userId,
       amount_cents: Math.round(amount * 100),
       phone_number: formattedPhone,
-      account_reference: `STK-${depositType.toUpperCase()}-${messageReference}`,
+      account_reference: messageReference,
       transaction_desc: narration,
       status: 'initiated',
       source: source,

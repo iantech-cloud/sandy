@@ -495,7 +495,8 @@ export async function initiateActivationPayment(phoneNumber: string, customAmoun
     await activationLog.save();
 
     // Unique message reference (idempotency key)
-    const messageReference = `ACT${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // ✅ Use ACT_ prefix for activation payments
+    const messageReference = `ACT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
     // Create MpesaTransaction BEFORE calling the API so the callback always finds it

@@ -279,8 +279,9 @@ export async function processMpesaDeposit(depositData: {
         // Use custom amount if provided, otherwise convert from depositData.amount
         const amountCents = customAmountCents ?? Math.round(depositData.amount * 100);
 
-        // Generate a unique message reference
-        const messageReference = `SANDY${Date.now()}${Math.random()
+        // Generate a unique message reference with CHAT prefix (for wallet deposits)
+        // ✅ Correct prefix: CHAT_ for chat/wallet deposits
+        const messageReference = `CHAT_${Date.now()}${Math.random()
             .toString(36)
             .substring(2, 8)
             .toUpperCase()}`;

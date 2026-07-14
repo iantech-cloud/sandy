@@ -62,7 +62,8 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
     }
 
     // Unique message reference used as the idempotency key in the callback
-    const messageReference = `SPIN${Date.now()}${Math.random()
+    // ✅ Use SPINDY_ prefix for spin wallet deposits
+    const messageReference = `SPINDY_${Date.now()}${Math.random()
       .toString(36)
       .substring(2, 8)
       .toUpperCase()}`

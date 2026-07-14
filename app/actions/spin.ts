@@ -782,7 +782,8 @@ export async function depositSpinWalletViaMpesa(depositData: {
     const amountCents = Math.round(depositData.amount * 100);
 
     // Generate a unique message reference (same pattern as deposit.ts)
-    const messageReference = `SPINDY${Date.now()}${Math.random()
+    // ✅ Use SPINDY_ prefix for spin wallet deposits
+    const messageReference = `SPINDY_${Date.now()}${Math.random()
       .toString(36)
       .substring(2, 8)
       .toUpperCase()}`;

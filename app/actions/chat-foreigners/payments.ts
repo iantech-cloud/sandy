@@ -92,7 +92,8 @@ export async function initiateBotUnlockViaMpesa(
     });
 
     // Call Co-op Bank STK Push — same pattern as main site activation
-    const messageRef = `CHATF${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // ✅ Use CHAT_ prefix for chat foreigners payments
+    const messageRef = `CHAT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const narration = 'Chat Foreigners - Personality Unlock';
     const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
@@ -560,7 +561,8 @@ export async function initiateWalletDepositViaMpesa(
     });
 
     // Call Co-op Bank STK Push — same pattern as main site
-    const messageRef = `CHATDEP${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // ✅ Use CHAT_ prefix for chat foreigners wallet deposits
+    const messageRef = `CHAT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const narration = 'Chat Foreigners Wallet Deposit';
     const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
