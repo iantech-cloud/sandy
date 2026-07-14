@@ -8,7 +8,25 @@ import {
   DarajaPaymentResponse,
   DarajaCallbackBody,
   DarajaConfig,
+  DarajaB2CPaymentRequest,
+  DarajaB2CPaymentResponse,
+  DarajaC2BRegisterRequest,
+  DarajaC2BRegisterResponse,
+  DarajaB2BPaymentRequest,
+  DarajaB2BPaymentResponse,
+  DarajaBalanceRequest,
+  DarajaBalanceResponse,
+  DarajaReversalRequest,
+  DarajaReversalResponse,
 } from '@/app/lib/types/mpesa-daraja';
+import {
+  encryptSecurityCredential,
+  getMpesaPublicKey,
+  validatePhoneNumber,
+  generateConversationId,
+  generateTransactionReference,
+  sanitizeTransactionDescription,
+} from '@/app/lib/utils/mpesa-security';
 
 /**
  * M-PESA Daraja API Service
@@ -352,6 +370,322 @@ export class MpesaDarajaService {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${accessToken}`,
     };
+  }
+
+  /**
+   * B2C Payment - Spin Wallet Payout (Business to Customer)
+   * Sends money to customer's M-PESA wallet
+   * Used for: Salaries, Promotions, Business payments, Wallet credits
+   * 
+   * Command IDs:
+   * - SalaryPayment: Regular salary disbursement
+   * - BusinessPayment: Payment to registered customers
+   * - PromotionPayment: Promotional funds with message
+   */
+  static async initiateB2CPayment(
+    phoneNumber: string,
+    amount: number,
+    commandId: 'SalaryPayment' | 'BusinessPayment' | 'PromotionPayment' = 'BusinessPayment',
+    remarks: string = 'HustleHub Africa Payment',
+    callbackUrl: string
+  ): Promise<DarajaB2CPaymentResponse | { success: false; error: string }> {
+    try {
+      if (!this.config.businessShortCode) {
+        throw new Error('Business short code not configured');
+      }
+
+      const accessToken = await this.getAccessToken();
+      const normalizedPhone = validatePhoneNumber(phoneNumber);
+      const conversationId = generateConversationId();
+      const initiatorName = process.env.DARAJA_INITIATOR_NAME || 'api_operator';
+      const initiatorPassword = process.env.DARAJA_INITIATOR_PASSWORD || '';
+
+      if (!initiatorPassword) {
+        throw new Error('Initiator password not configured for B2C');
+      }
+
+      // Encrypt security credentials
+      const publicKey = getMpesaPublicKey(this.config.baseUrl?.includes('sandbox') ? 'sandbox' : 'production');
+      const securityCredential = encryptSecurityCredential(initiatorPassword, publicKey);
+
+      const b2cRequest: DarajaB2CPaymentRequest = {
+        OriginatorConversationID: conversationId,
+        InitiatorName: initiatorName,
+        SecurityCredential: securityCredential,
+        CommandID: commandId,
+        Amount: Math.ceil(amount),
+        PartyA: this.config.businessShortCode,
+        PartyB: normalizedPhone,
+        Remarks: sanitizeTransactionDescription(remarks),
+        QueueTimeOutURL: callbackUrl,
+        ResultURL: callbackUrl,
+      };
+
+      const b2cUrl = this.config.baseUrl?.includes('sandbox')
+        ? 'https://sandbox.safaricom.co.ke/mpesa/b2c/v3/paymentrequest'
+        : 'https://api.safaricom.co.ke/mpesa/b2c/v3/paymentrequest';
+
+      const response = await fetch(b2cUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders(accessToken),
+        body: JSON.stringify(b2cRequest),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return { success: false, error: JSON.stringify(error) };
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('[MpesaDarajaService] B2C Payment Error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * C2B Register - Spin Wallet / Chat Foreigners Setup
+   * Registers your business short code for receiving customer payments
+   * Enables C2B validation and confirmation URLs for real-time processing
+   */
+  static async registerC2B(
+    shortCode: string,
+    validationUrl: string,
+    confirmationUrl: string,
+    responseType: 'Completed' | 'Cancel' = 'Completed'
+  ): Promise<DarajaC2BRegisterResponse | { success: false; error: string }> {
+    try {
+      const accessToken = await this.getAccessToken();
+
+      const c2bRegisterRequest: DarajaC2BRegisterRequest = {
+        ShortCode: shortCode,
+        ResponseType: responseType,
+        ConfirmationURL: confirmationUrl,
+        ValidationURL: validationUrl,
+      };
+
+      const c2bRegisterUrl = this.config.baseUrl?.includes('sandbox')
+        ? 'https://sandbox.safaricom.co.ke/mpesa/c2b/v1/registerurl'
+        : 'https://api.safaricom.co.ke/mpesa/c2b/v1/registerurl';
+
+      const response = await fetch(c2bRegisterUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders(accessToken),
+        body: JSON.stringify(c2bRegisterRequest),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return { success: false, error: JSON.stringify(error) };
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('[MpesaDarajaService] C2B Register Error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * B2B Payment - Business to Business Transfer
+   * Used for: Inter-business payments, payroll to business accounts, fund transfers
+   * 
+   * Command IDs:
+   * - BusinessPayBill: Pay bill to another business
+   * - MerchantToMerchantTransfer: Transfer between merchants
+   * - DisburseFundsToBusiness: Disburse funds to business account
+   */
+  static async initiateB2BPayment(
+    amount: number,
+    partyA: string, // Sender short code
+    partyB: string, // Receiver short code or identifier
+    accountReference: string,
+    remarks: string = 'B2B Transfer',
+    commandId: 'BusinessPayBill' | 'MerchantToMerchantTransfer' | 'DisburseFundsToBusiness' = 'BusinessPayBill',
+    callbackUrl: string
+  ): Promise<DarajaB2BPaymentResponse | { success: false; error: string }> {
+    return this._executeB2BPayment(
+      amount,
+      partyA,
+      partyB,
+      accountReference,
+      remarks,
+      commandId,
+      callbackUrl
+    );
+  }
+
+  /**
+   * Internal B2B payment execution
+   */
+  private static async _executeB2BPayment(
+    amount: number,
+    partyA: string,
+    partyB: string,
+    accountReference: string,
+    remarks: string,
+    commandId: string,
+    callbackUrl: string
+  ): Promise<DarajaB2BPaymentResponse | { success: false; error: string }> {
+    try {
+      const accessToken = await this.getAccessToken();
+      const initiatorName = process.env.DARAJA_INITIATOR_NAME || 'api_operator';
+      const initiatorPassword = process.env.DARAJA_INITIATOR_PASSWORD || '';
+
+      if (!initiatorPassword) {
+        throw new Error('Initiator password not configured for B2B');
+      }
+
+      const publicKey = getMpesaPublicKey(this.config.baseUrl?.includes('sandbox') ? 'sandbox' : 'production');
+      const securityCredential = encryptSecurityCredential(initiatorPassword, publicKey);
+
+      const b2bRequest: DarajaB2BPaymentRequest = {
+        Initiator: initiatorName,
+        SecurityCredential: securityCredential,
+        CommandID: commandId,
+        SenderIdentifierType: '4', // Short code
+        RecieverIdentifierType: '4', // Short code
+        Amount: Math.ceil(amount),
+        PartyA: partyA,
+        PartyB: partyB,
+        AccountReference: sanitizeTransactionDescription(accountReference),
+        Remarks: sanitizeTransactionDescription(remarks),
+        QueueTimeOutURL: callbackUrl,
+        ResultURL: callbackUrl,
+      };
+
+      const b2bUrl = this.config.baseUrl?.includes('sandbox')
+        ? 'https://sandbox.safaricom.co.ke/mpesa/b2b/v1/paymentrequest'
+        : 'https://api.safaricom.co.ke/mpesa/b2b/v1/paymentrequest';
+
+      const response = await fetch(b2bUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders(accessToken),
+        body: JSON.stringify(b2bRequest),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return { success: false, error: JSON.stringify(error) };
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('[MpesaDarajaService] B2B Payment Error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Account Balance Query
+   * Check current M-PESA account balance
+   */
+  static async queryAccountBalance(
+    shortCode: string,
+    identifierType: '1' | '2' | '4' = '4', // 4 = Short Code
+    callbackUrl: string
+  ): Promise<DarajaBalanceResponse | { success: false; error: string }> {
+    try {
+      const accessToken = await this.getAccessToken();
+      const initiatorName = process.env.DARAJA_INITIATOR_NAME || 'api_operator';
+      const initiatorPassword = process.env.DARAJA_INITIATOR_PASSWORD || '';
+
+      if (!initiatorPassword) {
+        throw new Error('Initiator password not configured');
+      }
+
+      const publicKey = getMpesaPublicKey(this.config.baseUrl?.includes('sandbox') ? 'sandbox' : 'production');
+      const securityCredential = encryptSecurityCredential(initiatorPassword, publicKey);
+
+      const balanceRequest: DarajaBalanceRequest = {
+        Initiator: initiatorName,
+        SecurityCredential: securityCredential,
+        CommandID: 'AccountBalance',
+        PartyA: shortCode,
+        IdentifierType: identifierType,
+        Remarks: 'Account balance query',
+        QueueTimeOutURL: callbackUrl,
+        ResultURL: callbackUrl,
+      };
+
+      const balanceUrl = this.config.baseUrl?.includes('sandbox')
+        ? 'https://sandbox.safaricom.co.ke/mpesa/accountbalance/v1/query'
+        : 'https://api.safaricom.co.ke/mpesa/accountbalance/v1/query';
+
+      const response = await fetch(balanceUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders(accessToken),
+        body: JSON.stringify(balanceRequest),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return { success: false, error: JSON.stringify(error) };
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('[MpesaDarajaService] Balance Query Error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Transaction Reversal
+   * Reverse a previously completed transaction
+   */
+  static async reverseTransaction(
+    transactionId: string,
+    amount: number,
+    receiverParty: string,
+    remarks: string = 'Transaction reversal',
+    callbackUrl: string
+  ): Promise<DarajaReversalResponse | { success: false; error: string }> {
+    try {
+      const accessToken = await this.getAccessToken();
+      const initiatorName = process.env.DARAJA_INITIATOR_NAME || 'api_operator';
+      const initiatorPassword = process.env.DARAJA_INITIATOR_PASSWORD || '';
+
+      if (!initiatorPassword) {
+        throw new Error('Initiator password not configured');
+      }
+
+      const publicKey = getMpesaPublicKey(this.config.baseUrl?.includes('sandbox') ? 'sandbox' : 'production');
+      const securityCredential = encryptSecurityCredential(initiatorPassword, publicKey);
+
+      const reversalRequest: DarajaReversalRequest = {
+        Initiator: initiatorName,
+        SecurityCredential: securityCredential,
+        CommandID: 'TransactionReversal',
+        TransactionID: transactionId,
+        Amount: Math.ceil(amount),
+        ReceiverParty: receiverParty,
+        RecieverIdentifierType: '4',
+        Remarks: sanitizeTransactionDescription(remarks),
+        QueueTimeOutURL: callbackUrl,
+        ResultURL: callbackUrl,
+      };
+
+      const reversalUrl = this.config.baseUrl?.includes('sandbox')
+        ? 'https://sandbox.safaricom.co.ke/mpesa/reversal/v1/request'
+        : 'https://api.safaricom.co.ke/mpesa/reversal/v1/request';
+
+      const response = await fetch(reversalUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders(accessToken),
+        body: JSON.stringify(reversalRequest),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return { success: false, error: JSON.stringify(error) };
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.error('[MpesaDarajaService] Transaction Reversal Error:', error);
+      return { success: false, error: error.message };
+    }
   }
 
   /**

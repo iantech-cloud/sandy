@@ -90,7 +90,7 @@ export interface DarajaCallbackBody {
 }
 
 // ---------------------------------------------------------------------------
-// C2B (Customer to Business)
+// C2B (Customer to Business) - Spin Wallet / Chat Foreigners
 // ---------------------------------------------------------------------------
 
 export interface DarajaC2BRegisterRequest {
@@ -98,6 +98,11 @@ export interface DarajaC2BRegisterRequest {
   ResponseType: 'Completed' | 'Cancel';
   ConfirmationURL: string;
   ValidationURL: string;
+}
+
+export interface DarajaC2BRegisterResponse {
+  ResponseCode: string;
+  ResponseDescription: string;
 }
 
 export interface DarajaC2BPaymentRequest {
@@ -108,24 +113,137 @@ export interface DarajaC2BPaymentRequest {
   BillRefNumber: string;
 }
 
+export interface DarajaC2BValidationRequest {
+  transactionType: string;
+  transactionID: string;
+  transactionTimestamp: string;
+  transactionAmount: number;
+  invoiceNumber?: string;
+  organizationAccountBalance?: number;
+  thirdPartyTransactionID?: string;
+  msisdn: string;
+  firstName?: string;
+}
+
+export interface DarajaC2BConfirmationRequest {
+  transactionType: string;
+  transactionID: string;
+  transactionTimestamp: string;
+  transactionAmount: number;
+  organizationAccountBalance: number;
+  invoiceNumber?: string;
+  thirdPartyTransactionID?: string;
+  msisdn: string;
+  firstName?: string;
+}
+
 // ---------------------------------------------------------------------------
-// B2C (Business to Customer)
+// B2C (Business to Customer) - Spin Wallet Payouts
 // ---------------------------------------------------------------------------
 
 export interface DarajaB2CPaymentRequest {
   OriginatorConversationID: string;
   InitiatorName: string;
   SecurityCredential: string;
-  CommandID: string;
+  CommandID: 'SalaryPayment' | 'BusinessPayment' | 'PromotionPayment';
   Amount: number;
   PartyA: string; // Business Short Code
-  PartyB: string; // Customer phone number
+  PartyB: string; // Customer phone number (format: 254XXXXXXXXX)
   Remarks: string;
   QueueTimeOutURL: string;
   ResultURL: string;
 }
 
 export interface DarajaB2CPaymentResponse {
+  ConversationID: string;
+  OriginatorConversationID: string;
+  ResponseCode: string;
+  ResponseDescription: string;
+}
+
+export interface DarajaB2CCallbackBody {
+  Result: {
+    ResultType: number;
+    ResultCode: number;
+    ResultDesc: string;
+    OriginatorConversationID: string;
+    ConversationID: string;
+    TransactionID: string;
+    ResultParameters?: {
+      ResultParameter: Array<{
+        Key: string;
+        Value: string | number;
+      }>;
+    };
+  };
+}
+
+// ---------------------------------------------------------------------------
+// B2B (Business to Business)
+// ---------------------------------------------------------------------------
+
+export interface DarajaB2BPaymentRequest {
+  Initiator: string;
+  SecurityCredential: string;
+  CommandID: 'BusinessPayBill' | 'MerchantToMerchantTransfer' | 'DisburseFundsToBusiness';
+  SenderIdentifierType: string;
+  RecieverIdentifierType: string;
+  Amount: number;
+  PartyA: string;
+  PartyB: string;
+  AccountReference: string;
+  Remarks: string;
+  QueueTimeOutURL: string;
+  ResultURL: string;
+}
+
+export interface DarajaB2BPaymentResponse {
+  ConversationID: string;
+  OriginatorConversationID: string;
+  ResponseCode: string;
+  ResponseDescription: string;
+}
+
+// ---------------------------------------------------------------------------
+// Account Balance Query
+// ---------------------------------------------------------------------------
+
+export interface DarajaBalanceRequest {
+  Initiator: string;
+  SecurityCredential: string;
+  CommandID: 'AccountBalance';
+  PartyA: string;
+  IdentifierType: string;
+  Remarks: string;
+  QueueTimeOutURL: string;
+  ResultURL: string;
+}
+
+export interface DarajaBalanceResponse {
+  ConversationID: string;
+  OriginatorConversationID: string;
+  ResponseCode: string;
+  ResponseDescription: string;
+}
+
+// ---------------------------------------------------------------------------
+// Transaction Reversal
+// ---------------------------------------------------------------------------
+
+export interface DarajaReversalRequest {
+  Initiator: string;
+  SecurityCredential: string;
+  CommandID: 'TransactionReversal';
+  TransactionID: string;
+  Amount: number;
+  ReceiverParty: string;
+  RecieverIdentifierType: string;
+  Remarks: string;
+  QueueTimeOutURL: string;
+  ResultURL: string;
+}
+
+export interface DarajaReversalResponse {
   ConversationID: string;
   OriginatorConversationID: string;
   ResponseCode: string;
