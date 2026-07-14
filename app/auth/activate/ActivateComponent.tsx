@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Phone, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { checkActivationStatus, initiateActivationPayment } from '@/app/actions/activation';
 import Link from 'next/link';
+import { getActivationAmount } from '@/app/lib/utils/dynamic-payment';
 
 export default function ActivateComponent() {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -12,9 +13,15 @@ export default function ActivateComponent() {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('error');
   const [activationStatus, setActivationStatus] = useState<any>(null);
+  const [activationAmount, setActivationAmount] = useState(0);
   
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Generate dynamic activation amount on component mount
+  useEffect(() => {
+    setActivationAmount(getActivationAmount());
+  }, []);
 
   useEffect(() => {
     // Pre-fill phone from URL if provided (coming from signup)
