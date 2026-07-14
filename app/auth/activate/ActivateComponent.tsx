@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Phone, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { checkActivationStatus, initiateActivationPayment } from '@/app/actions/activation';
+import { initiateHashBackActivation } from '@/app/actions/activation-hashback';
 import Link from 'next/link';
 import { getActivationAmount } from '@/app/lib/utils/dynamic-payment';
+import { PaymentMethodSelector } from '@/app/components/PaymentMethodSelector';
 
 export default function ActivateComponent() {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -186,45 +188,55 @@ export default function ActivateComponent() {
           </ul>
         </div>
 
-        <form onSubmit={handlePayment}>
-          <div className="mb-6">
-            <label className="block font-medium mb-2 text-gray-700">
-              Phone Number (Co-op Bank M-Pesa)
-            </label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="tel"
-                value={phoneNumber}
-                onChange={handlePhoneChange}
-                placeholder="07XXXXXXXX or 2547XXXXXXXX"
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                required
-                maxLength={12}
-              />
-            </div>
-            {phoneNumber && (
-              <p className="text-sm text-gray-500 mt-1">
-                {formatPhoneForDisplay(phoneNumber)}
-              </p>
-            )}
+        {/* Phone Number Input */}
+        <div className="mb-8">
+          <label className="block font-medium mb-2 text-gray-700">
+            Phone Number (M-Pesa Registered)
+          </label>
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="tel"
+              value={phoneNumber}
+              onChange={handlePhoneChange}
+              placeholder="07XXXXXXXX or 2547XXXXXXXX"
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              required
+              maxLength={12}
+            />
           </div>
+          {phoneNumber && (
+            <p className="text-sm text-gray-500 mt-1">
+              {formatPhoneForDisplay(phoneNumber)}
+            </p>
+          )}
+        </div>
 
-          <button
-            type="submit"
-            disabled={loading || !isValidPhone(phoneNumber)}
-            className="w-full py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition duration-150 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="animate-spin w-5 h-5 mr-2" />
-                Processing...
-              </>
-            ) : (
-              'Pay via Co-op Bank M-Pesa'
-            )}
-          </button>
-        </form>
+        {/* Payment Method Selector */}
+        {isValidPhone(phoneNumber) && (
+          <PaymentMethodSelector
+            amount={activationAmount / 100} // Convert cents to KES
+            customAmountCents={activationAmount}
+            reference={`ACT_${Date.now()}`}
+            phoneNumber={phoneNumber}
+            narration="Account Activation Fee"
+            onSuccess={(txn, provider) => {
+              console.log(`[v0] ${provider} activation payment initiated`);
+              if (provider === 'coop_bank') {
+                handlePayment();
+              } else if (provider === 'hashback') {
+                // HashBack verification happens via webhook
+                setMessage('Payment sent. Confirming your activation...');
+                setMessageType('info');
+              }
+            }}
+            onError={(error, provider) => {
+              console.error(`[v0] ${provider} payment error:`, error);
+              setMessage(`${provider === 'coop_bank' ? 'Co-op Bank' : 'HashBack'} payment failed: ${error.message || 'Please try again'}`);
+              setMessageType('error');
+            }}
+          />
+        )}
 
         <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
           <h4 className="font-semibold text-blue-800 mb-2">Payment Process:</h4>
