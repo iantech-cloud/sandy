@@ -236,16 +236,16 @@ async function syncTransactionStatus(
 }
 
 // ---------------------------------------------------------------------------
-// Main exported action: initiate a wallet deposit via Co-op Bank STK Push
+// Main exported action: initiate a wallet deposit via M-PESA Daraja STK Push
 // ---------------------------------------------------------------------------
 
 /**
- * Process a wallet deposit by sending a Co-op Bank STK Push to the user's phone.
+ * Process a wallet deposit by sending a M-PESA Daraja STK Push to the user's phone.
  * On success returns a messageReference that the client polls with
- * `checkCoopDepositStatus`.
+ * `checkMpesaPaymentStatus`.
  *
- * NOTE: wallet balance is credited ONLY in the Co-op Bank callback route
- * (/api/payments/coop-bank/callback) — never here.
+ * NOTE: wallet balance is credited ONLY in the Daraja callback route
+ * (/api/payments/daraja/callback) — never here.
  */
 export async function processMpesaDeposit(depositData: {
     amount: number;
@@ -284,7 +284,7 @@ export async function processMpesaDeposit(depositData: {
             .substring(2, 8)
             .toUpperCase()}`;
 
-        const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
+        const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/daraja/callback`;
 
         // Create the MpesaTransaction record BEFORE calling the API so the
         // callback always finds a matching record even if the API response is slow.
@@ -300,7 +300,7 @@ export async function processMpesaDeposit(depositData: {
             metadata: {
                 user_username: currentUser.username,
                 deposit_type: 'wallet',
-                payment_method: 'coop_bank_stk_push',
+                payment_method: 'daraja_stk_push',
                 initiated_at: new Date().toISOString(),
                 callback_url: callbackUrl,
             },
@@ -311,14 +311,14 @@ export async function processMpesaDeposit(depositData: {
             user_id: currentUser._id,
             amount_cents: amountCents,
             type: 'DEPOSIT',
-            description: `Co-op Bank deposit from ${formattedPhone}`,
+            description: `M-PESA Daraja deposit from ${formattedPhone}`,
             status: 'pending',
             mpesa_transaction_id: mpesaTransaction._id,
             target_type: 'user',
             target_id: currentUser._id.toString(),
             metadata: {
                 phoneNumber: formattedPhone,
-                provider: 'coop_bank',
+                provider: 'daraja',
                 messageReference,
                 initiated_at: new Date().toISOString(),
             },
@@ -357,19 +357,18 @@ export async function processMpesaDeposit(depositData: {
             success: true,
             data: {
                 messageReference,
-                ResponseDescription: stkResponse.ResponseDescription,
-                Amount: depositData.amount,
-                PhoneNumber: formattedPhone,
+                amount: depositData.amount,
+                phoneNumber: formattedPhone,
                 transactionId: transaction._id.toString(),
                 mpesaTransactionId: mpesaTransaction._id.toString(),
             },
             message:
-                stkResponse.ResponseDescription ||
+                stkResponse.message ||
                 'Payment prompt sent. Please check your phone to complete the payment.',
         };
 
     } catch (error) {
-        console.error('[Deposit] processCoopDeposit error:', error);
+        console.error('[Deposit] processMpesaDeposit error:', error);
         return {
             success: false,
             message: 'An error occurred while processing your deposit. Please try again.',
@@ -378,11 +377,11 @@ export async function processMpesaDeposit(depositData: {
 }
 
 // ---------------------------------------------------------------------------
-// Poll deposit status via Co-op Bank Enquiry API
+// Poll deposit status via M-PESA Daraja API
 // ---------------------------------------------------------------------------
 
 /**
- * Check the status of a Co-op Bank wallet deposit.
+ * Check the status of a M-PESA wallet deposit.
  * Wallet crediting is NEVER done here — only in the callback route.
  */
 export async function checkMpesaPaymentStatus(messageReference: string): Promise<PaymentStatusResponse> {
@@ -433,37 +432,35 @@ export async function checkMpesaPaymentStatus(messageReference: string): Promise
             };
         }
 
-        // Query Co-op Bank Enquiry API
-        const coopBank = createCoopBankService();
-        const statusResponse = await coopBank.getTransactionStatus(messageReference);
+        // Query M-PESA Daraja Status API
+        const statusResponse = await MpesaDarajaService.queryTransactionStatus(messageReference);
 
-        const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+        let mappedStatus = 'pending';
+        let resultDesc = '';
+        if (statusResponse.success && statusResponse.data) {
+            mappedStatus = statusResponse.data.status || 'pending';
+            resultDesc = statusResponse.data.resultDesc || '';
+        }
 
-        console.log('[Deposit] Payment status check:', {
+        console.log('[Deposit] Payment status check (Daraja):', {
           messageReference,
-          responseCode: statusResponse.ResponseCode,
           mappedStatus,
-          description: statusResponse.ResponseDescription,
+          description: resultDesc,
         });
 
         if (terminalStatuses.includes(mappedStatus)) {
-            // Safe parse result code - avoid NaN
-            const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
-            const safeResultCode = isNaN(resultCode) ? 1 : resultCode;
-            
             // Update the MpesaTransaction record status (wallet credit still via callback)
             await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
                 status: mappedStatus,
-                result_code: safeResultCode,
-                result_desc: statusResponse.ResponseDescription || '',
+                result_desc: resultDesc || '',
                 ...(mappedStatus === 'completed' ? { completed_at: new Date() } : { failed_at: new Date() }),
             });
 
             await syncTransactionStatus(
                 mpesaTransaction._id,
                 mappedStatus,
-                safeResultCode,
-                statusResponse.ResponseDescription || '',
+                0,
+                resultDesc || '',
                 undefined
             );
         }
@@ -472,18 +469,15 @@ export async function checkMpesaPaymentStatus(messageReference: string): Promise
             success: true,
             data: {
                 status: mappedStatus,
-                resultCode: statusResponse.ResponseCode,
-                resultDesc: statusResponse.ResponseDescription || '',
+                resultDesc: resultDesc || '',
                 amount: mpesaTransaction.amount_cents,
                 source: 'api',
-                responseCode: statusResponse.ResponseCode,
-                responseDescription: statusResponse.ResponseDescription,
             },
-            message: getDepositUserMessage(mappedStatus, statusResponse.ResponseDescription),
+            message: getDepositUserMessage(mappedStatus, resultDesc),
         };
 
     } catch (error) {
-        console.error('[Deposit] checkCoopDepositStatus error:', error);
+        console.error('[Deposit] checkMpesaPaymentStatus error:', error);
         return { success: false, message: 'Failed to check payment status. Please try again.' };
     }
 }
@@ -642,26 +636,15 @@ export async function validateDepositAmount(amount: number): Promise<{ valid: bo
 
 /*
  * =============================================================================
- * FALLBACK: M-Pesa implementation (commented out — kept for quick rollback)
+ * M-PESA Daraja Implementation (Active)
  * =============================================================================
  *
- * To revert to M-Pesa:
- *   1. Uncomment the functions below.
- *   2. In processMpesaDeposit, replace the CoopBankService call with initiateStkPush.
- *   3. In checkMpesaPaymentStatus, replace the CoopBankService call with queryStkPushStatus.
- *
- * const MPESA_CONFIG = {
- *   consumerKey: process.env.MPESA_CONSUMER_KEY!,
- *   consumerSecret: process.env.MPESA_CONSUMER_SECRET!,
- *   shortCode: process.env.MPESA_SHORTCODE!,
- *   passkey: process.env.MPESA_PASSKEY!,
- *   callbackURL: process.env.MPESA_CALLBACK_URL!,
- *   environment: process.env.MPESA_ENVIRONMENT || 'sandbox',
- * };
- *
- * async function getMpesaAccessToken(): Promise<string> { ... }
- * async function initiateMpesaSTKPush(amount, phone, ref, desc): Promise<...> { ... }
- * async function queryMpesaStatus(checkoutRequestId): Promise<...> { ... }
+ * Currently using MpesaDarajaService for STK Push payments.
+ * All deposit flows use Daraja API endpoints:
+ *   - /api/payments/daraja/stkpush - STK Push initiation
+ *   - /api/payments/daraja/callback - Payment callback handling
+ *   - MpesaDarajaService.initiatePayment() - Service method
+ *   - MpesaDarajaService.queryTransactionStatus() - Status polling
  *
  * =============================================================================
  */
