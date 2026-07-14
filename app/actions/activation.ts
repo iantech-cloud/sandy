@@ -511,7 +511,7 @@ export async function initiateActivationPayment(phoneNumber: string, customAmoun
       user_id: userProfile._id,
       amount_cents: activationAmount,
       phone_number: mpesaPhone,
-      account_reference: `ACTIVATION-${userProfile._id}`,
+      account_reference: messageReference,
       transaction_desc: `Account activation fee for ${userProfile.username}`,
       checkout_request_id: messageReference,
       status: 'initiated',

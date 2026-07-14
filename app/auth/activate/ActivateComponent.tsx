@@ -16,6 +16,7 @@ export default function ActivateComponent() {
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('error');
   const [activationStatus, setActivationStatus] = useState<any>(null);
   const [activationAmount, setActivationAmount] = useState(0);
+  const [isNavigating, setIsNavigating] = useState(false);
   
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -76,9 +77,17 @@ export default function ActivateComponent() {
     setMessage('');
 
     try {
+      console.log('[v0] Starting activation payment for phone:', phoneNumber);
       const result = await initiateActivationPayment(phoneNumber, activationAmount);
+      console.log('[v0] Payment result:', result);
 
       if (result.success && result.data?.messageReference) {
+        console.log('[v0] Payment successful, navigating to waiting page with:', {
+          messageReference: result.data.messageReference,
+          amount: result.data.amount,
+          activationPaymentId: result.data.activationPaymentId
+        });
+        
         const params = new URLSearchParams({
           messageReference: result.data.messageReference,
           amount: (result.data.amount / 100).toString(),
@@ -87,14 +96,18 @@ export default function ActivateComponent() {
           activationPaymentId: result.data.activationPaymentId
         });
         
-        router.push(`/auth/activate/mpesa-waiting?${params.toString()}`);
+        const waitingPageUrl = `/auth/activate/mpesa-waiting?${params.toString()}`;
+        console.log('[v0] Navigating to:', waitingPageUrl);
+        setIsNavigating(true);
+        router.push(waitingPageUrl);
         
       } else {
+        console.warn('[v0] Payment failed:', result.message);
         setMessageType('error');
         setMessage(result.message || 'Payment could not be initiated. Please try again.');
       }
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('[v0] Payment error:', error);
       setMessageType('error');
       setMessage('An error occurred. Please try again.');
     } finally {
@@ -129,6 +142,19 @@ export default function ActivateComponent() {
     if (cleanPhone.startsWith('254') && cleanPhone.length === 12) return true;
     return false;
   };
+
+  // Show loading state while navigating to waiting page
+  if (isNavigating) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-sm p-8 w-full max-w-md text-center border border-gray-200">
+          <Loader2 className="animate-spin w-8 h-8 mx-auto text-indigo-600" />
+          <p className="text-gray-600 mt-4">Initiating M-Pesa payment...</p>
+          <p className="text-gray-500 text-sm mt-2">Redirecting to payment confirmation page...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!activationStatus) {
     return (
