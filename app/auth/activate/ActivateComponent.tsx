@@ -249,39 +249,7 @@ export default function ActivateComponent() {
               {loading ? 'Initiating Payment...' : `Pay KES ${(activationAmount / 100).toLocaleString()} via Co-op Bank`}
             </button>
 
-            {/* HashBack Payment Button */}
-            <div>
-              <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
-                Alternative: HashBack M-Pesa
-              </p>
-              <button
-                onClick={async () => {
-                  setLoading(true);
-                  setMessage('');
-                  try {
-                    const result = await initiateHashBackActivation(phoneNumber, activationAmount);
-                    if (result.success) {
-                      setMessage('Payment sent. Confirming your activation...');
-                      setMessageType('info');
-                    } else {
-                      setMessage(`HashBack payment failed: ${result.message || 'Please try again'}`);
-                      setMessageType('error');
-                    }
-                  } catch (error) {
-                    console.error('[v0] HashBack error:', error);
-                    setMessage('An error occurred with HashBack. Please try again.');
-                    setMessageType('error');
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                disabled={loading}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {loading ? 'Processing...' : `Pay KES ${(activationAmount / 100).toLocaleString()} via HashBack`}
-              </button>
-            </div>
+
           </div>
         )}
 
