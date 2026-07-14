@@ -9,6 +9,8 @@ import { useDashboard } from '../../dashboard/DashboardContext';
 import { processWithdrawal } from '@/app/actions/transactions';
 import { getUserBalance } from '@/app/actions/deposit';
 import { formatPhoneNumber, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
+import { PaymentMethodSelector } from '@/app/components/PaymentMethodSelector';
+import { getActivationAmount } from '@/app/lib/utils/dynamic-payment';
 
 const MIN_WITHDRAWAL = 200;
 
@@ -48,13 +50,14 @@ export default function WalletPage() {
   const { user } = useDashboard();
   const router = useRouter();
 
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [mpesaNumber, setMpesaNumber] = useState(user?.phone || '');
-  const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
   const [currentBalance, setCurrentBalance] = useState(user?.balance || 0);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('success');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [depositPhoneNumber, setDepositPhoneNumber] = useState('');
+  const [depositAmountCents, setDepositAmountCents] = useState(3000); // 30 KES default
 
   if (!user) {
     return (
@@ -177,23 +180,56 @@ export default function WalletPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Deposit via M-Pesa — temporarily disabled */}
+        {/* Deposit via M-Pesa */}
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h4 className="font-semibold text-lg text-gray-700 flex items-center gap-2 mb-4">
-            <DollarSign size={20} className="text-gray-400" />
-            Deposit via M-Pesa
+            <DollarSign size={20} className="text-green-600" />
+            Deposit Funds
           </h4>
 
-          <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-center text-gray-500 text-sm mb-4">
-            Deposits via M-Pesa are temporarily unavailable. Please check back soon.
-          </div>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="depositPhone" className="block text-sm font-medium text-gray-700 mb-1">
+                M-Pesa Phone Number
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  id="depositPhone"
+                  type="tel"
+                  value={depositPhoneNumber}
+                  onChange={(e) => setDepositPhoneNumber(e.target.value)}
+                  placeholder="07XXXXXXXX"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  maxLength={12}
+                />
+              </div>
+            </div>
 
-          <button
-            disabled
-            className="w-full py-3 bg-gray-300 text-gray-500 font-semibold rounded-lg cursor-not-allowed"
-          >
-            Deposit via M-Pesa (Coming Soon)
-          </button>
+            {depositPhoneNumber && (
+              <PaymentMethodSelector
+                amount={30} // KES 30 default deposit
+                customAmountCents={depositAmountCents}
+                reference={`DEPOSIT_${Date.now()}`}
+                phoneNumber={depositPhoneNumber}
+                narration="Wallet Deposit"
+                onSuccess={() => {
+                  setMessage('Deposit initiated. Completing your payment...');
+                  setMessageType('info');
+                  setTimeout(() => {
+                    setMessage('Deposit successful! Your wallet has been updated.');
+                    setMessageType('success');
+                    setDepositPhoneNumber('');
+                    fetchWalletData();
+                  }, 2000);
+                }}
+                onError={(error) => {
+                  setMessage(`Deposit failed: ${error.message || 'Please try again'}`);
+                  setMessageType('error');
+                }}
+              />
+            )}
+          </div>
         </div>
 
         {/* Withdrawal Section */}
