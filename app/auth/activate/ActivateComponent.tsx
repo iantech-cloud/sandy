@@ -7,7 +7,6 @@ import { checkActivationStatus, initiateActivationPayment } from '@/app/actions/
 import { initiateHashBackActivation } from '@/app/actions/activation-hashback';
 import Link from 'next/link';
 import { getActivationAmount } from '@/app/lib/utils/dynamic-payment';
-import { PaymentMethodSelector } from '@/app/components/PaymentMethodSelector';
 
 export default function ActivateComponent() {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -71,8 +70,7 @@ export default function ActivateComponent() {
     checkStatus();
   }, [router]);
 
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePayment = async () => {
     setLoading(true);
     setMessage('');
 
@@ -238,30 +236,53 @@ export default function ActivateComponent() {
           )}
         </div>
 
-        {/* Payment Method Selector */}
+        {/* Payment Methods */}
         {isValidPhone(phoneNumber) && (
-          <PaymentMethodSelector
-            amount={activationAmount / 100} // Convert cents to KES
-            customAmountCents={activationAmount}
-            reference={`ACT_${Date.now()}`}
-            phoneNumber={phoneNumber}
-            narration="Account Activation Fee"
-            onSuccess={(txn, provider) => {
-              console.log(`[v0] ${provider} activation payment initiated`);
-              if (provider === 'coop_bank') {
-                handlePayment();
-              } else if (provider === 'hashback') {
-                // HashBack verification happens via webhook
-                setMessage('Payment sent. Confirming your activation...');
-                setMessageType('info');
-              }
-            }}
-            onError={(error, provider) => {
-              console.error(`[v0] ${provider} payment error:`, error);
-              setMessage(`${provider === 'coop_bank' ? 'Co-op Bank' : 'HashBack'} payment failed: ${error.message || 'Please try again'}`);
-              setMessageType('error');
-            }}
-          />
+          <div className="space-y-3">
+            {/* Co-op Bank Payment Button */}
+            <button
+              onClick={handlePayment}
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {loading ? 'Initiating Payment...' : `Pay KES ${(activationAmount / 100).toLocaleString()} via Co-op Bank`}
+            </button>
+
+            {/* HashBack Payment Button */}
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+                Alternative: HashBack M-Pesa
+              </p>
+              <button
+                onClick={async () => {
+                  setLoading(true);
+                  setMessage('');
+                  try {
+                    const result = await initiateHashBackActivation(phoneNumber, activationAmount);
+                    if (result.success) {
+                      setMessage('Payment sent. Confirming your activation...');
+                      setMessageType('info');
+                    } else {
+                      setMessage(`HashBack payment failed: ${result.message || 'Please try again'}`);
+                      setMessageType('error');
+                    }
+                  } catch (error) {
+                    console.error('[v0] HashBack error:', error);
+                    setMessage('An error occurred with HashBack. Please try again.');
+                    setMessageType('error');
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {loading ? 'Processing...' : `Pay KES ${(activationAmount / 100).toLocaleString()} via HashBack`}
+              </button>
+            </div>
+          </div>
         )}
 
         <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
