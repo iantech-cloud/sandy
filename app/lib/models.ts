@@ -7,7 +7,7 @@ import { connectToDatabase } from './mongoose';
 const UserRoles = ['user', 'support', 'admin'];
 const ApprovalStatuses = ['pending', 'approved', 'rejected'];
 const UserStatuses = ['active', 'inactive', 'suspended', 'banned', 'pending'];
-const PaymentProviders = ['mpesa', 'card', 'bank', 'coop_bank'];
+const PaymentProviders = ['mpesa', 'card', 'bank', 'coop_bank', 'hashback'];
 const PaymentStatuses = ['pending', 'completed', 'failed', 'refunded'];
 const TicketStatuses = ['open', 'in_progress', 'resolved', 'closed'];
 const TicketPriorities = ['low', 'medium', 'high', 'urgent'];
@@ -398,6 +398,12 @@ const ActivationPaymentSchema = new Schema({
   checkout_request_id: { type: String, index: true },
   mpesa_receipt_number: { type: String },
   phone_number: { type: String, required: true },
+  
+  // HashBack payment fields
+  hashback_checkout_id: { type: String, index: true },
+  hashback_transaction_id: { type: String },
+  hashback_receipt: { type: String },
+  hashback_verified: { type: Boolean, default: false },
   
   metadata: { 
     type: Schema.Types.Mixed,
