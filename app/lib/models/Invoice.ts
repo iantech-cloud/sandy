@@ -13,7 +13,7 @@ export interface IInvoice extends Document {
   paid_at?: Date;
   
   // Payment Information
-  payment_method?: 'mpesa' | 'admin' | 'manual' | 'bank_transfer' | 'card';
+  payment_method?: 'mpesa' | 'admin' | 'manual' | 'bank_transfer' | 'card' | 'coop_bank';
   payment_reference?: string; // M-Pesa receipt, transaction ID, etc.
   payment_transaction_id?: Types.ObjectId; // Reference to Transaction document
   

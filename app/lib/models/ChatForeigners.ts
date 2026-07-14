@@ -204,6 +204,10 @@ const ChatForeignersMpesaTransactionSchema = new Schema({
     sparse: true,
     index: true
   },
+  account_reference: {
+    type: String,
+    index: true
+  },
   merchant_request_id: {
     type: String,
     index: true

@@ -61,8 +61,12 @@ export async function POST(request: NextRequest) {
 
     // FIXED: Check idempotency BEFORE creating session (faster rejection of duplicates)
     // Look up the transaction WITHOUT session first for quick duplicate detection
+    // Try both checkout_request_id and account_reference for robustness
     const existingTransaction = await MpesaTransaction.findOne({
-      checkout_request_id: messageReference,
+      $or: [
+        { checkout_request_id: messageReference },
+        { account_reference: messageReference }
+      ]
     }).lean();
 
     if (!existingTransaction) {
@@ -85,8 +89,12 @@ export async function POST(request: NextRequest) {
     session.startTransaction();
 
     // Re-fetch with session for transactional consistency
+    // Use the same lookup strategy: try both fields
     const mpesaTransaction = await MpesaTransaction.findOne({
-      checkout_request_id: messageReference,
+      $or: [
+        { checkout_request_id: messageReference },
+        { account_reference: messageReference }
+      ]
     }).session(session);
 
     if (!mpesaTransaction) {

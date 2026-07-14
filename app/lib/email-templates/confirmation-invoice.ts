@@ -6,7 +6,7 @@ export interface ConfirmationInvoiceData {
   amount: number;
   paymentDate: string;
   transactionId: string;
-  paymentMethod: 'mpesa' | 'admin' | 'manual';
+  paymentMethod: 'mpesa' | 'admin' | 'manual' | 'coop_bank';
   user: {
     name: string;
     email: string;
@@ -41,13 +41,15 @@ export function generateConfirmationInvoiceTemplate(data: ConfirmationInvoiceDat
   const paymentMethodText = {
     mpesa: 'M-Pesa Mobile Payment',
     admin: 'Admin Manual Activation',
-    manual: 'Manual Payment'
+    manual: 'Manual Payment',
+    coop_bank: 'Co-op Bank STK Push'
   }[paymentMethod];
 
   const paymentMethodIcon = {
     mpesa: '📱',
     admin: '👨‍💼',
-    manual: '💳'
+    manual: '💳',
+    coop_bank: '🏦'
   }[paymentMethod];
 
   return `
