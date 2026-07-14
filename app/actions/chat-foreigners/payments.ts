@@ -138,6 +138,7 @@ export async function initiateBotUnlockViaMpesa(
 
     // Update M-Pesa transaction with STK response
     mpesaTransaction.checkout_request_id = checkoutRequestId;
+    mpesaTransaction.account_reference = messageRef;
     mpesaTransaction.merchant_request_id = stkResponse.MessageReference || messageRef;
     mpesaTransaction.stk_push_response = stkResponse;
     await mpesaTransaction.save();
@@ -602,6 +603,7 @@ export async function initiateWalletDepositViaMpesa(
 
     // Update M-Pesa transaction with STK response
     mpesaTransaction.checkout_request_id = messageRef;
+    mpesaTransaction.account_reference = messageRef;
     mpesaTransaction.merchant_request_id = stkResponse.MessageReference || messageRef;
     mpesaTransaction.stk_push_response = stkResponse;
     await mpesaTransaction.save();

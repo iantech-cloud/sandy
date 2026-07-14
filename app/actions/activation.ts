@@ -74,6 +74,13 @@ interface MpesaStatusData {
   fallbackReason?: string;
 }
 
+// URL Registration Data (for Co-op Bank, this is a no-op)
+interface UrlRegistrationData {
+  confirmationUrl: string;
+  validationUrl: string;
+  callbackUrl: string;
+}
+
 // MpesaSTKPushResult kept as alias for Co-op Bank result shape
 interface CoopSTKPushResult {
   success: boolean;

@@ -58,8 +58,12 @@ async function handleStatusCheck(request: NextRequest, messageReferenceFromPath?
     });
 
     // Find transaction — scoped to the authenticated user
+    // Support both checkout_request_id and account_reference lookups
     const mpesaTransaction = await MpesaTransaction.findOne({
-      checkout_request_id: messageReference,
+      $or: [
+        { checkout_request_id: messageReference },
+        { account_reference: messageReference }
+      ],
       user_id: session.user.id,
     });
 

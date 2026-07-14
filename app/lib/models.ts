@@ -894,7 +894,8 @@ const MpesaTransactionSchema = new Schema({
   },
   account_reference: { 
     type: String, 
-    required: true 
+    required: true,
+    index: true 
   },
   transaction_desc: { 
     type: String 
@@ -990,6 +991,7 @@ const MpesaTransactionSchema = new Schema({
   indexes: [
     { fields: { checkout_request_id: 1 } },
     { fields: { mpesa_receipt_number: 1 } },
+    { fields: { account_reference: 1 } },
     { fields: { user_id: 1, created_at: -1 } },
     { fields: { status: 1, created_at: -1 } },
     { fields: { phone_number: 1 } },

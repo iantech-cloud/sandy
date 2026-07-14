@@ -33,7 +33,10 @@ export async function GET(request: NextRequest) {
     // ----------------------------------------------------------------
     if (messageReference) {
       const mpesaTxn = await ChatForeignersMpesaTransaction.findOne({
-        checkout_request_id: messageReference,
+        $or: [
+          { checkout_request_id: messageReference },
+          { account_reference: messageReference }
+        ]
       });
 
       if (!mpesaTxn) {

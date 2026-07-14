@@ -827,7 +827,7 @@ export async function sendPaymentConfirmationInvoice(
     amount: number;
     paymentDate: string;
     transactionId: string;
-    paymentMethod: 'mpesa' | 'admin' | 'manual';
+    paymentMethod: 'mpesa' | 'admin' | 'manual' | 'coop_bank';
     adminNotes?: string;
   }
 ) {
@@ -848,7 +848,8 @@ export async function sendPaymentConfirmationInvoice(
     const paymentMethodText = {
       mpesa: 'M-Pesa',
       admin: 'Admin Activation',
-      manual: 'Manual Payment'
+      manual: 'Manual Payment',
+      coop_bank: 'Co-op Bank STK'
     }[invoiceData.paymentMethod];
 
     const result = await getResendClient().emails.send({
