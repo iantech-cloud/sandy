@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { useCoopBankPayment } from '@/app/hooks/useCoopBankPayment';
 import { Button } from '@/app/ui/button';
-import { Loader2, AlertCircle } from 'lucide-react';
-import { PAYMENT_ERROR } from '@/app/lib/payment-error';
+import { Loader2 } from 'lucide-react';
 
 interface CoopBankPaymentButtonProps {
   amount: number;
@@ -27,30 +26,61 @@ export function CoopBankPaymentButton({
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handlePayment = async () => {
-    // Temporarily block all payments
-    setLocalError(PAYMENT_ERROR.title);
-    onError?.(PAYMENT_ERROR.title);
-    return;
+    setLocalError(null);
+
+    // Validate inputs
+    if (!amount || amount <= 0) {
+      const errMsg = 'Amount must be greater than 0';
+      setLocalError(errMsg);
+      onError?.(errMsg);
+      return;
+    }
+
+    if (!phoneNumber || !/^254\d{9}$/.test(phoneNumber)) {
+      const errMsg = 'Phone number must be in format 254XXXXXXXXX';
+      setLocalError(errMsg);
+      onError?.(errMsg);
+      return;
+    }
+
+    try {
+      const result = await initiatePayment({
+        amount: Math.round(amount),
+        phoneNumber,
+        narration,
+      });
+
+      if (result.success && result.messageReference) {
+        onSuccess?.(result.messageReference);
+      } else {
+        const errMsg = result.error || 'Payment initiation failed';
+        setLocalError(errMsg);
+        onError?.(errMsg);
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'An error occurred';
+      setLocalError(errMsg);
+      onError?.(errMsg);
+    }
   };
 
   const displayError = error || localError;
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="bg-red-50 border-2 border-red-500 rounded-lg p-4 flex items-start gap-3">
-        <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" />
-        <div className="flex-1">
-          <h4 className="font-bold text-red-700 text-base">{PAYMENT_ERROR.title}</h4>
-          <p className="text-red-600 text-sm mt-1">{PAYMENT_ERROR.message}</p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-2">
       <Button
         onClick={handlePayment}
-        disabled={true}
-        className={`${className} bg-gray-300 text-gray-500 cursor-not-allowed hover:bg-gray-300`}
+        disabled={loading}
+        className={className}
       >
-        Pay KES {amount.toLocaleString()}
+        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        {loading ? 'Processing...' : `Pay KES ${amount.toLocaleString()}`}
       </Button>
+      {displayError && (
+        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+          {displayError}
+        </div>
+      )}
     </div>
   );
 }
