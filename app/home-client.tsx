@@ -3,33 +3,7 @@
 import React from 'react';
 import Link from 'next/link'; 
 import Image from 'next/image';
-import { ThemeToggle } from './components/ThemeToggle';
-
-const NotificationBanner: React.FC = () => {
-  const [isVisible, setIsVisible] = React.useState(true);
-
-  if (!isVisible) return null;
-
-  return (
-    <div className="fixed bottom-4 right-4 z-40 animate-in fade-in slide-in-from-bottom-5 duration-500">
-      <div className="bg-indigo-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between gap-4 max-w-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-          <span className="font-semibold text-sm">Under new management</span>
-        </div>
-        <button
-          onClick={() => setIsVisible(false)}
-          className="text-white hover:text-indigo-100 transition-colors flex-shrink-0"
-          aria-label="Dismiss notification"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-}; 
+import { ThemeToggle } from './components/ThemeToggle'; 
 
 interface ServiceFeature {
   icon: React.ReactNode;
@@ -425,7 +399,6 @@ export default function Page() {
       </main>
 
       <Footer />
-      <NotificationBanner />
     </div>
   );
 }
