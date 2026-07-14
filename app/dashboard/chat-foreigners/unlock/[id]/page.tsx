@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { checkBotUnlockPaymentStatus } from '@/app/actions/chat-foreigners/payments';
 import { getBotUnlockAmount, centsToKes } from '@/app/lib/utils/dynamic-payment';
+import { PaymentMethodSelector } from '@/app/components/PaymentMethodSelector';
 
 interface Person {
   id: string;
@@ -550,7 +551,7 @@ export default function UnlockPage() {
                 <p className="text-xs text-zinc-400 text-center">No response received. Check your M-Pesa history — if debited, contact support.</p>
               </div>
             ) : (
-              <form onSubmit={handleUnlock} className="space-y-3">
+              <div className="space-y-3">
                 {error && (
                   <div className="bg-red-950/50 border border-red-900/50 text-red-400 px-3 py-2.5 rounded-xl text-xs">
                     {error}
@@ -567,24 +568,24 @@ export default function UnlockPage() {
                     autoComplete="tel"
                   />
                 </div>
-                <button
-                  type="submit"
-                  disabled={status === 'pending'}
-                  className="w-full bg-[#00c97a] hover:bg-[#00b06a] text-white font-bold h-12 rounded-full transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {status === 'pending' ? (
-                    <>
-                      <Loader2 size={17} className="animate-spin" />
-                      Sending prompt...
-                    </>
-                  ) : (
-                    <>
-                      <Lock size={16} />
-                      Pay KES {unlockPrice} via M-Pesa
-                    </>
-                  )}
-                </button>
-              </form>
+
+                {phoneNumber && (
+                  <PaymentMethodSelector
+                    amount={unlockPrice}
+                    customAmountCents={unlockPriceCents}
+                    reference={`UNLOCK_${personId}_${Date.now()}`}
+                    phoneNumber={phoneNumber}
+                    narration={`Unlock: ${person?.name || 'Personality'}`}
+                    onSuccess={() => {
+                      setStatus('pending');
+                      handleUnlock();
+                    }}
+                    onError={(error) => {
+                      setError(`Payment failed: ${error.message || 'Please try again'}`);
+                    }}
+                  />
+                )}
+              </div>
             )}
           </div>
         )}
