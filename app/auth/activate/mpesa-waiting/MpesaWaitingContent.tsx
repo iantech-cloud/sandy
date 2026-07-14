@@ -25,6 +25,16 @@ export default function MpesaWaitingContent() {
   const amount = searchParams.get('amount');
   const phoneNumber = searchParams.get('phoneNumber');
   const activationPaymentId = searchParams.get('activationPaymentId');
+
+  // Validate parameters on mount
+  useEffect(() => {
+    console.log('[v0] Waiting page params:', {
+      messageReference,
+      amount,
+      phoneNumber,
+      activationPaymentId,
+    });
+  }, [messageReference, amount, phoneNumber, activationPaymentId]);
   
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({ 
     status: 'processing' 
@@ -241,6 +251,18 @@ export default function MpesaWaitingContent() {
       router.push('/auth/activate');
     }
   }, [messageReference, router]);
+
+  // Auto-redirect to dashboard on successful activation
+  useEffect(() => {
+    if (paymentStatus.status === 'success' && !isActivatingAccount) {
+      // Give user a brief moment to see the success message before redirecting
+      const redirectTimer = setTimeout(() => {
+        console.log('[v0] Auto-redirecting to dashboard after successful activation');
+        router.push('/dashboard');
+      }, 2000);
+      return () => clearTimeout(redirectTimer);
+    }
+  }, [paymentStatus.status, isActivatingAccount, router]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
