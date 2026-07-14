@@ -50,7 +50,7 @@ export default function WalletPage() {
   const { user } = useDashboard();
   const router = useRouter();
 
-  const [currentBalance, setCurrentBalance] = useState(0);
+  const [currentBalance, setCurrentBalance] = useState(user?.balance || 0);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -58,9 +58,6 @@ export default function WalletPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [depositPhoneNumber, setDepositPhoneNumber] = useState('');
   const [depositAmountCents, setDepositAmountCents] = useState(3000); // 30 KES default
-  const [message, setMessage] = useState<string | null>(null);
-  const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info');
-  const [currentBalance, setCurrentBalance] = useState(user?.balance || 0);
 
   if (!user) {
     return (
