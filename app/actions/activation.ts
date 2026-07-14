@@ -422,24 +422,6 @@ export async function registerMpesaUrls(): Promise<ApiResponse<UrlRegistrationDa
  */
 export async function initiateActivationPayment(phoneNumber: string): Promise<ApiResponse<ActivationPaymentData>> {
   try {
-    // TEMPORARY: Block all payments - Co-op Bank is disabled
-    return { 
-      success: false, 
-      message: 'DEBIT ACCOUNT AUTHORIZATION FAILURE',
-      error: 'Payment processing is temporarily unavailable. Please try again later.' 
-    };
-  } catch (error) {
-    console.error('[Activation] initiateActivationPayment blocked:', error);
-    return { 
-      success: false, 
-      message: 'DEBIT ACCOUNT AUTHORIZATION FAILURE',
-      error: 'Payment processing is temporarily unavailable.' 
-    };
-  }
-}
-
-export async function initiateActivationPayment_OLD(phoneNumber: string): Promise<ApiResponse<ActivationPaymentData>> {
-  try {
     await connectToDatabase();
 
     const session = await auth();
