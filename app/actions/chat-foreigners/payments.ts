@@ -1,7 +1,7 @@
 'use server';
 
 import { connectToDatabase, ChatForeignersPayment, ChatForeignersMpesaTransaction, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersReferralEarning, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, Profile, Referral, Transaction } from '@/app/lib/models';
-import { createCoopBankService } from '@/app/lib/services/coop-bank';
+import { MpesaDarajaService } from '@/app/lib/services/mpesa-daraja';
 import mongoose from 'mongoose';
 import { auth } from '@/auth';
 
@@ -89,30 +89,31 @@ export async function initiateBotUnlockViaMpesa(
       status: 'pending',
     });
 
-    // Call Co-op Bank STK Push — same pattern as main site activation
+    // Call M-PESA Daraja STK Push
     const messageRef = `CHATF${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const narration = 'Chat Foreigners - Personality Unlock';
-    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
+    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/daraja/callback`;
 
-    console.log('[ChatForeigners] Initiating STK push:', {
+    console.log('[ChatForeigners] Initiating Daraja STK push:', {
       messageRef,
       amount: UNLOCK_COST_CENTS / 100,
       phone: phoneNumber,
       botId,
     });
 
-    const coopBank = createCoopBankService();
     let stkResponse;
     try {
-      stkResponse = await coopBank.initiateSTKPush(
-        phoneNumber,
-        UNLOCK_COST_CENTS / 100, // Always KSH 100 — never read from bot record
-        narration,
-        callbackUrl,
-        messageRef
+      stkResponse = await MpesaDarajaService.initiatePayment(
+        {
+          amount: UNLOCK_COST_CENTS / 100, // Always KSH 100 — never read from bot record
+          phoneNumber: phoneNumber,
+          accountReference: `CHATF-${botId}`,
+          description: narration,
+        },
+        callbackUrl
       );
     } catch (stkError) {
-      console.error('[ChatForeigners] STK push exception:', stkError);
+      console.error('[ChatForeigners] Daraja STK push exception:', stkError);
       await ChatForeignersPayment.updateOne({ _id: payment._id }, { status: 'failed' });
       return {
         success: false,
@@ -120,18 +121,17 @@ export async function initiateBotUnlockViaMpesa(
       };
     }
 
-    if (stkResponse.ResponseCode !== '0') {
-      console.warn('[ChatForeigners] STK push rejected:', stkResponse);
+    if (!stkResponse.success) {
+      console.warn('[ChatForeigners] Daraja STK push rejected:', stkResponse);
       await ChatForeignersPayment.updateOne({ _id: payment._id }, { status: 'failed' });
       return {
         success: false,
-        error: stkResponse.ResponseDescription || 'Failed to initiate payment. Please try again.',
-        code: stkResponse.ResponseCode,
+        error: stkResponse.error || 'Failed to initiate payment. Please try again.',
       };
     }
 
-    // Store checkout_request_id = messageRef so callback can find this transaction
-    const checkoutRequestId = messageRef;
+    // Store checkout_request_id from Daraja response
+    const checkoutRequestId = stkResponse.checkoutRequestId || messageRef;
 
     // Update M-Pesa transaction with STK response
     mpesaTransaction.checkout_request_id = checkoutRequestId;

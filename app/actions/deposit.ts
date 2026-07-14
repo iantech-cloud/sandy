@@ -5,7 +5,7 @@ import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
 import { connectToDatabase, Profile, MpesaTransaction, Transaction } from '../lib/models';
 import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '../lib/utils/phoneFormatter';
-import { createCoopBankService, CoopBankService } from '../lib/services/coop-bank';
+import { MpesaDarajaService } from '../lib/services/mpesa-daraja';
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -324,29 +324,29 @@ export async function processMpesaDeposit(depositData: {
             },
         });
 
-        // Now call the Co-op Bank STK Push API
-        const coopBank = createCoopBankService();
-
-        const stkResponse = await coopBank.initiateSTKPush(
-            formattedPhone,
-            depositData.amount,
-            `Wallet deposit - ${currentUser.username}`,
-            callbackUrl,
-            messageReference
+        // Now call the M-PESA Daraja STK Push API
+        const stkResponse = await MpesaDarajaService.initiatePayment(
+            {
+                amount: depositData.amount,
+                phoneNumber: formattedPhone,
+                accountReference: `DEPOSIT-${currentUser._id.toString().slice(-8).toUpperCase()}`,
+                description: `Wallet deposit - ${currentUser.username}`,
+            },
+            callbackUrl
         );
 
-        // Non-'0' ResponseCode means the bank rejected the initiation
-        if (stkResponse.ResponseCode !== '0') {
+        // Daraja returns success: false on rejection
+        if (!stkResponse.success) {
             // Mark the pre-created records as failed
             await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
                 status: 'failed',
-                result_desc: stkResponse.ResponseDescription || 'STK Push rejected by bank',
+                result_desc: stkResponse.error || 'STK Push rejected by Daraja',
             });
             await (Transaction as any).findByIdAndUpdate(transaction._id, { status: 'failed' });
 
             return {
                 success: false,
-                message: stkResponse.ResponseDescription || 'Failed to initiate payment. Please try again.',
+                message: stkResponse.error || 'Failed to initiate payment. Please try again.',
             };
         }
 

@@ -1,11 +1,11 @@
-// app/actions/activation.ts - CO-OP BANK STK PUSH (no Daraja/M-Pesa)
+// app/actions/activation.ts - M-PESA DARAJA STK PUSH
 'use server';
 
 import { auth } from '@/auth'; // NextAuth v5 auth import
 import { revalidatePath } from 'next/cache';
 import { connectToDatabase } from '@/app/lib/mongoose';
 import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
-import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank';
+import { MpesaDarajaService } from '@/app/lib/services/mpesa-daraja';
 import { 
   Profile, 
   MpesaTransaction, 
@@ -264,19 +264,19 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
       };
     }
 
-    // Query Co-op Bank Enquiry API
+    // Query M-PESA Daraja Status API
     try {
-      const coopBank = createCoopBankService();
-      const statusResponse = await coopBank.getTransactionStatus(messageReference);
-      
-      // Use centralized mapping from CoopBankService (single source of truth)
-      const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+      const statusResponse = await MpesaDarajaService.queryTransactionStatus(messageReference);
 
-      console.log('[Activation] Status check:', {
+      let mappedStatus = 'pending';
+      if (statusResponse.success && statusResponse.data) {
+        mappedStatus = statusResponse.data.status || 'pending';
+      }
+
+      console.log('[Activation] Status check (Daraja):', {
         messageReference,
-        responseCode: statusResponse.ResponseCode,
         mappedStatus,
-        description: statusResponse.ResponseDescription,
+        resultDesc: statusResponse.data?.resultDesc,
       });
 
       // Persist status update - ensure result_code is valid number
@@ -540,32 +540,33 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       },
     });
 
-    // Initiate Co-op Bank STK Push
-    const coopBank = createCoopBankService();
+    // Initiate M-PESA Daraja STK Push
     let stkResponse;
     try {
-      console.log('[Activation] Calling initiateSTKPush...');
-      stkResponse = await coopBank.initiateSTKPush(
-        mpesaPhone,
-        activationAmount / 100, // KES
-        `Activation fee - ${userProfile.username}`,
-        callbackUrl,
-        messageReference
+      console.log('[Activation] Calling M-PESA Daraja STK Push...');
+      stkResponse = await MpesaDarajaService.initiatePayment(
+        {
+          amount: activationAmount / 100, // KES
+          phoneNumber: mpesaPhone,
+          accountReference: `ACTIVATION-${userProfile._id}`,
+          description: `Activation fee - ${userProfile.username}`,
+        },
+        callbackUrl
       );
-      console.log('[Activation] STK Push response received:', stkResponse);
+      console.log('[Activation] Daraja STK Push response:', stkResponse);
     } catch (stkError) {
-      console.error('[Activation] STK Push initiation failed:', stkError);
+      console.error('[Activation] Daraja STK Push failed:', stkError);
       // Mark records as failed
       await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: 'failed',
-        result_desc: stkError instanceof Error ? stkError.message : 'STK Push request failed',
+        result_desc: stkError instanceof Error ? stkError.message : 'Daraja STK Push failed',
         failed_at: new Date(),
       });
       activationPayment.status = 'failed';
-      activationPayment.error_message = stkError instanceof Error ? stkError.message : 'STK Push request failed';
+      activationPayment.error_message = stkError instanceof Error ? stkError.message : 'Daraja STK Push failed';
       await activationPayment.save();
       activationLog.status = 'failed';
-      activationLog.error_message = stkError instanceof Error ? stkError.message : 'STK Push request failed';
+      activationLog.error_message = stkError instanceof Error ? stkError.message : 'Daraja STK Push failed';
       await activationLog.save();
 
       return {
@@ -574,24 +575,24 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       };
     }
 
-    if (!stkResponse || stkResponse.ResponseCode !== '0') {
-      console.error('[Activation] STK Push rejected:', stkResponse?.ResponseDescription);
+    if (!stkResponse || !stkResponse.success) {
+      console.error('[Activation] Daraja STK Push rejected:', stkResponse?.error);
       // Mark records as failed
       await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: 'failed',
-        result_desc: stkResponse?.ResponseDescription || 'STK Push rejected by bank',
+        result_desc: stkResponse?.error || 'STK Push rejected by Daraja',
         failed_at: new Date(),
       });
       activationPayment.status = 'failed';
-      activationPayment.error_message = stkResponse?.ResponseDescription || 'STK Push rejected';
+      activationPayment.error_message = stkResponse?.error || 'STK Push rejected';
       await activationPayment.save();
       activationLog.status = 'failed';
-      activationLog.error_message = stkResponse?.ResponseDescription;
+      activationLog.error_message = stkResponse?.error;
       await activationLog.save();
 
       return {
         success: false,
-        message: stkResponse?.ResponseDescription || 'Failed to initiate payment. Please try again.',
+        message: stkResponse?.error || 'Failed to initiate payment. Please try again.',
       };
     }
 

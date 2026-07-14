@@ -25,19 +25,47 @@ export async function getLLMResponse(
   _model?: string
 ): Promise<string> {
   if (!nvidiaClient) {
-    throw new Error('NVIDIA_API_KEY is not configured. Please set it in the environment variables.');
+    console.warn('[NVIDIA] API key not configured - returning fallback response');
+    return 'I apologize, but the AI service is currently unavailable. Please try again later or contact support.';
   }
 
-  const completion = await nvidiaClient.chat.completions.create({
-    model: NVIDIA_MODEL,
-    messages,
-    temperature: 0.7,
-    top_p: 0.9,
-    max_tokens: 1024,
-    stream: false,
-  });
+  try {
+    const completion = await nvidiaClient.chat.completions.create({
+      model: NVIDIA_MODEL,
+      messages,
+      temperature: 0.7,
+      top_p: 0.9,
+      max_tokens: 1024,
+      stream: false,
+    });
 
-  return completion.choices[0]?.message?.content ?? 'Unable to generate response';
+    return completion.choices[0]?.message?.content ?? 'Unable to generate response';
+  } catch (error: any) {
+    console.error('[NVIDIA] API error:', {
+      status: error.status,
+      message: error.message,
+      type: error.type,
+    });
+    
+    // Handle 403 Forbidden (free preview limit reached or invalid key)
+    if (error.status === 403) {
+      return 'The AI service is currently at capacity. Please try again in a few moments.';
+    }
+    
+    // Handle 401 Unauthorized (invalid API key)
+    if (error.status === 401) {
+      return 'The AI service configuration is invalid. Please contact support.';
+    }
+    
+    // Handle rate limiting
+    if (error.status === 429) {
+      return 'Too many requests. Please wait a moment and try again.';
+    }
+    
+    // Generic fallback for other errors
+    console.error('[NVIDIA] Unhandled API error:', error);
+    return 'The AI service encountered an error. Please try again later.';
+  }
 }
 
 /**
