@@ -27,6 +27,9 @@ import { createCompanyRevenueTransaction } from './company';
 // Import notification function
 import { createReferralActivationNotification } from './notifications';
 
+// Import ChatForeignersProfile for activation
+import { ChatForeignersProfile } from '@/app/lib/models';
+
 // =============================================================================
 // TYPE DEFINITIONS
 // =============================================================================
@@ -492,7 +495,8 @@ export async function initiateActivationPayment(phoneNumber: string, customAmoun
     await activationLog.save();
 
     // Unique message reference (idempotency key)
-    const messageReference = `ACT${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // ✅ Use ACT_ prefix for activation payments
+    const messageReference = `ACT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
     // Create MpesaTransaction BEFORE calling the API so the callback always finds it
@@ -967,7 +971,39 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     });
 
     // =============================================================================
-    // STEP 5.5: Send Referral Activation Notification to Referrer
+    // STEP 5.5: Create Chat Foreigners Profile for User
+    // =============================================================================
+    // Create or update chat profile so user can immediately access chat features
+    try {
+      const existingChatProfile = await (ChatForeignersProfile as any).findOne({
+        user_id: userProfile._id
+      });
+
+      if (!existingChatProfile) {
+        const chatProfile = new (ChatForeignersProfile as any)({
+          user_id: userProfile._id,
+          username: userProfile.username,
+          balance_cents: 0,
+          total_spent_cents: 0,
+          is_active: true,
+          created_at: new Date(),
+          metadata: {
+            activated_from: 'account_activation',
+            activation_payment_id: activationPayment._id.toString(),
+          }
+        });
+        await chatProfile.save();
+        console.log(`[v0] Chat foreigners profile created for user: ${userProfile.username}`);
+      } else {
+        console.log(`[v0] Chat foreigners profile already exists for user: ${userProfile.username}`);
+      }
+    } catch (chatError) {
+      console.error('[v0] Error creating chat foreigners profile:', chatError);
+      // Don't fail activation if chat profile creation fails
+    }
+
+    // =============================================================================
+    // STEP 5.6: Send Referral Activation Notification to Referrer
     // =============================================================================
     if (userProfile.referred_by) {
       try {
@@ -988,9 +1024,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     }
 
     // =============================================================================
-    // STEP 6: Update Activation Payment Record
-    // =============================================================================
-    // STEP 6: Update Activation Payment Record
+    // STEP 7: Update Activation Payment Record
     // =============================================================================
     activationPayment.processed_by_system = true;
     activationPayment.processed_at = new Date();
@@ -1004,7 +1038,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     await activationPayment.save();
 
     // =============================================================================
-    // STEP 7: Send Payment Confirmation Invoice
+    // STEP 8: Send Payment Confirmation Invoice
     // =============================================================================
     await sendActivationConfirmationInvoice(
       userProfile,
@@ -1013,7 +1047,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     );
 
     // =============================================================================
-    // STEP 8: Log Successful Activation
+    // STEP 9: Log Successful Activation
     // =============================================================================
     const activationLog = new (ActivationLog as any)({
       user_id: userProfile._id,
@@ -1031,7 +1065,7 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     await activationLog.save();
 
     // =============================================================================
-    // STEP 9: Create Admin Audit Log
+    // STEP 10: Create Admin Audit Log
     // =============================================================================
     const auditLog = new (AdminAuditLog as any)({
       actor_id: userProfile._id,

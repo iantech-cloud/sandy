@@ -171,21 +171,24 @@ MpesaTransaction
 ├─ user_id
 ├─ amount_cents
 ├─ phone_number
-├─ account_reference (STK-{TYPE}-{REF})
+├─ account_reference (✅ FIXED: now uses prefix directly - ACT_, CHAT_, SPINDY_)
 ├─ transaction_desc
 ├─ status: "initiated" → "completed" (on callback)
 ├─ source: "activation" | "wallet" | "spin_wallet"
 ├─ is_activation_payment
 ├─ metadata
 │  ├─ deposit_type
-│  ├─ message_reference (idempotency key)
+│  ├─ message_reference (idempotency key: ACT_, CHAT_, SPINDY_)
 │  ├─ payment_method: "coop_bank_stk_push"
 │  └─ revenue_target: "user" | "company"
 └─ created_at
 ```
 
 ### Idempotency Guarantee
-- **Message Reference Format**: `SANDY{timestamp}{random}`
+- **Message Reference Format** (✅ FIXED):
+  - Activation: `ACT_{timestamp}{random}`
+  - Chat Wallet Deposits: `CHAT_{timestamp}{random}`
+  - Spin Wallet Deposits: `SPINDY_{timestamp}{random}`
 - **Stored BEFORE API call**: Prevents duplicate processing
 - **Callback uses MessageReference to lookup**: Always finds same transaction
 - **Result**: Safe to retry without double-charging

@@ -246,7 +246,7 @@ export class CoopBankService {
 
     const msgRef =
       messageReference ||
-      `SANDY${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+      `CHAT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
     const formattedPhone = CoopBankService.normalisePhone(phoneNumber);
 
