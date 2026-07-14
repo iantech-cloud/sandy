@@ -377,6 +377,10 @@ export class MpesaDarajaService {
    * Sends money to customer's M-PESA wallet
    * Used for: Salaries, Promotions, Business payments, Wallet credits
    * 
+   * NOTE: B2C requires security credentials (encrypted password) to be configured
+   * This is separate from STK Push which uses only Consumer Key/Secret
+   * Only implement if you have B2C credentials from Daraja portal
+   * 
    * Command IDs:
    * - SalaryPayment: Regular salary disbursement
    * - BusinessPayment: Payment to registered customers
@@ -387,30 +391,37 @@ export class MpesaDarajaService {
     amount: number,
     commandId: 'SalaryPayment' | 'BusinessPayment' | 'PromotionPayment' = 'BusinessPayment',
     remarks: string = 'HustleHub Africa Payment',
-    callbackUrl: string
+    callbackUrl: string,
+    initiatorName?: string,
+    initiatorPassword?: string
   ): Promise<DarajaB2CPaymentResponse | { success: false; error: string }> {
     try {
       if (!this.config.businessShortCode) {
         throw new Error('Business short code not configured');
       }
 
+      // B2C requires security credentials - allow passing them explicitly
+      const credentialName = initiatorName || process.env.DARAJA_INITIATOR_NAME;
+      const credentialPassword = initiatorPassword || process.env.DARAJA_INITIATOR_PASSWORD;
+
+      if (!credentialPassword) {
+        return {
+          success: false,
+          error: 'B2C payment requires initiator credentials. Please configure DARAJA_INITIATOR_PASSWORD or pass credentials explicitly.',
+        };
+      }
+
       const accessToken = await this.getAccessToken();
       const normalizedPhone = validatePhoneNumber(phoneNumber);
       const conversationId = generateConversationId();
-      const initiatorName = process.env.DARAJA_INITIATOR_NAME || 'api_operator';
-      const initiatorPassword = process.env.DARAJA_INITIATOR_PASSWORD || '';
-
-      if (!initiatorPassword) {
-        throw new Error('Initiator password not configured for B2C');
-      }
 
       // Encrypt security credentials
       const publicKey = getMpesaPublicKey(this.config.baseUrl?.includes('sandbox') ? 'sandbox' : 'production');
-      const securityCredential = encryptSecurityCredential(initiatorPassword, publicKey);
+      const securityCredential = encryptSecurityCredential(credentialPassword, publicKey);
 
       const b2cRequest: DarajaB2CPaymentRequest = {
         OriginatorConversationID: conversationId,
-        InitiatorName: initiatorName,
+        InitiatorName: credentialName || 'api_operator',
         SecurityCredential: securityCredential,
         CommandID: commandId,
         Amount: Math.ceil(amount),
@@ -490,6 +501,10 @@ export class MpesaDarajaService {
    * B2B Payment - Business to Business Transfer
    * Used for: Inter-business payments, payroll to business accounts, fund transfers
    * 
+   * NOTE: B2B requires security credentials (encrypted password) to be configured
+   * This is separate from STK Push which uses only Consumer Key/Secret
+   * Only implement if you have B2B credentials from Daraja portal
+   * 
    * Command IDs:
    * - BusinessPayBill: Pay bill to another business
    * - MerchantToMerchantTransfer: Transfer between merchants
@@ -502,7 +517,9 @@ export class MpesaDarajaService {
     accountReference: string,
     remarks: string = 'B2B Transfer',
     commandId: 'BusinessPayBill' | 'MerchantToMerchantTransfer' | 'DisburseFundsToBusiness' = 'BusinessPayBill',
-    callbackUrl: string
+    callbackUrl: string,
+    initiatorName?: string,
+    initiatorPassword?: string
   ): Promise<DarajaB2BPaymentResponse | { success: false; error: string }> {
     return this._executeB2BPayment(
       amount,
@@ -511,7 +528,9 @@ export class MpesaDarajaService {
       accountReference,
       remarks,
       commandId,
-      callbackUrl
+      callbackUrl,
+      initiatorName,
+      initiatorPassword
     );
   }
 
@@ -525,22 +544,29 @@ export class MpesaDarajaService {
     accountReference: string,
     remarks: string,
     commandId: string,
-    callbackUrl: string
+    callbackUrl: string,
+    initiatorName?: string,
+    initiatorPassword?: string
   ): Promise<DarajaB2BPaymentResponse | { success: false; error: string }> {
     try {
-      const accessToken = await this.getAccessToken();
-      const initiatorName = process.env.DARAJA_INITIATOR_NAME || 'api_operator';
-      const initiatorPassword = process.env.DARAJA_INITIATOR_PASSWORD || '';
+      // B2B requires security credentials
+      const credentialName = initiatorName || process.env.DARAJA_INITIATOR_NAME;
+      const credentialPassword = initiatorPassword || process.env.DARAJA_INITIATOR_PASSWORD;
 
-      if (!initiatorPassword) {
-        throw new Error('Initiator password not configured for B2B');
+      if (!credentialPassword) {
+        return {
+          success: false,
+          error: 'B2B payment requires initiator credentials. Please configure DARAJA_INITIATOR_PASSWORD or pass credentials explicitly.',
+        };
       }
 
+      const accessToken = await this.getAccessToken();
+
       const publicKey = getMpesaPublicKey(this.config.baseUrl?.includes('sandbox') ? 'sandbox' : 'production');
-      const securityCredential = encryptSecurityCredential(initiatorPassword, publicKey);
+      const securityCredential = encryptSecurityCredential(credentialPassword, publicKey);
 
       const b2bRequest: DarajaB2BPaymentRequest = {
-        Initiator: initiatorName,
+        Initiator: credentialName || 'api_operator',
         SecurityCredential: securityCredential,
         CommandID: commandId,
         SenderIdentifierType: '4', // Short code
@@ -579,26 +605,36 @@ export class MpesaDarajaService {
   /**
    * Account Balance Query
    * Check current M-PESA account balance
+   * 
+   * NOTE: Requires security credentials (encrypted password)
+   * Only implement if you have balance query credentials from Daraja portal
    */
   static async queryAccountBalance(
     shortCode: string,
     identifierType: '1' | '2' | '4' = '4', // 4 = Short Code
-    callbackUrl: string
+    callbackUrl: string,
+    initiatorName?: string,
+    initiatorPassword?: string
   ): Promise<DarajaBalanceResponse | { success: false; error: string }> {
     try {
-      const accessToken = await this.getAccessToken();
-      const initiatorName = process.env.DARAJA_INITIATOR_NAME || 'api_operator';
-      const initiatorPassword = process.env.DARAJA_INITIATOR_PASSWORD || '';
+      // Balance query requires security credentials
+      const credentialName = initiatorName || process.env.DARAJA_INITIATOR_NAME;
+      const credentialPassword = initiatorPassword || process.env.DARAJA_INITIATOR_PASSWORD;
 
-      if (!initiatorPassword) {
-        throw new Error('Initiator password not configured');
+      if (!credentialPassword) {
+        return {
+          success: false,
+          error: 'Account balance query requires initiator credentials. Please configure DARAJA_INITIATOR_PASSWORD or pass credentials explicitly.',
+        };
       }
 
+      const accessToken = await this.getAccessToken();
+
       const publicKey = getMpesaPublicKey(this.config.baseUrl?.includes('sandbox') ? 'sandbox' : 'production');
-      const securityCredential = encryptSecurityCredential(initiatorPassword, publicKey);
+      const securityCredential = encryptSecurityCredential(credentialPassword, publicKey);
 
       const balanceRequest: DarajaBalanceRequest = {
-        Initiator: initiatorName,
+        Initiator: credentialName || 'api_operator',
         SecurityCredential: securityCredential,
         CommandID: 'AccountBalance',
         PartyA: shortCode,
@@ -633,28 +669,38 @@ export class MpesaDarajaService {
   /**
    * Transaction Reversal
    * Reverse a previously completed transaction
+   * 
+   * NOTE: Requires security credentials (encrypted password)
+   * Only implement if you have reversal credentials from Daraja portal
    */
   static async reverseTransaction(
     transactionId: string,
     amount: number,
     receiverParty: string,
     remarks: string = 'Transaction reversal',
-    callbackUrl: string
+    callbackUrl: string,
+    initiatorName?: string,
+    initiatorPassword?: string
   ): Promise<DarajaReversalResponse | { success: false; error: string }> {
     try {
-      const accessToken = await this.getAccessToken();
-      const initiatorName = process.env.DARAJA_INITIATOR_NAME || 'api_operator';
-      const initiatorPassword = process.env.DARAJA_INITIATOR_PASSWORD || '';
+      // Reversal requires security credentials
+      const credentialName = initiatorName || process.env.DARAJA_INITIATOR_NAME;
+      const credentialPassword = initiatorPassword || process.env.DARAJA_INITIATOR_PASSWORD;
 
-      if (!initiatorPassword) {
-        throw new Error('Initiator password not configured');
+      if (!credentialPassword) {
+        return {
+          success: false,
+          error: 'Transaction reversal requires initiator credentials. Please configure DARAJA_INITIATOR_PASSWORD or pass credentials explicitly.',
+        };
       }
 
+      const accessToken = await this.getAccessToken();
+
       const publicKey = getMpesaPublicKey(this.config.baseUrl?.includes('sandbox') ? 'sandbox' : 'production');
-      const securityCredential = encryptSecurityCredential(initiatorPassword, publicKey);
+      const securityCredential = encryptSecurityCredential(credentialPassword, publicKey);
 
       const reversalRequest: DarajaReversalRequest = {
-        Initiator: initiatorName,
+        Initiator: credentialName || 'api_operator',
         SecurityCredential: securityCredential,
         CommandID: 'TransactionReversal',
         TransactionID: transactionId,
