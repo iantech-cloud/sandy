@@ -134,19 +134,78 @@ export async function POST(request: NextRequest) {
         responseCode: stkResponse.ResponseCode,
         description: stkResponse.ResponseDescription,
       });
+
+      // Map specific error codes to helpful messages
+      let userFriendlyError = stkResponse.ResponseDescription || 'STK Push rejected by bank';
+      let diagnosticInfo: { [key: string]: string } = {};
+
+      if (stkResponse.ResponseCode === '-8') {
+        userFriendlyError = 'Account authorization failed. Please contact support - this is a merchant account configuration issue.';
+        diagnosticInfo = {
+          issue: 'DEBIT_ACCOUNT_AUTHORIZATION_FAILURE',
+          code: '-8',
+          cause: 'The Co-op Bank merchant account (OperatorCode or BasicAuth credentials) does not have STK Push or debit authorization enabled.',
+          action: 'Contact Co-op Bank merchant support to enable STK Push functionality on the account.',
+          bankMessage: stkResponse.ResponseDescription || 'No description',
+        };
+      } else if (stkResponse.ResponseCode === '-1') {
+        userFriendlyError = 'Payment system is temporarily unavailable. Please try again in a moment.';
+        diagnosticInfo = {
+          issue: 'SYSTEM_ERROR',
+          code: '-1',
+          cause: 'Co-op Bank system error',
+          action: 'Retry the payment',
+          bankMessage: stkResponse.ResponseDescription || 'No description',
+        };
+      } else if (stkResponse.ResponseCode === '-2') {
+        userFriendlyError = 'Invalid request parameters. Please try again or contact support.';
+        diagnosticInfo = {
+          issue: 'INVALID_PARAMETERS',
+          code: '-2',
+          cause: 'Request parameters do not match Co-op Bank API requirements',
+          action: 'Verify phone number, amount, and account configuration',
+          bankMessage: stkResponse.ResponseDescription || 'No description',
+        };
+      } else if (stkResponse.ResponseCode === '-3') {
+        userFriendlyError = 'Invalid amount. Ensure the amount is between KES 1 and KES 999,999.';
+        diagnosticInfo = {
+          issue: 'INVALID_AMOUNT',
+          code: '-3',
+          cause: 'Amount is out of acceptable range',
+          action: 'Check that amount is between 1 and 999,999 KES',
+          bankMessage: stkResponse.ResponseDescription || 'No description',
+        };
+      }
+
+      // Log diagnostic info server-side for troubleshooting
+      console.error('[API] STK Push Bank Error Diagnostics:', {
+        ...diagnosticInfo,
+        merchantOperatorCode: process.env.COOP_BANK_OPERATOR_CODE,
+        basicAuthConfigured: !!process.env.COOP_BANK_BASIC_AUTH,
+        phoneNumber: formattedPhone,
+        amount,
+        narration,
+      });
+
       // Mark the pre-created record as failed (non-blocking background update)
       (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: 'failed',
         result_code: parseInt(stkResponse.ResponseCode || '1', 10) || 1,
         result_desc: stkResponse.ResponseDescription || 'STK Push rejected by bank',
         failed_at: new Date(),
+        metadata: {
+          bankErrorCode: stkResponse.ResponseCode,
+          bankErrorDescription: stkResponse.ResponseDescription,
+          diagnosticInfo,
+        },
       }).catch((err: any) => console.error('[API] Failed to update transaction status:', err));
-      
+
       return NextResponse.json(
         {
           success: false,
-          error: stkResponse.ResponseDescription || 'STK Push rejected by bank',
+          error: userFriendlyError,
           responseCode: stkResponse.ResponseCode,
+          diagnostic: process.env.NODE_ENV === 'development' ? diagnosticInfo : undefined,
         },
         { status: 400 }
       );
