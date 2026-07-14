@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { botId, phoneNumber, referralCode } = body;
+    const { botId, phoneNumber, referralCode, customAmountCents } = body;
 
     if (!botId || !phoneNumber) {
       return NextResponse.json(
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await initiateBotUnlockViaMpesa(botId, phoneNumber, referralCode);
+    const result = await initiateBotUnlockViaMpesa(botId, phoneNumber, referralCode, customAmountCents);
     return NextResponse.json(result);
   } catch (error) {
     console.error('[API] Payment unlock error:', error);

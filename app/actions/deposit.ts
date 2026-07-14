@@ -250,7 +250,7 @@ async function syncTransactionStatus(
 export async function processMpesaDeposit(depositData: {
     amount: number;
     phoneNumber: string;
-}): Promise<ProcessDepositResponse> {
+}, customAmountCents?: number): Promise<ProcessDepositResponse> {
     try {
         const session = await auth();
 
@@ -276,7 +276,8 @@ export async function processMpesaDeposit(depositData: {
         }
 
         const formattedPhone = validation.data!.formattedPhone;
-        const amountCents = Math.round(depositData.amount * 100);
+        // Use custom amount if provided, otherwise convert from depositData.amount
+        const amountCents = customAmountCents ?? Math.round(depositData.amount * 100);
 
         // Generate a unique message reference
         const messageReference = `SANDY${Date.now()}${Math.random()

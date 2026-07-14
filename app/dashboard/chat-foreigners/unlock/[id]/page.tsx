@@ -9,6 +9,7 @@ import {
   Sparkles, Info,
 } from 'lucide-react';
 import { checkBotUnlockPaymentStatus } from '@/app/actions/chat-foreigners/payments';
+import { getBotUnlockAmount, centsToKes } from '@/app/lib/utils/dynamic-payment';
 
 interface Person {
   id: string;
@@ -140,6 +141,12 @@ export default function UnlockPage() {
   const [pollCount, setPollCount] = useState(0);
   const [resultDesc, setResultDesc] = useState('');
   const [hasAccess, setHasAccess] = useState(false);
+  const [unlockPriceCents, setUnlockPriceCents] = useState(0);
+
+  // Generate dynamic unlock price on component mount
+  useEffect(() => {
+    setUnlockPriceCents(getBotUnlockAmount());
+  }, []);
 
   useEffect(() => {
     const loadPerson = async () => {
@@ -237,7 +244,7 @@ export default function UnlockPage() {
       const res = await fetch('/api/chat-foreigners/payments/unlock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ botId: personId, phoneNumber }),
+        body: JSON.stringify({ botId: personId, phoneNumber, customAmountCents: unlockPriceCents }),
       });
       const data = await res.json();
 
@@ -291,7 +298,7 @@ export default function UnlockPage() {
     person.category;
   const flag = NATIONALITY_FLAGS[person.nationality || ''] ?? '🌐';
   const stats = CATEGORY_STATS[person.personalityType || ''] ?? CATEGORY_STATS.default;
-  const unlockPrice = 100; // Fixed KSH 100
+  const unlockPrice = centsToKes(unlockPriceCents); // Dynamic KSH 95-100
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0d0d14] text-zinc-100 overflow-y-auto">

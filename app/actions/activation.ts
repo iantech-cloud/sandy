@@ -420,7 +420,7 @@ export async function registerMpesaUrls(): Promise<ApiResponse<UrlRegistrationDa
  * Initiate activation payment via Co-op Bank STK Push.
  * Returns messageReference which the client polls with checkActivationPaymentStatus.
  */
-export async function initiateActivationPayment(phoneNumber: string): Promise<ApiResponse<ActivationPaymentData>> {
+export async function initiateActivationPayment(phoneNumber: string, customAmountCents?: number): Promise<ApiResponse<ActivationPaymentData>> {
   try {
     await connectToDatabase();
 
@@ -465,8 +465,8 @@ export async function initiateActivationPayment(phoneNumber: string): Promise<Ap
       };
     }
 
-    // Standard activation fee: KES 95
-    const activationAmount = 9500; // cents
+    // Use dynamic amount if provided, otherwise default to KES 95 (9500 cents)
+    const activationAmount = customAmountCents ?? 9500; // cents
 
     const activationPayment = new (ActivationPayment as any)({
       user_id: userProfile._id,
