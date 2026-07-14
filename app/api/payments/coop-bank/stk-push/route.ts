@@ -62,6 +62,15 @@ export async function POST(request: NextRequest) {
     // Callback URL for payment confirmation
     const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
 
+    // Map depositType to valid source enum values
+    const sourceMap: { [key: string]: string } = {
+      'activation': 'activation',
+      'wallet': 'wallet',
+      'spin_wallet': 'spin_wallet',
+      'deposit': 'wallet',
+    };
+    const source = sourceMap[depositType] || 'wallet';
+
     // ── CRITICAL: persist the transaction BEFORE calling the bank ────────────
     // Under high traffic the bank's callback can arrive before our code finishes
     // running. If the MpesaTransaction does not exist yet, the callback returns
@@ -71,8 +80,10 @@ export async function POST(request: NextRequest) {
       user_id: userId,
       amount_cents: Math.round(amount * 100),
       phone_number: formattedPhone,
+      account_reference: `STK-${depositType.toUpperCase()}-${messageReference}`,
+      transaction_desc: narration,
       status: 'initiated',
-      source: 'coop_bank',
+      source: source,
       checkout_request_id: messageReference,
       is_activation_payment: depositType === 'activation',
       metadata: {
