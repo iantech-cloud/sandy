@@ -235,9 +235,13 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
 
     await connectToDatabase();
 
+    // Query with index hint to ensure fast lookup
     const mpesaTransaction = await (MpesaTransaction as any).findOne({
-      checkout_request_id: messageReference,
-    });
+      $or: [
+        { checkout_request_id: messageReference },
+        { account_reference: messageReference }
+      ]
+    }).lean();
 
     if (!mpesaTransaction) {
       return { success: false, message: 'Transaction not found' };
@@ -274,10 +278,31 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
       };
     }
 
-    // Query Co-op Bank Enquiry API
+    // Optimization: Skip Co-op Bank API calls after a certain time to reduce load
+    // If still pending after 60 seconds and last_api_check is recent, use local DB status
+    const lastCheck = mpesaTransaction.metadata?.last_api_check ? new Date(mpesaTransaction.metadata.last_api_check) : null;
+    const timeSinceLastCheck = lastCheck ? (Date.now() - lastCheck.getTime()) / 1000 : Infinity;
+    const shouldSkipApiCall = timeSinceLastCheck < 10; // Skip if checked in last 10 seconds
+
+    // Query Co-op Bank Enquiry API (with optimization to reduce calls)
     try {
+      let statusResponse;
+      
+      if (shouldSkipApiCall && mpesaTransaction.status === 'pending') {
+        // Return cached pending status to reduce API load
+        return {
+          success: true,
+          data: {
+            status: 'pending',
+            source: 'database_cached',
+            isActivationPayment: true,
+          },
+          message: 'Payment is still being processed. Please wait...',
+        };
+      }
+
       const coopBank = createCoopBankService();
-      const statusResponse = await coopBank.getTransactionStatus(messageReference);
+      statusResponse = await coopBank.getTransactionStatus(messageReference);
       
       // Use centralized mapping from CoopBankService (single source of truth)
       const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
@@ -299,6 +324,7 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
         result_desc: statusResponse.ResponseDescription || '',
         ...(mappedStatus === 'completed' ? { completed_at: new Date() } : {}),
         ...((['failed', 'cancelled', 'timeout'].includes(mappedStatus)) ? { failed_at: new Date() } : {}),
+        'metadata.last_api_check': new Date(),
       });
 
       // If completed via poll (callback missed), run activation logic

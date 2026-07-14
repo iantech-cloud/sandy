@@ -26,15 +26,7 @@ export default function MpesaWaitingContent() {
   const phoneNumber = searchParams.get('phoneNumber');
   const activationPaymentId = searchParams.get('activationPaymentId');
 
-  // Validate parameters on mount
-  useEffect(() => {
-    console.log('[v0] Waiting page params:', {
-      messageReference,
-      amount,
-      phoneNumber,
-      activationPaymentId,
-    });
-  }, [messageReference, amount, phoneNumber, activationPaymentId]);
+
   
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({ 
     status: 'processing' 
@@ -43,9 +35,9 @@ export default function MpesaWaitingContent() {
   const [pollingCount, setPollingCount] = useState(0);
   const [isActivatingAccount, setIsActivatingAccount] = useState(false);
 
-  // Constants for polling
-  const POLLING_INTERVAL = 4000; // 4 seconds for faster response
-  const MAX_POLLING_ATTEMPTS = 60; // 60 attempts * 4s = 240 seconds (~4 minutes)
+  // Constants for polling - optimized for performance
+  const POLLING_INTERVAL = 2000; // 2 seconds - quick initial checks
+  const MAX_POLLING_ATTEMPTS = 120; // 120 attempts * 2s = 240 seconds (~4 minutes)
 
   // Poll for payment status using server action with fixed intervals
   const pollPaymentStatus = useCallback(async () => {
@@ -58,17 +50,8 @@ export default function MpesaWaitingContent() {
       if (result.success && result.data) {
         const { status, resultCode, resultDesc, mpesaReceiptNumber, amount, source } = result.data;
 
-        // Log for debugging
-        console.log(`[v0] Activation polling attempt ${pollingCount + 1}:`, {
-          status,
-          resultCode,
-          resultDesc,
-          source,
-        });
-
         // Handle pending/processing state - normal intermediate state
         if (status === 'pending' || status === 'initiated') {
-          console.log('⏳ Transaction still pending - M-Pesa is processing, will check again');
           return;
         }
 
@@ -81,7 +64,6 @@ export default function MpesaWaitingContent() {
           
           // Map status from API/database to our UI status
           if (status === 'completed') {
-            console.log('✅ Status mapped to success');
             return {
               status: 'success',
               resultCode: resultCode,
@@ -90,14 +72,12 @@ export default function MpesaWaitingContent() {
               amount: amount
             };
           } else if (status === 'cancelled') {
-            console.log('❌ Status mapped to cancelled');
             return {
               status: 'cancelled',
               resultCode: resultCode,
               resultDesc: resultDesc || 'Payment cancelled by user'
             };
           } else if (status === 'timeout') {
-            console.log('⏱️ Status mapped to timeout');
             return {
               status: 'timeout',
               resultCode: resultCode,
