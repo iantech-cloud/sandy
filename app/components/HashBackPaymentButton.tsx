@@ -31,8 +31,9 @@ export function HashBackPaymentButton({
 
   // Load HashPay script on component mount
   useEffect(() => {
-    // Skip if not enabled
-    if (config.status === 'coming_soon') {
+    // Skip if not enabled or no account ID
+    if (config.status === 'coming_soon' || !config.accountId) {
+      console.log('[v0] HashBack not available - status:', config.status, 'account:', !!config.accountId);
       return;
     }
 
@@ -43,18 +44,26 @@ export function HashBackPaymentButton({
       return;
     }
 
-    // Check if script tag already exists
-    if (document.querySelector('script[src="https://pay.hashback.co.ke/hashpay.js"]')) {
-      console.log('[v0] HashPay script tag exists');
-      // Wait for it to load
+    // Check if script tag already exists in DOM
+    const existingScript = document.querySelector('script[src="https://pay.hashback.co.ke/hashpay.js"]');
+    if (existingScript) {
+      console.log('[v0] HashPay script tag exists, waiting for load...');
+      let attempts = 0;
+      const maxAttempts = 50; // 2.5 seconds max
+      
       const checkScript = setInterval(() => {
+        attempts++;
         if ((window as any).HashPay) {
           clearInterval(checkScript);
           setScriptLoaded(true);
           console.log('[v0] HashPay script loaded from existing tag');
+        } else if (attempts >= maxAttempts) {
+          clearInterval(checkScript);
+          console.warn('[v0] HashPay script timeout after existing tag');
+          setScriptError(true);
         }
       }, 50);
-      return;
+      return () => clearInterval(checkScript);
     }
 
     // Create and append script tag
@@ -62,33 +71,55 @@ export function HashBackPaymentButton({
     script.src = 'https://pay.hashback.co.ke/hashpay.js';
     script.async = true;
 
+    let timeout: NodeJS.Timeout;
+    const loadTimeout = 10000; // 10 second timeout
+
     script.onload = () => {
-      console.log('[v0] HashPay script loaded successfully');
-      // Give the script a moment to initialize the global
+      clearTimeout(timeout);
+      console.log('[v0] HashPay script tag loaded from CDN');
+      
+      // Give the script a moment to initialize the global object
       setTimeout(() => {
         if ((window as any).HashPay) {
+          console.log('[v0] HashPay global object initialized');
           setScriptLoaded(true);
         } else {
-          console.warn('[v0] HashPay global not found after script load');
+          console.warn('[v0] HashPay global not initialized after onload event');
           setScriptError(true);
         }
-      }, 100);
+      }, 200);
     };
 
-    script.onerror = () => {
-      console.error('[v0] Failed to load HashPay script');
+    script.onerror = (error) => {
+      clearTimeout(timeout);
+      console.error('[v0] Failed to load HashPay script from CDN:', error);
       setScriptError(true);
     };
 
+    // Set a timeout in case onload/onerror don't fire
+    timeout = setTimeout(() => {
+      if (!scriptLoaded && !(window as any).HashPay) {
+        console.error('[v0] HashPay script load timeout');
+        setScriptError(true);
+      }
+    }, loadTimeout);
+
+    console.log('[v0] Appending HashPay script to document head');
     document.head.appendChild(script);
 
     return () => {
-      // Cleanup: remove script on unmount if we added it
-      if (script.parentElement) {
-        script.parentElement.removeChild(script);
+      clearTimeout(timeout);
+      // Cleanup: remove script on unmount
+      try {
+        if (script.parentElement) {
+          script.parentElement.removeChild(script);
+          console.log('[v0] HashPay script removed from DOM');
+        }
+      } catch (err) {
+        console.warn('[v0] Error removing HashPay script:', err);
       }
     };
-  }, [config.status]);
+  }, [config.status, config.accountId]);
 
   if (!config.accountId) {
     console.error('[v0] NEXT_PUBLIC_HASHBACK_ACCOUNT_ID not configured');
