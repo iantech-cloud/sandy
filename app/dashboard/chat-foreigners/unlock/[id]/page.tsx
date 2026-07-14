@@ -244,7 +244,7 @@ export default function UnlockPage() {
       const res = await fetch('/api/chat-foreigners/payments/unlock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ botId: personId, phoneNumber }),
+        body: JSON.stringify({ botId: personId, phoneNumber, customAmountCents: unlockPriceCents }),
       });
       const data = await res.json();
 

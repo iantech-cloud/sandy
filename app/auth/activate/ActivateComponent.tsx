@@ -74,7 +74,7 @@ export default function ActivateComponent() {
     setMessage('');
 
     try {
-      const result = await initiateActivationPayment(phoneNumber);
+      const result = await initiateActivationPayment(phoneNumber, activationAmount);
 
       if (result.success && result.data?.messageReference) {
         const params = new URLSearchParams({

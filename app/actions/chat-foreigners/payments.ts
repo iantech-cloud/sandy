@@ -37,7 +37,8 @@ async function getCurrentUserFromSession() {
 export async function initiateBotUnlockViaMpesa(
   botId: string,
   phoneNumber: string,
-  referralCode?: string
+  referralCode?: string,
+  customAmountCents?: number
 ) {
   try {
     await connectToDatabase();
@@ -63,7 +64,8 @@ export async function initiateBotUnlockViaMpesa(
       return { success: false, error: 'You have already unlocked this personality. Access is lifetime — no re-subscription needed.' };
     }
 
-    const UNLOCK_COST_CENTS = 10000; // KSH 100 fixed
+    // Use dynamic amount if provided, otherwise default to KES 100 (10000 cents)
+    const UNLOCK_COST_CENTS = customAmountCents ?? 10000; // KSH 95-100 dynamic or fixed
 
     // Create M-Pesa transaction record
     const mpesaTransaction = await ChatForeignersMpesaTransaction.create({
