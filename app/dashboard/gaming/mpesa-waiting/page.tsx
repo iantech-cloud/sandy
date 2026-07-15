@@ -113,7 +113,7 @@ export default function GamingMpesaWaitingPage() {
       if (paymentStatus.status === 'processing') {
         setPaymentStatus({
           status: 'timeout',
-          resultCode: '1037',
+          resultCode: 1037, // Must be a number to match MpesaResultCodes enum
           resultDesc: 'Payment request timed out. Please try again.',
         });
       }
@@ -211,9 +211,8 @@ export default function GamingMpesaWaitingPage() {
     if (paymentStatus.status === 'processing') return;
 
     setPaymentStatus({ status: 'processing' });
-    setTimeLeft(180);
+    setTimeLeft(120); // 2 minutes
     setPollingCount(0);
-    setIsPolling(true);
     pollPaymentStatus();
   };
 
@@ -340,10 +339,7 @@ export default function GamingMpesaWaitingPage() {
             {paymentStatus.status === 'processing' && (
               <>
                 <button
-                  onClick={() => {
-                    setIsPolling(false);
-                    router.push('/dashboard/gaming');
-                  }}
+                  onClick={() => router.push('/dashboard/gaming')}
                   className="py-3 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" />
@@ -351,10 +347,9 @@ export default function GamingMpesaWaitingPage() {
                 </button>
                 <button
                   onClick={handleRetryPolling}
-                  disabled={isPolling}
-                  className="py-2 px-4 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-300"
+                  className="py-2 px-4 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  {isPolling ? 'Checking Status...' : 'Check Status Now'}
+                  Check Status Now
                 </button>
               </>
             )}
@@ -409,9 +404,6 @@ export default function GamingMpesaWaitingPage() {
                 </div>
                 <div>
                   <strong>Polling Count:</strong> {pollingCount}
-                </div>
-                <div>
-                  <strong>Is Polling:</strong> {isPolling ? 'Yes' : 'No'}
                 </div>
                 <div>
                   <strong>Time Left:</strong> {timeLeft}s
