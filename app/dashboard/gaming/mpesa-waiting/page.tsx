@@ -34,13 +34,16 @@ export default function GamingMpesaWaitingPage() {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>({
     status: 'processing',
   });
-  const [timeLeft, setTimeLeft] = useState(180); // 3 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(120); // 2 minutes in seconds
   const [pollingCount, setPollingCount] = useState(0);
-  const [isPolling, setIsPolling] = useState(true);
 
-  // Poll for payment status using server action
+  // Constants for polling - optimized for rapid status detection
+  const POLLING_INTERVAL = 2000; // 2 seconds - quick initial checks to catch cancellations
+  const MAX_POLLING_ATTEMPTS = 120; // 120 attempts * 2s = 240 seconds (~4 minutes)
+
+  // Poll for payment status using server action with fixed intervals
   const pollPaymentStatus = useCallback(async () => {
-    if (!messageReference || !isPolling) return;
+    if (!messageReference) return;
 
     try {
       const result = await checkGameDepositStatus(messageReference);
@@ -49,70 +52,70 @@ export default function GamingMpesaWaitingPage() {
       if (result.success && result.data) {
         const { status, resultCode, resultDesc, mpesaReceiptNumber } = result.data;
 
-        console.log('[Gaming waiting] Status received:', { status, resultCode, resultDesc });
-
         // Handle pending/processing state - normal intermediate state
         if (status === 'pending' || status === 'initiated') {
-          console.log('⏳ Transaction still pending - continuing to poll');
           return; // Keep polling, don't update UI
         }
 
-        // Map terminal statuses
-        if (status === 'completed') {
-          console.log('✅ Payment completed successfully');
-          setPaymentStatus({
-            status: 'success',
-            resultCode,
-            resultDesc,
-            mpesaReceiptNumber,
-            amount: Number(amount),
-          });
-          setIsPolling(false);
-        } else if (status === 'cancelled') {
-          console.log('❌ Payment cancelled by user');
-          setPaymentStatus({
-            status: 'cancelled',
-            resultCode,
-            resultDesc: resultDesc || 'You cancelled the payment request',
-            amount: Number(amount),
-          });
-          setIsPolling(false);
-        } else if (status === 'failed') {
-          console.log('❌ Payment failed:', resultCode);
-          setPaymentStatus({
-            status: 'failed',
-            resultCode,
-            resultDesc: resultDesc || 'Payment failed',
-            amount: Number(amount),
-          });
-          setIsPolling(false);
-        } else if (status === 'timeout') {
-          console.log('⏱️ Payment timeout');
-          setPaymentStatus({
-            status: 'timeout',
-            resultCode,
-            resultDesc: resultDesc || 'Payment request timed out',
-            amount: Number(amount),
-          });
-          setIsPolling(false);
-        }
+        // Update payment status based on the response
+        setPaymentStatus((prev) => {
+          // Don't update if we're already in a final state
+          if (['success', 'cancelled', 'timeout', 'failed'].includes(prev.status)) {
+            return prev;
+          }
+
+          // Map status from API/database to our UI status
+          if (status === 'completed') {
+            return {
+              status: 'success',
+              resultCode,
+              resultDesc,
+              mpesaReceiptNumber,
+              amount: Number(amount),
+            };
+          } else if (status === 'cancelled') {
+            return {
+              status: 'cancelled',
+              resultCode,
+              resultDesc: resultDesc || 'You cancelled the payment request',
+              amount: Number(amount),
+            };
+          } else if (status === 'timeout') {
+            return {
+              status: 'timeout',
+              resultCode,
+              resultDesc: resultDesc || 'Payment request timed out',
+              amount: Number(amount),
+            };
+          } else if (status === 'failed') {
+            return {
+              status: 'failed',
+              resultCode,
+              resultDesc: resultDesc || 'Payment failed',
+              amount: Number(amount),
+            };
+          }
+
+          // Keep processing status for pending
+          return prev;
+        });
       }
     } catch (error) {
-      console.error('Error polling payment status:', error);
+      console.error('[v0] Error polling payment status:', error);
       // Don't stop polling on network errors
     }
-  }, [messageReference, amount, pollingCount, isPolling]);
+  }, [messageReference, amount]);
 
   // Timer countdown
   useEffect(() => {
     if (timeLeft <= 0) {
-      if (paymentStatus.status === 'processing' && isPolling) {
+      // Only set to timeout if still processing
+      if (paymentStatus.status === 'processing') {
         setPaymentStatus({
           status: 'timeout',
-          resultCode: 1037,
+          resultCode: '1037',
           resultDesc: 'Payment request timed out. Please try again.',
         });
-        setIsPolling(false);
       }
       return;
     }
@@ -122,26 +125,22 @@ export default function GamingMpesaWaitingPage() {
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [timeLeft, paymentStatus.status, isPolling]);
+  }, [timeLeft, paymentStatus.status]);
 
-  // Polling interval - continues until stopped
+  // Polling interval - continues until stopped or final state reached
   useEffect(() => {
-    if (!isPolling || paymentStatus.status !== 'processing') return;
+    if (paymentStatus.status !== 'processing' || pollingCount >= MAX_POLLING_ATTEMPTS) return;
 
-    const interval = setInterval(pollPaymentStatus, 4000); // Poll every 4 seconds
+    const interval = setInterval(pollPaymentStatus, POLLING_INTERVAL); // Poll every 2 seconds
     return () => clearInterval(interval);
-  }, [isPolling, paymentStatus.status, pollPaymentStatus]);
+  }, [paymentStatus.status, pollPaymentStatus, pollingCount]);
 
-  // Initial poll
+  // Initial poll - start immediately
   useEffect(() => {
-    if (messageReference && isPolling) {
-      const initialPollTimer = setTimeout(() => {
-        pollPaymentStatus();
-      }, 2000);
-
-      return () => clearTimeout(initialPollTimer);
+    if (messageReference) {
+      pollPaymentStatus();
     }
-  }, [messageReference, pollPaymentStatus, isPolling]);
+  }, [messageReference, pollPaymentStatus]);
 
   // Redirect if no messageReference
   useEffect(() => {
