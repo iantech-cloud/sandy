@@ -76,19 +76,21 @@ export async function connectToDatabase(): Promise<Connection> {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 10000, // Server selection (10s)
+      serverSelectionTimeoutMS: 30000, // Server selection (30s)
       socketTimeoutMS: 45000, // Socket timeout (45s)
-      maxPoolSize: 10, // Increased pool size for better concurrency
-      minPoolSize: 2, // Keep minimum connections alive
-      maxIdleTimeMS: 30000, // Keep idle connections for 30s
-      connectTimeoutMS: 10000, // Connect timeout (10s)
+      maxPoolSize: 50, // Large pool for high concurrency (activation spikes)
+      minPoolSize: 5, // Keep minimum 5 connections alive
+      maxIdleTimeMS: 60000, // Keep idle connections for 60s to reduce reconnects
+      connectTimeoutMS: 30000, // Connect timeout (30s)
       family: 4, // Use IPv4 only
       retryWrites: true,
       retryReads: true,
-      waitQueueTimeoutMS: 15000, // Wait up to 15s for connection from pool
+      waitQueueTimeoutMS: 30000, // Wait up to 30s for connection from pool
       authSource: 'admin',
       appName: 'sandy-app',
       heartbeatFrequencyMS: 10000, // Check connection health every 10s
+      monitorCommands: true, // Enable command monitoring for debugging
+      loggerLevel: 'warn', // Log warnings and errors
     };
 
     console.log('🔗 Attempting to connect to MongoDB...');
@@ -97,22 +99,27 @@ export async function connectToDatabase(): Promise<Connection> {
       .then((mongooseInstance) => {
         // Set up connection event handlers
         mongooseInstance.connection.on('error', (err) => {
-          console.error('❌ MongoDB connection error:', err);
-          // Clear cache on error to allow reconnection
+          console.error('❌ MongoDB connection error:', err.message);
+          // Only clear cache if it's a connection pool issue
           if (cached.conn && cached.conn.readyState !== 1) {
+            console.warn('⚠️ Clearing connection cache due to error');
             cached.conn = null;
             cached.promise = null;
           }
         });
 
         mongooseInstance.connection.on('disconnected', () => {
-          console.log('⚠️ MongoDB disconnected');
+          console.warn('⚠️ MongoDB disconnected, clearing cache for reconnection');
           cached.conn = null;
           cached.promise = null;
         });
 
         mongooseInstance.connection.on('reconnected', () => {
-          console.log('🔁 MongoDB reconnected');
+          console.log('✅ MongoDB reconnected successfully');
+        });
+
+        mongooseInstance.connection.on('connected', () => {
+          console.log('✅ MongoDB connection established');
         });
 
         return mongooseInstance;

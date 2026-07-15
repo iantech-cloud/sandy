@@ -17,6 +17,7 @@ import {
   AdminAuditLog,
   Company
 } from '@/app/lib/models';
+import { withConnectionRetry, executeSequentialQueries } from '@/app/lib/db-pool-utils';
 
 // Import email function for payment confirmation
 import { sendPaymentConfirmationInvoice } from '@/app/actions/email';
@@ -457,8 +458,16 @@ export async function registerMpesaUrls(): Promise<ApiResponse<UrlRegistrationDa
  * Returns messageReference which the client polls with checkActivationPaymentStatus.
  */
 export async function initiateActivationPayment(phoneNumber: string, customAmountCents?: number): Promise<ApiResponse<ActivationPaymentData>> {
+  return withConnectionRetry(
+    () => initiateActivationPaymentImpl(phoneNumber, customAmountCents),
+    3,
+    1500
+  );
+}
+
+async function initiateActivationPaymentImpl(phoneNumber: string, customAmountCents?: number): Promise<ApiResponse<ActivationPaymentData>> {
   try {
-    await connectToDatabase();
+  await connectToDatabase();
 
     const session = await auth();
     if (!session?.user) {
@@ -656,11 +665,23 @@ export async function initiateActivationPayment(phoneNumber: string, customAmoun
   }
 }
 
+// Helper function exported for testing
+export const _testInitiateActivationImpl = initiateActivationPaymentImpl;
+
 /**
  * Complete activation after successful payment.
  * NOTE: Called from the Co-op Bank callback route — no session required.
+ * Wrapped with connection retry to handle pool exhaustion during concurrent activations.
  */
 export async function completeActivationAfterPayment(activationPaymentId: string): Promise<ApiResponse<ActivationCompletionData>> {
+  return withConnectionRetry(
+    () => completeActivationAfterPaymentImpl(activationPaymentId),
+    5, // Retry up to 5 times
+    2000 // 2 second delay between retries
+  );
+}
+
+async function completeActivationAfterPaymentImpl(activationPaymentId: string): Promise<ApiResponse<ActivationCompletionData>> {
   try {
     await connectToDatabase();
 
@@ -1174,6 +1195,9 @@ export async function completeActivationAfterPayment(activationPaymentId: string
     };
   }
 }
+
+// Helper function exported for testing
+export const _testCompleteActivationImpl = completeActivationAfterPaymentImpl;
 
 /**
  * Verify URL registration status
