@@ -2,39 +2,232 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Wallet, Play, RotateCcw, Loader, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Wallet, RotateCcw, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { playPlinko, getGamingWallet } from '@/app/actions/gaming-games';
 
+const RISK_LEVELS = {
+  low: { multipliers: [0.5, 0.8, 1.2, 1.5, 2.0, 1.5, 1.2, 0.8, 0.5], color: '#10b981' },
+  medium: { multipliers: [0.2, 0.5, 1.5, 3.0, 10.0, 3.0, 1.5, 0.5, 0.2], color: '#f59e0b' },
+  high: { multipliers: [0.1, 0.3, 0.5, 2.0, 100.0, 2.0, 0.5, 0.3, 0.1], color: '#ef4444' },
+};
+
 export default function PlinkoGame() {
-  const router = useRouter();
   const { data: session } = useSession();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [bet, setBet] = useState(3000);
+  const [bet, setBet] = useState(50000);
+  const [riskLevel, setRiskLevel] = useState<'low' | 'medium' | 'high'>('medium');
+  const [gameState, setGameState] = useState<'setup' | 'dropping' | 'done'>('setup');
   const [balance, setBalance] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [result, setResult] = useState<{ multiplier: number; landed: boolean } | null>(null);
-  const [gameHistory, setGameHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ amount: number; multiplier: number; slot: number } | null>(null);
+  const [history, setHistory] = useState<{ risk: string; multiplier: number; amount: number }[]>([]);
 
-  const MIN_BET = 3000; // 30 KES in cents
-  const MAX_BET = 500000000; // 5,000,000 KES in cents
+  const MIN_BET = 3000;
+  const MAX_BET = 500000000;
+  const ROWS = 12;
+  const SLOTS = 9;
+
+  // Animation refs
+  const ballRef = useRef({ x: 0, y: 0, vx: 0, vy: 0 });
+  const pegsRef = useRef<Array<{ x: number; y: number }>>([]);
 
   useEffect(() => {
-    loadWallet();
-  }, []);
+    if (session?.user?.id) {
+      fetchBalance();
+      initializePegs();
+    }
+  }, [session]);
 
-  const loadWallet = async () => {
-    const result = await getGamingWallet();
-    if (result.success && result.wallet) {
-      setBalance(result.wallet.balance_cents);
+  const fetchBalance = async () => {
+    try {
+      const response = await fetch('/api/gaming/wallet');
+      const data = await response.json();
+      setBalance(data.balance_cents || 0);
+    } catch (err) {
+      console.error('Failed to fetch balance:', err);
     }
   };
 
-  const startGame = async () => {
+  const initializePegs = () => {
+    const pegs: Array<{ x: number; y: number }> = [];
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const width = 500;
+    const height = 600;
+    const spacingX = width / (SLOTS + 1);
+    const spacingY = height / (ROWS + 1);
+
+    for (let row = 0; row < ROWS; row++) {
+      const offset = row % 2 === 0 ? 0 : spacingX / 2;
+      for (let col = 0; col < SLOTS; col++) {
+        pegs.push({
+          x: offset + spacingX * (col + 1),
+          y: spacingY * (row + 1),
+        });
+      }
+    }
+
+    pegsRef.current = pegs;
+  };
+
+  // Draw plinko board
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const draw = () => {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw pegs
+      ctx.fillStyle = '#a78bfa';
+      pegsRef.current.forEach(peg => {
+        ctx.beginPath();
+        ctx.arc(peg.x, peg.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Draw slots at bottom
+      const slotWidth = canvas.width / SLOTS;
+      const slotY = canvas.height - 40;
+      const multipliers = RISK_LEVELS[riskLevel].multipliers;
+
+      multipliers.forEach((mult, i) => {
+        const x = i * slotWidth + slotWidth / 2;
+        const color = mult >= 3 ? '#10b981' : mult >= 1.5 ? '#f59e0b' : '#ef4444';
+        
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.2;
+        ctx.fillRect(i * slotWidth + 2, slotY, slotWidth - 4, 40);
+        ctx.globalAlpha = 1.0;
+
+        ctx.fillStyle = color;
+        ctx.font = 'bold 14px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(mult.toFixed(2) + 'x', x, slotY + 25);
+      });
+
+      // Draw ball if dropping
+      if (gameState === 'dropping' && result) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(ballRef.current.x, ballRef.current.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glow
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.arc(ballRef.current.x, ballRef.current.y, 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+      }
+
+      requestAnimationFrame(draw);
+    };
+
+    const animationId = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(animationId);
+  }, [gameState, riskLevel, result]);
+
+  // Animate ball
+  useEffect(() => {
+    if (gameState !== 'dropping') return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const gravity = 0.3;
+    const damping = 0.99;
+    const bounce = 0.8;
+    const friction = 0.98;
+
+    ballRef.current = {
+      x: canvas.width / 2,
+      y: 30,
+      vx: 0,
+      vy: 0,
+    };
+
+    const animate = () => {
+      const ball = ballRef.current;
+
+      // Apply gravity
+      ball.vy += gravity;
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Friction
+      ball.vx *= friction;
+
+      // Collision with pegs
+      pegsRef.current.forEach(peg => {
+        const dx = ball.x - peg.x;
+        const dy = ball.y - peg.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const minDist = 8 + 5; // Ball radius + peg radius
+
+        if (dist < minDist) {
+          const angle = Math.atan2(dy, dx);
+          ball.x = peg.x + Math.cos(angle) * minDist;
+          ball.y = peg.y + Math.sin(angle) * minDist;
+
+          const speed = Math.sqrt(ball.vx ** 2 + ball.vy ** 2);
+          ball.vx = Math.cos(angle) * speed * bounce + (Math.random() - 0.5) * 2;
+          ball.vy = Math.sin(angle) * speed * bounce;
+        }
+      });
+
+      // Boundaries
+      if (ball.x - 8 < 0) {
+        ball.x = 8;
+        ball.vx = Math.abs(ball.vx) * bounce;
+      }
+      if (ball.x + 8 > canvas.width) {
+        ball.x = canvas.width - 8;
+        ball.vx = -Math.abs(ball.vx) * bounce;
+      }
+
+      // Check if ball reached bottom
+      if (ball.y > canvas.height - 40) {
+        const slotWidth = canvas.width / SLOTS;
+        const slot = Math.floor(ball.x / slotWidth);
+        const finalSlot = Math.max(0, Math.min(SLOTS - 1, slot));
+
+        setGameState('done');
+        const multiplier = RISK_LEVELS[riskLevel].multipliers[finalSlot];
+        const winAmount = Math.floor(bet * multiplier);
+
+        setResult({
+          amount: winAmount,
+          multiplier,
+          slot: finalSlot,
+        });
+
+        setBalance(prev => prev + winAmount);
+        setHistory(prev => [
+          { risk: riskLevel, multiplier, amount: winAmount },
+          ...prev.slice(0, 19),
+        ]);
+
+        return;
+      }
+
+      requestAnimationFrame(animate);
+    };
+
+    animate();
+  }, [gameState, riskLevel, bet]);
+
+  const startGame = () => {
     setError(null);
 
     if (bet < MIN_BET) {
@@ -52,211 +245,190 @@ export default function PlinkoGame() {
       return;
     }
 
-    setIsPlaying(true);
     setLoading(true);
-
-    try {
-      const gameResult = await playPlinko(bet);
-
-      if (gameResult.success) {
-        setBalance(gameResult.wallet?.balance_cents || 0);
-        const multiplier = gameResult.game?.gameData.multiplier || 0;
-
-        setResult({ multiplier, landed: true });
-        setGameHistory(prev => [
-          {
-            multiplier,
-            result: 'loss',
-            amount: bet,
-            timestamp: new Date().toLocaleTimeString(),
-          },
-          ...prev.slice(0, 9),
-        ]);
-
-        // Animate ball drop
-        animateBall(multiplier);
-      }
-    } finally {
-      setLoading(false);
-      setTimeout(() => setIsPlaying(false), 3000);
-    }
-  };
-
-  const animateBall = (multiplier: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let ballY = 0;
-    let ballX = canvas.width / 2;
-    const ballRadius = 5;
-    let landingIndex = Math.floor(multiplier * 2);
-
-    const animate = () => {
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.1)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Draw bins
-      ctx.fillStyle = 'rgba(168, 85, 247, 0.3)';
-      for (let i = 0; i < 10; i++) {
-        const binWidth = canvas.width / 10;
-        ctx.fillRect(i * binWidth, canvas.height - 50, binWidth, 50);
-        ctx.strokeStyle = 'rgba(168, 85, 247, 0.5)';
-        ctx.strokeRect(i * binWidth, canvas.height - 50, binWidth, 50);
-      }
-
-      // Draw ball
-      ctx.fillStyle = '#3b82f6';
-      ctx.beginPath();
-      ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      ballY += 5;
-      ballX += (Math.random() - 0.5) * 8;
-
-      if (ballY < canvas.height - 50) {
-        requestAnimationFrame(animate);
-      } else {
-        // Ball landed
-        ctx.fillStyle = '#10b981';
-        ctx.beginPath();
-        ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    };
-
-    animate();
-  };
-
-  const resetGame = () => {
+    setBalance(prev => prev - bet);
+    setGameState('dropping');
     setResult(null);
-    setIsPlaying(false);
+    setLoading(false);
+  };
+
+  const playAgain = () => {
+    setGameState('setup');
+    setResult(null);
+    fetchBalance();
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <Link href="/dashboard/gaming" className="flex items-center gap-2 text-purple-300 hover:text-purple-200">
-            <ArrowLeft size={20} />
-            Back to Gaming
-          </Link>
-          <div className="flex items-center gap-3 bg-slate-800/50 px-4 py-2 rounded-lg border border-purple-500/30">
+    <div className="min-h-screen bg-slate-900">
+      {/* Header */}
+      <div className="border-b border-slate-800 bg-slate-800/50 backdrop-blur-sm sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard/gaming" className="p-2 hover:bg-slate-700 rounded-lg transition-colors">
+              <ArrowLeft size={20} className="text-gray-400" />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold text-white">Plinko</h1>
+              <p className="text-sm text-gray-400">Drop the ball and win big</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 bg-slate-800 px-4 py-2 rounded-lg border border-purple-500/30">
             <Wallet size={20} className="text-purple-400" />
             <div>
               <p className="text-xs text-slate-400">Balance</p>
-              <p className="text-xl font-bold text-white">KES {(balance / 100).toLocaleString()}</p>
+              <p className="text-lg font-bold text-white">KES {(balance / 100).toLocaleString()}</p>
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Game Area */}
           <div className="lg:col-span-2">
-            {/* Error Alert */}
             {error && (
               <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
                 <AlertCircle className="text-red-400 flex-shrink-0 mt-0.5" size={20} />
-                <div>
-                  <p className="text-red-400 font-semibold text-sm">{error}</p>
-                </div>
+                <p className="text-red-400 font-semibold text-sm">{error}</p>
               </div>
             )}
 
-            <div className="bg-slate-800/50 border border-purple-500/30 rounded-xl p-6">
-              <h2 className="text-2xl font-bold text-white mb-4">Plinko</h2>
-
-              {/* Canvas */}
+            {/* Game Canvas */}
+            <div className="bg-slate-800/50 border border-purple-500/30 rounded-xl p-6 mb-6">
               <canvas
                 ref={canvasRef}
-                width={600}
-                height={400}
-                className="w-full bg-slate-900 rounded-lg border border-purple-500/20 mb-6"
+                width={500}
+                height={650}
+                className="w-full bg-slate-900 rounded-lg"
               />
+            </div>
 
-              {/* Result */}
-              {result && (
-                <div className="bg-red-500/20 border border-red-500 rounded-lg p-4 text-center mb-6">
-                  <p className="text-red-400 text-lg font-bold mb-1">Game Over!</p>
-                  <p className="text-red-300 font-bold">Multiplier: {result.multiplier.toFixed(2)}x</p>
-                  <p className="text-red-300 mt-1">You lost KES {(bet / 100).toLocaleString()}</p>
-                </div>
-              )}
+            {/* Result */}
+            {result && (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-6 mb-6">
+                <p className="text-green-400 font-semibold text-sm mb-2">YOU WON!</p>
+                <p className="text-3xl font-bold text-green-400">+KES {(result.amount / 100).toLocaleString()}</p>
+                <p className="text-green-400 text-sm mt-2">Multiplier: {result.multiplier.toFixed(2)}x</p>
+              </div>
+            )}
+          </div>
 
-              {/* Controls */}
+          {/* Sidebar - Controls */}
+          <div className="space-y-6">
+            {/* Controls */}
+            <div className="bg-slate-800/50 border border-purple-500/30 rounded-xl p-6">
+              <h2 className="text-lg font-bold text-white mb-4">Game Settings</h2>
+
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
+                {/* Bet Amount */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">Bet Amount (KES)</label>
                   <input
                     type="number"
                     value={bet / 100}
-                    onChange={e => setBet(parseInt(e.target.value) * 100 || 3000)}
-                    min={30}
-                    disabled={isPlaying || loading}
-                    className="flex-1 bg-slate-700 border border-purple-500/30 rounded-lg px-4 py-2 text-white disabled:opacity-50"
+                    onChange={(e) => setBet(Math.max(30, parseInt(e.target.value) || 30) * 100)}
+                    disabled={gameState !== 'setup'}
+                    className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-purple-500 focus:outline-none disabled:opacity-50"
                   />
-                  <span className="text-slate-400">KES</span>
                 </div>
 
-                {/* Quick Bet Buttons */}
-                <div className="flex gap-2 flex-wrap">
-                  {[30, 60, 90, 120, 500, 1000].map(amount => (
-                    <button
-                      key={amount}
-                      onClick={() => setBet(amount * 100)}
-                      disabled={isPlaying || amount * 100 > balance || loading}
-                      className="px-3 py-1 bg-slate-700 hover:bg-slate-600 border border-purple-500/30 rounded-lg text-white text-sm disabled:opacity-50 transition-colors"
-                    >
-                      KES {amount}
-                    </button>
-                  ))}
+                {/* Risk Level */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">Risk Level</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['low', 'medium', 'high'] as const).map(level => (
+                      <button
+                        key={level}
+                        onClick={() => setRiskLevel(level)}
+                        disabled={gameState !== 'setup'}
+                        className={`py-2 px-3 rounded-lg font-semibold text-sm transition-all ${
+                          riskLevel === level
+                            ? 'bg-purple-600 text-white border border-purple-400'
+                            : 'bg-slate-700 text-gray-300 border border-slate-600 hover:border-purple-500'
+                        } disabled:opacity-50`}
+                      >
+                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Multipliers Preview */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">Prize Multipliers</label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {RISK_LEVELS[riskLevel].multipliers.map((mult, i) => (
+                      <div key={i} className={`p-2 rounded text-center text-xs font-semibold ${
+                        mult >= 3 ? 'bg-green-500/30 text-green-400' : mult >= 1.5 ? 'bg-yellow-500/30 text-yellow-400' : 'bg-red-500/30 text-red-400'
+                      }`}>
+                        {mult.toFixed(2)}x
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quick Bets */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">Quick Bets</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {[100, 500, 1000, 5000].map(amount => (
+                      <button
+                        key={amount}
+                        onClick={() => setBet(amount * 100)}
+                        disabled={gameState !== 'setup' || amount * 100 > balance}
+                        className="px-3 py-1 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-white text-xs disabled:opacity-50 transition-colors"
+                      >
+                        KES {amount}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-3 pt-4">
-                  {!result ? (
+                <div className="pt-4 space-y-2">
+                  {gameState === 'setup' && (
                     <button
                       onClick={startGame}
-                      disabled={isPlaying || loading || balance < bet}
-                      className="flex-1 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white font-bold py-3 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
+                      disabled={loading || bet > balance}
+                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 rounded-lg disabled:opacity-50 transition-all"
                     >
-                      {loading ? <Loader size={20} className="animate-spin" /> : <Play size={20} />}
-                      {loading ? 'Playing...' : 'Play'}
+                      Drop Ball
                     </button>
-                  ) : (
+                  )}
+
+                  {gameState !== 'setup' && (
                     <button
-                      onClick={resetGame}
-                      className="flex-1 bg-slate-700 hover:bg-slate-600 border border-purple-500/30 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                      onClick={playAgain}
+                      className="w-full bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-500 hover:to-slate-600 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
                     >
                       <RotateCcw size={20} />
-                      Try Again
+                      Play Again
                     </button>
                   )}
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Sidebar */}
-          <div className="bg-slate-800/50 border border-purple-500/30 rounded-xl p-6">
-            <h3 className="text-lg font-bold text-white mb-4">Recent Games</h3>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {gameHistory.length === 0 ? (
-                <p className="text-slate-400 text-sm">No games yet</p>
-              ) : (
-                gameHistory.map((game, i) => (
-                  <div key={i} className="flex items-center justify-between bg-slate-700/50 p-3 rounded-lg border border-slate-600/50">
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-white">{game.multiplier.toFixed(2)}x</p>
-                      <p className="text-xs text-slate-400">{game.timestamp}</p>
+            {/* Recent History */}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+              <h3 className="text-sm font-bold text-white mb-3">Recent Drops</h3>
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {history.length === 0 ? (
+                  <p className="text-gray-400 text-sm">No games yet</p>
+                ) : (
+                  history.map((game, i) => (
+                    <div key={i} className="p-3 rounded-lg bg-slate-700/50 border border-slate-600/50">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs">
+                          <p className="font-semibold text-white capitalize">{game.risk}</p>
+                          <p className="text-gray-400">{game.multiplier.toFixed(2)}x</p>
+                        </div>
+                        <p className="text-green-400 font-semibold text-sm">+KES {(game.amount / 100).toLocaleString('en', { maximumFractionDigits: 0 })}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-red-400">-KES {(game.amount / 100).toLocaleString()}</p>
-                    </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
