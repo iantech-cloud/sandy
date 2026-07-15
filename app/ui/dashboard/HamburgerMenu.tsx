@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useState } from 'react';
-import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle, ClipboardList, LogOut, History, TrendingUp, Briefcase, BookOpen, FileText, Zap, MapPin, Gift } from 'lucide-react';
+import { Menu, X, BarChart, Wallet, Award, Users, Settings, HelpCircle, User as UserIcon, ShoppingBag, MessageCircle, ClipboardList, LogOut, History, TrendingUp, Briefcase, BookOpen, FileText, Zap, MapPin, Gift, Gamepad2 } from 'lucide-react';
 // (UserIcon used for Profile entry; Settings icon used for Settings entry)
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -21,6 +21,7 @@ export default function HamburgerMenu({ userName, onLogout }: HamburgerMenuProps
     { id: 'dashboard',        label: 'Dashboard',         icon: BarChart,      path: '/dashboard' },
     { id: 'wallet',           label: 'Wallet & Escrow',   icon: Wallet,        path: '/dashboard/wallet' },
     { id: 'transactions',     label: 'Transaction History', icon: History,     path: '/dashboard/transactions' },
+    { id: 'gaming',           label: 'Gaming',            icon: Gamepad2,      path: '/dashboard/gaming' },
     { id: 'freelance',        label: 'Freelance Jobs',    icon: Briefcase,     path: 'https://www.upwork.com', external: true },
     { id: 'surveys',          label: 'Surveys',           icon: Award,         path: '/dashboard/surveys' },
     { id: 'chat-foreigners',  label: 'Chat Foreigners',   icon: MessageCircle, path: '/dashboard/chat-foreigners' },
