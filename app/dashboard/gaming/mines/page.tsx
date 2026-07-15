@@ -23,7 +23,7 @@ export default function MinesGame() {
   const [history, setHistory] = useState<{ mines: number; revealed: number; multiplier: number; result: 'win' | 'lose' }[]>([]);
 
   const MIN_BET = 3000;
-  const MAX_BET = 500000000;
+  const MAX_BET = 7000000; // 70,000 KES
   const GRID_SIZE = 25;
   const SAFE_TILES = GRID_SIZE - mineCount;
 
@@ -328,7 +328,8 @@ export default function MinesGame() {
                   {gameState === 'setup' && (
                     <button
                       onClick={startGame}
-                      disabled={loading || bet > balance}
+                      disabled={loading || balance < MIN_BET}
+                      title={balance < MIN_BET ? `Minimum KES ${MIN_BET / 100} required to play` : ''}
                       className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 rounded-lg disabled:opacity-50 transition-all"
                     >
                       Start Game
