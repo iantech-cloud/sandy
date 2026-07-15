@@ -52,6 +52,7 @@ export default function WalletPage() {
 
   const [currentBalance, setCurrentBalance] = useState(user?.balance || 0);
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [mpesaNumber, setMpesaNumber] = useState('');
   const [isProcessingWithdraw, setIsProcessingWithdraw] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('success');
@@ -94,10 +95,10 @@ export default function WalletPage() {
   }, []);
 
   useEffect(() => {
-    if (user?.phone) {
-      if (!mpesaNumber) setMpesaNumber(user.phone);
+    if (user?.phone && !mpesaNumber) {
+      setMpesaNumber(user.phone);
     }
-  }, [user]);
+  }, [user?.phone]);
 
   const handleRefresh = async () => {
     await fetchWalletData();
