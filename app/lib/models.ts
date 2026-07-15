@@ -263,6 +263,7 @@ const ProfileSchema = new Schema({
 }, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
   indexes: [
+    // Single field indexes
     { fields: { role: 1 } },
     { fields: { approval_status: 1 } },
     { fields: { status: 1 } },
@@ -276,12 +277,16 @@ const ProfileSchema = new Schema({
     { fields: { spin_tier: 1 } },
     { fields: { available_spins: 1 } },
     { fields: { authMethod: 1 } },
-    // 2FA INDEXES
     { fields: { twoFAEnabled: 1 } },
     { fields: { twoFALastUsed: 1 } },
-    // ANTI-PHISHING INDEXES
     { fields: { antiPhishingCodeSet: 1 } },
     { fields: { antiPhishingSetAt: 1 } },
+    // Compound indexes for common queries
+    { fields: { is_active: 1, created_at: -1 } }, // Active users by date
+    { fields: { role: 1, is_active: 1 } }, // Users by role and active status
+    { fields: { approval_status: 1, created_at: -1 } }, // Pending approvals by date
+    { fields: { referred_by: 1, created_at: -1 } }, // Referral tree with date
+    { fields: { status: 1, is_active: 1, created_at: -1 } }, // Status filtering with pagination
   ]
 });
 
@@ -2464,9 +2469,13 @@ const GamingWalletSchema = new Schema({
 }, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
   indexes: [
-    { fields: { user_id: 1 } },
-    { fields: { balance_cents: -1 } },
-    { fields: { created_at: -1 } },
+    { fields: { user_id: 1 } }, // Unique index on user_id
+    { fields: { balance_cents: -1 } }, // Leaderboard queries
+    { fields: { created_at: -1 } }, // Recent wallets
+    // Compound indexes
+    { fields: { is_locked: 1, user_id: 1 } }, // Find locked wallets
+    { fields: { total_lost_cents: -1, user_id: 1 } }, // Loss tracking
+    { fields: { last_transaction_at: -1 } }, // Recently active wallets
   ]
 });
 
@@ -2497,10 +2506,15 @@ const GameResultSchema = new Schema({
 }, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
   indexes: [
+    // Primary query indexes
     { fields: { user_id: 1, game_type: 1, created_at: -1 } },
-    { fields: { user_id: 1, created_at: -1 } },
-    { fields: { game_type: 1, created_at: -1 } },
+    { fields: { user_id: 1, created_at: -1 } }, // Recent games for user
+    { fields: { game_type: 1, created_at: -1 } }, // Games by type
     { fields: { outcome: 1 } },
+    // Additional compound indexes for analytics
+    { fields: { user_id: 1, bet_amount_cents: -1 } }, // High bet games by user
+    { fields: { game_type: 1, bet_amount_cents: -1 } }, // High stakes by game type
+    { fields: { created_at: -1, user_id: 1 } }, // Recent games globally
   ]
 });
 
@@ -2532,10 +2546,15 @@ const GamingTransactionSchema = new Schema({
 }, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
   indexes: [
-    { fields: { user_id: 1, type: 1, created_at: -1 } },
-    { fields: { user_id: 1, created_at: -1 } },
-    { fields: { type: 1, status: 1 } },
-    { fields: { payment_reference: 1 } },
+    // Primary query indexes
+    { fields: { user_id: 1, type: 1, created_at: -1 } }, // Transactions by user and type
+    { fields: { user_id: 1, created_at: -1 } }, // Recent transactions for user
+    { fields: { type: 1, status: 1 } }, // Transactions by type and status
+    { fields: { payment_reference: 1 } }, // Find by reference
+    // Additional compound indexes
+    { fields: { status: 1, created_at: -1 } }, // Pending transactions by date
+    { fields: { type: 1, user_id: 1 } }, // User transactions by type
+    { fields: { user_id: 1, status: 1, created_at: -1 } }, // User status history
   ]
 });
 
