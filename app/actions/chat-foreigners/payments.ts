@@ -182,8 +182,11 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
 
     // Look up by checkout_request_id (= messageRef set at STK push time)
     const mpesaTransaction = await ChatForeignersMpesaTransaction.findOne({
-      checkout_request_id: messageReference,
-    });
+      $or: [
+        { checkout_request_id: messageReference },
+        { account_reference: messageReference }
+      ]
+    }).lean();
 
     if (!mpesaTransaction) {
       return { success: false, message: 'Transaction not found' };
@@ -192,7 +195,6 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
     // Already in a terminal state — return cached result immediately
     const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
     if (terminalStatuses.includes(mpesaTransaction.status)) {
-      console.log('[ChatForeigners] Returning cached terminal status:', mpesaTransaction.status);
       return {
         success: true,
         data: {
@@ -218,18 +220,30 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
     }
 
     // Query Co-op Bank Enquiry API — same as activation flow
-    try {
-      const coopBank = createCoopBankService();
-      const statusResponse = await coopBank.getTransactionStatus(messageReference);
-      const { CoopBankService } = await import('@/app/lib/services/coop-bank');
-      const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+    // Optimization: Skip API calls if checked recently to reduce load
+    const lastCheck = mpesaTransaction.metadata?.last_api_check ? new Date(mpesaTransaction.metadata.last_api_check) : null;
+    const timeSinceLastCheck = lastCheck ? (Date.now() - lastCheck.getTime()) / 1000 : Infinity;
+    const shouldSkipApiCall = timeSinceLastCheck < 10; // Skip if checked in last 10 seconds
 
-      console.log('[ChatForeigners] Status poll:', {
-        messageReference,
-        responseCode: statusResponse.ResponseCode,
-        mappedStatus,
-        description: statusResponse.ResponseDescription,
-      });
+    try {
+      let statusResponse;
+      let mappedStatus;
+
+      if (shouldSkipApiCall && mpesaTransaction.status === 'pending') {
+        // Return cached pending status to reduce API load
+        return {
+          success: true,
+          data: {
+            status: 'pending',
+            source: 'database_cached',
+          },
+        };
+      }
+
+      const coopBank = createCoopBankService();
+      statusResponse = await coopBank.getTransactionStatus(messageReference);
+      const { CoopBankService } = await import('@/app/lib/services/coop-bank');
+      mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
 
       // Persist the updated status
       const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
@@ -241,11 +255,11 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
         result_desc: statusResponse.ResponseDescription || '',
         ...(mappedStatus === 'completed' ? { completed_at: new Date() } : {}),
         ...(['failed', 'cancelled', 'timeout'].includes(mappedStatus) ? { failed_at: new Date() } : {}),
+        'metadata.last_api_check': new Date(),
       });
 
       // If completed via poll (callback missed), run unlock completion logic
       if (mappedStatus === 'completed') {
-        console.log('[ChatForeigners] Unlock confirmed via status poll, completing...');
         const payment = await ChatForeignersPayment.findOne({
           mpesa_transaction_id: mpesaTransaction._id,
         });
@@ -645,9 +659,12 @@ export async function checkWalletDepositPaymentStatus(messageReference: string) 
 
     // Look up by checkout_request_id (= messageRef set at STK push time)
     const mpesaTransaction = await ChatForeignersMpesaTransaction.findOne({
-      checkout_request_id: messageReference,
+      $or: [
+        { checkout_request_id: messageReference },
+        { account_reference: messageReference }
+      ],
       transaction_type: 'chat_foreigners_deposit',
-    });
+    }).lean();
 
     if (!mpesaTransaction) {
       return { success: false, message: 'Transaction not found' };
@@ -670,18 +687,30 @@ export async function checkWalletDepositPaymentStatus(messageReference: string) 
     }
 
     // Query Co-op Bank Enquiry API — same as activation/unlock flow
-    try {
-      const coopBank = createCoopBankService();
-      const statusResponse = await coopBank.getTransactionStatus(messageReference);
-      const { CoopBankService } = await import('@/app/lib/services/coop-bank');
-      const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+    // Optimization: Skip API calls if checked recently to reduce load
+    const lastCheck = mpesaTransaction.metadata?.last_api_check ? new Date(mpesaTransaction.metadata.last_api_check) : null;
+    const timeSinceLastCheck = lastCheck ? (Date.now() - lastCheck.getTime()) / 1000 : Infinity;
+    const shouldSkipApiCall = timeSinceLastCheck < 10; // Skip if checked in last 10 seconds
 
-      console.log('[ChatForeigners] Deposit status poll:', {
-        messageReference,
-        responseCode: statusResponse.ResponseCode,
-        mappedStatus,
-        description: statusResponse.ResponseDescription,
-      });
+    try {
+      let statusResponse;
+      let mappedStatus;
+
+      if (shouldSkipApiCall && mpesaTransaction.status === 'pending') {
+        // Return cached pending status to reduce API load
+        return {
+          success: true,
+          data: {
+            status: 'pending',
+            source: 'database_cached',
+          },
+        };
+      }
+
+      const coopBank = createCoopBankService();
+      statusResponse = await coopBank.getTransactionStatus(messageReference);
+      const { CoopBankService } = await import('@/app/lib/services/coop-bank');
+      mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
 
       // Persist the updated status
       const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
@@ -693,6 +722,7 @@ export async function checkWalletDepositPaymentStatus(messageReference: string) 
         result_desc: statusResponse.ResponseDescription || '',
         ...(mappedStatus === 'completed' ? { completed_at: new Date() } : {}),
         ...(['failed', 'cancelled', 'timeout'].includes(mappedStatus) ? { failed_at: new Date() } : {}),
+        'metadata.last_api_check': new Date(),
       });
 
       // If completed via poll (callback missed), credit the wallet — guard so we
@@ -703,7 +733,6 @@ export async function checkWalletDepositPaymentStatus(messageReference: string) 
           type: 'CHAT_DEPOSIT',
         });
         if (depositTxn && depositTxn.status !== 'completed') {
-          console.log('[ChatForeigners] Deposit confirmed via status poll, completing...');
           await completeWalletDeposit(mpesaTransaction._id.toString());
         }
       }
@@ -719,7 +748,7 @@ export async function checkWalletDepositPaymentStatus(messageReference: string) 
         },
       };
     } catch (apiError) {
-      console.error('[ChatForeigners] Deposit status API error, returning DB status:', apiError);
+      // Silently handle API errors and return DB status
       return {
         success: true,
         data: {
