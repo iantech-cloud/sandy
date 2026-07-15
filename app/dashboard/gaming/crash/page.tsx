@@ -68,11 +68,7 @@ export default function CrashGame() {
     return (8 + Math.random() * 40).toFixed(2);
   }, []);
 
-  // Initialize history
-  useEffect(() => {
-    const newHistory = Array.from({ length: 10 }, () => generateRandomMultiplier());
-    setHistory(newHistory);
-  }, [generateRandomMultiplier]);
+
 
   // Generate crash point
   const generateCrashPoint = useCallback(() => {
@@ -124,9 +120,9 @@ export default function CrashGame() {
 
   // Game tick
   const tick = useCallback((now: number) => {
-    if (gameState !== 'running') return;
+    if (gameState !== 'running' || !startTimeRef.current) return;
 
-    const elapsed = (now - (startTimeRef.current || now)) / 1000;
+    const elapsed = (now - startTimeRef.current) / 1000;
     const newMult = 1 + elapsed * elapsed * 0.18 + elapsed * 0.35;
 
     if (newMult >= crashPoint) {
@@ -142,7 +138,7 @@ export default function CrashGame() {
     positionPlane(t);
 
     rafIdRef.current = requestAnimationFrame(tick);
-  }, [gameState, crashPoint, drawCurve, positionPlane]);
+  }, [gameState, crashPoint, drawCurve, positionPlane, crash]);
 
   // Reset round
   const resetRound = useCallback(() => {
@@ -175,7 +171,10 @@ export default function CrashGame() {
     setGameState('running');
     const newCrashPoint = generateCrashPoint();
     setCrashPoint(newCrashPoint);
+    setMultiplier(1.0);
+    multRef.current = 1.0;
     startTimeRef.current = performance.now();
+    if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
     rafIdRef.current = requestAnimationFrame(tick);
   }, [generateCrashPoint, tick]);
 
@@ -184,8 +183,9 @@ export default function CrashGame() {
     setGameState('crashed');
     if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
 
-    // Update history
-    const newHistory = [multiplier.toFixed(2) + 'x', ...history.slice(0, 9)];
+    // Update history with crash point
+    const crashMultiplier = multRef.current || multiplier;
+    const newHistory = [crashMultiplier.toFixed(2), ...history.slice(0, 9)];
     setHistory(newHistory);
 
     // Hide plane
@@ -193,17 +193,27 @@ export default function CrashGame() {
       planeRef.current.style.opacity = '0';
     }
 
+    // Reset bets on crash - players lose
+    setBetPlaced({ 1: false, 2: false });
+
     setTimeout(resetRound, 2200);
   }, [multiplier, history, resetRound]);
 
   // Initialize game
   useEffect(() => {
-    resetRound();
+    const newHistory = Array.from({ length: 10 }, () => generateRandomMultiplier());
+    setHistory(newHistory);
+    
+    // Start the game cycle
+    setTimeout(() => {
+      startRound();
+    }, 1500);
+
     return () => {
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       if (gameLoopRef.current) clearTimeout(gameLoopRef.current);
     };
-  }, []);
+  }, [generateRandomMultiplier, startRound]);
 
   // Bet handlers
   const adjustBet = (panelId: number, direction: number) => {
