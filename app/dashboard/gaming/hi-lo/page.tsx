@@ -43,7 +43,7 @@ export default function HiLoGame() {
   const [revealingNext, setRevealingNext] = useState(false);
 
   const MIN_BET = 3000;
-  const MAX_BET = 500000000;
+  const MAX_BET = 7000000; // 70,000 KES
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -348,7 +348,7 @@ export default function HiLoGame() {
                   {gameState === 'setup' && (
                     <button
                       onClick={startGame}
-                      disabled={loading || bet > balance}
+                      disabled={loading}
                       className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 rounded-lg disabled:opacity-50 transition-all"
                     >
                       Start Game

@@ -23,11 +23,16 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
   const formatPhoneNumber = (value: string) => {
     let cleaned = value.replace(/\D/g, '');
     
-    // If starts with 254, keep it; if starts with 7, prepend 254; otherwise reject or prepend 254
+    // Handle various Kenyan formats:
+    // 0791406285 -> 254791406285
+    // 791406285 -> 254791406285
+    // 2547XXXXXXXX -> keep as is
+    // +2547XXXXXXXX -> remove + and keep as is
+    
     if (cleaned.startsWith('254')) {
       return cleaned;
-    } else if (cleaned.startsWith('7')) {
-      return '254' + cleaned;
+    } else if (cleaned.startsWith('0')) {
+      return '254' + cleaned.substring(1);
     } else {
       return '254' + cleaned;
     }
@@ -36,8 +41,8 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
   const isPhoneValid = useMemo(() => {
     if (!phoneNumber) return false;
     const formatted = formatPhoneNumber(phoneNumber);
-    // Must be 254 followed by 9 digits (Kenyan format)
-    return /^254\d{9}$/.test(formatted);
+    // Must be 254 followed by 9 digits (Kenyan format: 2547/01 + 8 digits)
+    return /^254[0-9]{9}$/.test(formatted);
   }, [phoneNumber]);
 
   const presetAmounts = [100, 500, 1000, 2000, 5000, 10000];
@@ -66,8 +71,8 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
       return;
     }
 
-    if (numAmount > 1000000) {
-      setError('Maximum deposit is KES 1,000,000');
+    if (numAmount > 70000) {
+      setError('Maximum deposit is KES 70,000');
       return;
     }
 
@@ -202,7 +207,7 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
                 disabled={loading}
               />
             </div>
-            <p className="text-xs text-gray-400 mt-2">Minimum: KES 10 | Maximum: KES 1,000,000</p>
+            <p className="text-xs text-gray-400 mt-2">Minimum: KES 10 | Maximum: KES 70,000</p>
           </div>
 
           {/* Preset Amounts */}

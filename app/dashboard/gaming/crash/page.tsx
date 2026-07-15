@@ -26,7 +26,7 @@ export default function CrashGame() {
   const [gameStartCountdown, setGameStartCountdown] = useState(5);
 
   const MIN_BET = 3000;
-  const MAX_BET = 500000000;
+  const MAX_BET = 7000000; // 70,000 KES
   const gameLoopRef = useRef<any>(null);
   const multiplierRef = useRef(1.0);
   const targetCrashRef = useRef<number>(0);
@@ -407,7 +407,7 @@ export default function CrashGame() {
                 {gameState === 'waiting' && (
                   <button
                     onClick={handleBet}
-                    disabled={loading || bet > balance}
+                    disabled={loading}
                     className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 rounded-lg disabled:opacity-50 transition-all"
                   >
                     {loading ? 'Starting...' : 'Place Bet'}
