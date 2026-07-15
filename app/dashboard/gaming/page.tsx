@@ -68,7 +68,7 @@ const GAMES = [
 export default function GamingPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [selectedGame, setSelectedGame] = useState<string | null>(null);
+
   const [gamingWalletOpen, setGamingWalletOpen] = useState(false);
 
   if (status === 'loading') {
@@ -187,10 +187,7 @@ export default function GamingPage() {
           })}
         </div>
 
-        {/* Game Detail View - Show if Aviator Selected */}
-        {selectedGame === 'aviator' && (
-          <AviatorGame onClose={() => setSelectedGame(null)} />
-        )}
+
       </div>
     </div>
   );

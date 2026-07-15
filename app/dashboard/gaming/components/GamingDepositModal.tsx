@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { X, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
-import { initiateGameingDeposit } from '@/app/actions/gaming';
+import { depositToGamingWallet } from '@/app/actions/gaming-games';
 
 interface GamingDepositModalProps {
   onClose: () => void;
@@ -51,7 +51,7 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
 
     try {
       setLoading(true);
-      const result = await initiateGameingDeposit(numAmount * 100); // Convert to cents
+      const result = await depositToGamingWallet(numAmount * 100, 'coop_bank'); // Convert to cents
 
       if (result.success && result.data?.messageReference) {
         setMessageRef(result.data.messageReference);
