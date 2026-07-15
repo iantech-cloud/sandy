@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { checkBotUnlockPaymentStatus } from '@/app/actions/chat-foreigners/payments';
 import { getBotUnlockAmount, centsToKes } from '@/app/lib/utils/dynamic-payment';
-import { PaymentMethodSelector } from '@/app/components/PaymentMethodSelector';
 
 interface Person {
   id: string;
@@ -232,8 +231,7 @@ export default function UnlockPage() {
     return () => clearTimeout(timeout);
   }, [status, pollPaymentStatus, pollCount]);
 
-  const handleUnlock = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUnlock = async () => {
     setError('');
     if (!phoneNumber.trim()) {
       setError('Please enter your M-Pesa phone number.');
@@ -563,28 +561,26 @@ export default function UnlockPage() {
                     type="tel"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="e.g. 0712345678"
+                    placeholder="07XXXXXXXX, 2547XXXXXXXX, or +2547XXXXXXXX"
                     className="w-full bg-[#0d0d14] border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-[#00c97a]/50 focus:ring-1 focus:ring-[#00c97a]/20 text-sm"
                     autoComplete="tel"
                   />
                 </div>
 
-                {phoneNumber && (
-                  <PaymentMethodSelector
-                    amount={unlockPrice}
-                    customAmountCents={unlockPriceCents}
-                    reference={`UNLOCK_${personId}_${Date.now()}`}
-                    phoneNumber={phoneNumber}
-                    narration={`Unlock: ${person?.name || 'Personality'}`}
-                    onSuccess={() => {
-                      setStatus('pending');
-                      handleUnlock();
-                    }}
-                    onError={(error) => {
-                      setError(`Payment failed: ${error.message || 'Please try again'}`);
-                    }}
-                  />
-                )}
+                <button
+                  onClick={handleUnlock}
+                  disabled={status === 'pending' || !phoneNumber.trim()}
+                  className="w-full bg-[#00c97a] hover:bg-[#00b06a] disabled:bg-zinc-700 disabled:cursor-not-allowed text-white font-bold h-14 rounded-full text-base shadow-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  {status === 'pending' ? (
+                    <>
+                      <Loader2 className="animate-spin" size={20} />
+                      Sending STK Push...
+                    </>
+                  ) : (
+                    `Pay KES ${unlockPrice} via M-Pesa`
+                  )}
+                </button>
               </div>
             )}
           </div>

@@ -39,6 +39,100 @@ interface CoopBankCallback {
 // This is the single source of truth for response code mappings
 
 // ---------------------------------------------------------------------------
+// Chat Foreigners Callback Handler (separate from main MpesaTransaction flow)
+// ---------------------------------------------------------------------------
+async function handleChatForeignersCallback(
+  existingChatTxn: any,
+  callbackData: CoopBankCallback,
+  callbackReceivedAt: Date
+) {
+  const messageReference = callbackData.MessageReference;
+  const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
+
+  // Idempotency guard
+  if (
+    terminalStatuses.includes(existingChatTxn.status) &&
+    existingChatTxn.metadata?.callback_processed
+  ) {
+    console.log('[CoopCallback] Chat foreigners callback already processed — skipping duplicate');
+    return NextResponse.json({ success: true, message: 'Already processed' });
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const txn = await ChatForeignersMpesaTransaction.findOne({
+      checkout_request_id: messageReference,
+    }).session(session);
+
+    if (!txn) {
+      await session.abortTransaction();
+      session.endSession();
+      return NextResponse.json({ success: false, error: 'Transaction not found' }, { status: 404 });
+    }
+
+    const paymentStatus = CoopBankService.mapResponseCode(callbackData.ResponseCode);
+    const receiptNumber =
+      callbackData.ReceiptNumber || callbackData.OperatorTxnID || txn.merchant_request_id || null;
+
+    // Update transaction record
+    txn.status = paymentStatus;
+    txn.result_code = parseInt(callbackData.ResponseCode || '1', 10);
+    txn.result_desc = callbackData.ResponseDescription || callbackData.ResultDesc || '';
+    txn.callback_payload = callbackData;
+    txn.callback_received_at = callbackReceivedAt;
+    txn.metadata = {
+      ...(txn.metadata || {}),
+      callback_processed: true,
+      callback_processed_at: callbackReceivedAt.toISOString(),
+    };
+
+    if (paymentStatus === 'completed') {
+      txn.completed_at = new Date();
+      txn.mpesa_receipt_number = receiptNumber;
+      if (callbackData.PhoneNumber) {
+        txn.phone_number = callbackData.PhoneNumber;
+      }
+      txn.transaction_date = callbackData.TransactionDate;
+    } else if (['failed', 'cancelled', 'timeout'].includes(paymentStatus)) {
+      txn.failed_at = new Date();
+    }
+
+    await txn.save({ session });
+    await session.commitTransaction();
+    session.endSession();
+
+    // Fire background completion jobs after transaction is committed
+    if (paymentStatus === 'completed') {
+      if (txn.transaction_type === 'chat_foreigners_unlock') {
+        void completeBotUnlockPayment(txn._id.toString()).catch((err) =>
+          console.error('[CoopCallback] Background chat-foreigners unlock error:', err)
+        );
+      } else if (txn.transaction_type === 'chat_foreigners_deposit') {
+        void completeWalletDeposit(txn._id.toString()).catch((err) =>
+          console.error('[CoopCallback] Background chat-foreigners deposit error:', err)
+        );
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: { status: paymentStatus, messageReference },
+      message: 'Chat foreigners callback processed successfully',
+    });
+  } catch (error) {
+    await session.abortTransaction().catch(() => {});
+    session.endSession();
+    console.error('[CoopCallback] Chat foreigners callback error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to process chat foreigners callback' },
+      { status: 500 }
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/payments/coop-bank/callback
 // ---------------------------------------------------------------------------
 
@@ -60,19 +154,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing MessageReference' }, { status: 400 });
     }
 
-    // FIXED: Check idempotency BEFORE creating session (faster rejection of duplicates)
-    // Look up the transaction WITHOUT session first for quick duplicate detection
-    // Try both checkout_request_id and account_reference for robustness
-    const existingTransaction = await MpesaTransaction.findOne({
-      $or: [
-        { checkout_request_id: messageReference },
-        { account_reference: messageReference }
-      ]
-    }).lean();
+    // FIXED: Check BOTH MpesaTransaction and ChatForeignersMpesaTransaction collections
+    // Chat foreigners payments are in a separate collection and never touch MpesaTransaction
+    const [existingTransaction, existingChatTransaction] = await Promise.all([
+      MpesaTransaction.findOne({
+        $or: [
+          { checkout_request_id: messageReference },
+          { account_reference: messageReference }
+        ]
+      }).lean(),
+      ChatForeignersMpesaTransaction.findOne({
+        checkout_request_id: messageReference,
+      }).lean(),
+    ]);
 
-    if (!existingTransaction) {
-      console.error('[CoopCallback] Transaction not found for reference:', messageReference);
+    if (!existingTransaction && !existingChatTransaction) {
+      console.error('[CoopCallback] Transaction not found in either collection for reference:', messageReference);
       return NextResponse.json({ success: false, error: 'Transaction not found' }, { status: 404 });
+    }
+
+    // Route chat foreigners transactions to separate handler to avoid 404
+    if (!existingTransaction && existingChatTransaction) {
+      console.log('[CoopCallback] Routing to chat foreigners handler for reference:', messageReference);
+      return handleChatForeignersCallback(existingChatTransaction, callbackData, callbackReceivedAt);
     }
 
     // ── Idempotency guard ──────────────────────────────────────────────────
@@ -462,110 +566,6 @@ export async function POST(request: NextRequest) {
             message: 'Payment confirmed and user account activated.',
           });
         }
-      }
-    }
-
-    // ========================================================================
-    // CHAT FOREIGNERS BOT UNLOCK
-    // ========================================================================
-    const chatForeignersUnlock = await ChatForeignersMpesaTransaction.findOne({
-      checkout_request_id: messageReference,
-      transaction_type: 'chat_foreigners_unlock',
-    }).session(session);
-
-    if (chatForeignersUnlock) {
-      if (paymentStatus === 'completed') {
-        // Grant lifetime access immediately for chat-foreigners
-        // Set lifetimeAccessUnlocked = true for permanent chat access after KSH 100 payment
-        try {
-          await ChatForeignersBotAccess.findOneAndUpdate(
-            {
-              user_id: chatForeignersUnlock.user_id,
-              bot_id: chatForeignersUnlock.metadata?.bot_id,
-            },
-            {
-              lifetimeAccessUnlocked: true,
-              lifetimeAccessUnlockedAt: new Date(),
-            },
-            { session }
-          );
-
-          console.log('[CoopCallback] Lifetime access granted for chat-foreigners:', {
-            userId: chatForeignersUnlock.user_id,
-            botId: chatForeignersUnlock.metadata?.bot_id,
-            amount: chatForeignersUnlock.amount_cents / 100,
-          });
-        } catch (err) {
-          console.error('[CoopCallback] Error granting lifetime access:', err);
-        }
-
-        // Commit the main transaction first, then process the unlock in the background
-        // so the callback response is never delayed by the unlock work.
-        await session.commitTransaction();
-        session.endSession();
-        session = null;
-
-        void completeBotUnlockPayment(chatForeignersUnlock._id.toString()).catch(
-          (chatError) => {
-            console.error('[CoopCallback] Background chat-foreigners unlock error (can retry manually):', chatError);
-          }
-        );
-
-        return NextResponse.json({
-          success: true,
-          data: { status: paymentStatus, messageReference },
-          message: 'Lifetime chat access unlocked! Enjoy unlimited chatting.',
-        });
-      } else if (['failed', 'cancelled', 'timeout'].includes(paymentStatus)) {
-        // BUG FIX: Mark transaction as failed so it doesn't persist on 'processing'
-        chatForeignersUnlock.status = paymentStatus;
-        chatForeignersUnlock.failed_at = new Date();
-        await chatForeignersUnlock.save({ session });
-
-        console.log('[CoopCallback] Chat-foreigners unlock failed:', {
-          userId: chatForeignersUnlock.user_id,
-          status: paymentStatus,
-        });
-      }
-    }
-
-    // ========================================================================
-    // CHAT FOREIGNERS WALLET DEPOSIT
-    // ========================================================================
-    const chatForeignersDeposit = await ChatForeignersMpesaTransaction.findOne({
-      checkout_request_id: messageReference,
-      transaction_type: 'chat_foreigners_deposit',
-    }).session(session);
-
-    if (chatForeignersDeposit) {
-      if (paymentStatus === 'completed') {
-        // Commit the main transaction and run the wallet credit in the background
-        // to keep callback response times fast under high traffic.
-        await session.commitTransaction();
-        session.endSession();
-        session = null;
-
-        void completeWalletDeposit(chatForeignersDeposit._id.toString(), null).catch(
-          (chatDepositError) => {
-            console.error('[CoopCallback] Background chat-foreigners deposit error:', chatDepositError);
-          }
-        );
-
-        return NextResponse.json({
-          success: true,
-          data: { status: paymentStatus, messageReference },
-          message: 'Chat foreigners deposit confirmed. Processing in background.',
-        });
-      } else if (['failed', 'cancelled', 'timeout'].includes(paymentStatus)) {
-        // BUG FIX: Mark transaction as failed so it doesn't persist on 'processing'
-        chatForeignersDeposit.status = paymentStatus;
-        chatForeignersDeposit.failed_at = new Date();
-        await chatForeignersDeposit.save({ session });
-
-        console.log('[CoopCallback] Chat-foreigners deposit failed:', {
-          userId: chatForeignersDeposit.user_id,
-          status: paymentStatus,
-        });
       }
     }
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { X, CheckCircle2, AlertCircle, Phone } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { PaymentMethodSelector } from '@/app/components/PaymentMethodSelector';
+import { isValidPhoneNumber, formatPhoneNumber, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
 
 interface DepositModalProps {
   isOpen: boolean;
@@ -16,6 +17,18 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
   const [amount, setAmount] = useState('30');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // Real-time phone validation
+  const isPhoneValid = useMemo(() => {
+    if (!phoneNumber) return false;
+    return isValidPhoneNumber(phoneNumber);
+  }, [phoneNumber]);
+
+  const phoneValidationError = useMemo(() => {
+    if (!phoneNumber) return null;
+    if (isPhoneValid) return null;
+    return 'Invalid phone number. Use 07XXXXXXXX, 2547XXXXXXXX, +2547XXXXXXXX, or 791XXXXXXX';
+  }, [phoneNumber, isPhoneValid]);
 
   const handleDepositSuccess = () => {
     setSuccess(true);
@@ -63,19 +76,33 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
               <div className="relative">
-                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Phone className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
+                  phoneNumber && isPhoneValid ? 'text-green-500' : phoneNumber ? 'text-red-500' : 'text-gray-400'
+                }`} />
                 <input
                   type="tel"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="07XXXXXXXX"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  maxLength={12}
+                  placeholder="07XXXXXXXX, 2547XXXXXXXX, or 791XXXXXXX"
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                    phoneNumber && isPhoneValid
+                      ? 'border-green-300 focus:ring-green-500'
+                      : phoneNumber && !isPhoneValid
+                      ? 'border-red-300 focus:ring-red-500'
+                      : 'border-gray-300 focus:ring-blue-500'
+                  }`}
+                  maxLength={15}
                 />
               </div>
+              {phoneValidationError && (
+                <p className="text-xs text-red-600 mt-1.5">{phoneValidationError}</p>
+              )}
+              {phoneNumber && isPhoneValid && (
+                <p className="text-xs text-green-600 mt-1.5">Phone number valid ✓</p>
+              )}
             </div>
 
-            {phoneNumber && (
+            {phoneNumber && isPhoneValid && (
               <>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Amount (KES)</label>
@@ -88,15 +115,15 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                     min="30"
                     step="1"
                   />
-                  <p className="text-xs text-gray-600 mt-1">Minimum: KES 30</p>
+                  <p className="text-xs text-gray-600 mt-1">Minimum: KES 30 | Maximum: KES 70,000</p>
                 </div>
 
-                {amount && parseFloat(amount) >= 30 && (
+                {amount && parseFloat(amount) >= 30 && parseFloat(amount) <= 70000 && (
                   <PaymentMethodSelector
                     amount={parseFloat(amount) || 30}
                     customAmountCents={Math.round(parseFloat(amount) * 100) || 3000}
                     reference={`CHAT_DEPOSIT_${Date.now()}`}
-                    phoneNumber={phoneNumber}
+                    phoneNumber={getMpesaPhoneFormat(formatPhoneNumber(phoneNumber))}
                     narration="Chat Wallet Deposit"
                     onSuccess={() => {
                       setError('');
