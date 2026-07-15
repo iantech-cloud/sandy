@@ -173,14 +173,14 @@ export default function GamingPage() {
                     </div>
                   </div>
 
-                  {/* Play Button */}
-                  <Link
-                    href={game.route}
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-lg hover:shadow-purple-500/50"
+                  {/* Play Button - Disabled */}
+                  <button
+                    disabled={true}
+                    className="w-full bg-gray-600 text-gray-400 font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-300 cursor-not-allowed opacity-60"
                   >
                     <Play size={16} />
                     Play Now
-                  </Link>
+                  </button>
                 </div>
               </div>
             );

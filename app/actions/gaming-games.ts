@@ -115,20 +115,24 @@ export async function depositToGamingWallet(amount_cents: number, method: string
       description: `Deposit via ${method}`,
     });
 
-    // Update wallet
-    wallet.balance_cents += amount_cents;
-    wallet.total_deposited_cents += amount_cents;
-    wallet.last_transaction_at = new Date();
-
-    await transaction.save();
-    await wallet.save();
+    // Update wallet using findByIdAndUpdate
+    const finalBalance = balanceBefore + amount_cents;
+    
+    await Promise.all([
+      transaction.save(),
+      GamingWallet.findByIdAndUpdate(wallet._id, {
+        balance_cents: finalBalance,
+        total_deposited_cents: (wallet.total_deposited_cents || 0) + amount_cents,
+        last_transaction_at: new Date(),
+      }, { new: true })
+    ]);
     
     // Invalidate wallet cache
     invalidateCache('wallet');
 
     return {
       success: true,
-      wallet: { balance_cents: wallet.balance_cents },
+      wallet: { balance_cents: finalBalance },
       transaction: {
         id: transaction._id.toString(),
         type: 'deposit',
@@ -197,42 +201,43 @@ export async function playCrash(betAmount: number, cashOutMultiplier?: number): 
       balance_after_cents: balanceBefore - betAmount,
     });
 
-    // Deduct bet from wallet
-    wallet.balance_cents -= betAmount;
-    wallet.total_wagered_cents += betAmount;
-    wallet.total_lost_cents += betAmount;
-    wallet.last_transaction_at = new Date();
-
     // Create transaction
     const transaction = new GamingTransaction({
       user_id: profile._id.toString(),
       type: 'game_loss',
       amount_cents: betAmount,
       balance_before_cents: balanceBefore,
-      balance_after_cents: wallet.balance_cents,
+      balance_after_cents: balanceBefore - betAmount,
       game_result_id: gameResult._id,
       description: 'Crash game - Loss',
     });
 
-    // Batch save all operations
+    // Batch save all operations with findByIdAndUpdate for wallet
     await Promise.all([
       gameResult.save(),
       transaction.save(),
-      wallet.save()
+      GamingWallet.findByIdAndUpdate(wallet._id, {
+        balance_cents: balanceBefore - betAmount,
+        total_wagered_cents: (wallet.total_wagered_cents || 0) + betAmount,
+        total_lost_cents: (wallet.total_lost_cents || 0) + betAmount,
+        last_transaction_at: new Date(),
+      }, { new: true })
     ]);
     
     // Clear cache after wallet update
     invalidateCache('wallet');
 
+    const finalBalance = balanceBefore - betAmount;
+
     return {
       success: true,
-      wallet: { balance_cents: wallet.balance_cents },
+      wallet: { balance_cents: finalBalance },
       game: {
         gameType: 'crash',
         betAmount,
         result: 'loss',
         balanceBefore,
-        balanceAfter: wallet.balance_cents,
+        balanceAfter: finalBalance,
         gameData,
       },
     };
@@ -298,35 +303,40 @@ export async function playMines(betAmount: number, mineCount: number, revealedTi
       balance_after_cents: balanceBefore - betAmount,
     });
 
-    // Deduct bet
-    wallet.balance_cents -= betAmount;
-    wallet.total_wagered_cents += betAmount;
-    wallet.total_lost_cents += betAmount;
-    wallet.last_transaction_at = new Date();
+    const finalBalance = balanceBefore - betAmount;
 
     const transaction = new GamingTransaction({
       user_id: profile._id,
       type: 'game_loss',
       amount_cents: betAmount,
       balance_before_cents: balanceBefore,
-      balance_after_cents: wallet.balance_cents,
+      balance_after_cents: finalBalance,
       game_result_id: gameResult._id,
       description: 'Mines game - Loss',
     });
 
-    await gameResult.save();
-    await transaction.save();
-    await wallet.save();
+    await Promise.all([
+      gameResult.save(),
+      transaction.save(),
+      GamingWallet.findByIdAndUpdate(wallet._id, {
+        balance_cents: finalBalance,
+        total_wagered_cents: (wallet.total_wagered_cents || 0) + betAmount,
+        total_lost_cents: (wallet.total_lost_cents || 0) + betAmount,
+        last_transaction_at: new Date(),
+      }, { new: true })
+    ]);
+    
+    invalidateCache('wallet');
 
     return {
       success: true,
-      wallet: { balance_cents: wallet.balance_cents },
+      wallet: { balance_cents: finalBalance },
       game: {
         gameType: 'mines',
         betAmount,
         result: 'loss',
         balanceBefore,
-        balanceAfter: wallet.balance_cents,
+        balanceAfter: finalBalance,
         gameData,
       },
     };
@@ -392,34 +402,40 @@ export async function playPlinko(betAmount: number): Promise<GamePlayResult> {
 
     // Deduct net loss
     const netLoss = betAmount - winnings;
-    wallet.balance_cents -= netLoss;
-    wallet.total_wagered_cents += betAmount;
-    wallet.total_lost_cents += netLoss;
-    wallet.last_transaction_at = new Date();
+    const finalBalance = balanceBefore - netLoss;
 
     const transaction = new GamingTransaction({
       user_id: profile._id,
       type: 'game_loss',
       amount_cents: netLoss,
       balance_before_cents: balanceBefore,
-      balance_after_cents: wallet.balance_cents,
+      balance_after_cents: finalBalance,
       game_result_id: gameResult._id,
       description: `Plinko game - Loss (${multiplier}x)`,
     });
 
-    await gameResult.save();
-    await transaction.save();
-    await wallet.save();
+    await Promise.all([
+      gameResult.save(),
+      transaction.save(),
+      GamingWallet.findByIdAndUpdate(wallet._id, {
+        balance_cents: finalBalance,
+        total_wagered_cents: (wallet.total_wagered_cents || 0) + betAmount,
+        total_lost_cents: (wallet.total_lost_cents || 0) + netLoss,
+        last_transaction_at: new Date(),
+      }, { new: true })
+    ]);
+    
+    invalidateCache('wallet');
 
     return {
       success: true,
-      wallet: { balance_cents: wallet.balance_cents },
+      wallet: { balance_cents: finalBalance },
       game: {
         gameType: 'plinko',
         betAmount,
         result: 'loss',
         balanceBefore,
-        balanceAfter: wallet.balance_cents,
+        balanceAfter: finalBalance,
         gameData,
       },
     };
@@ -482,35 +498,40 @@ export async function playHiLo(betAmount: number, predictions: { prediction: 'hi
       balance_after_cents: balanceBefore - betAmount,
     });
 
-    // Deduct bet
-    wallet.balance_cents -= betAmount;
-    wallet.total_wagered_cents += betAmount;
-    wallet.total_lost_cents += betAmount;
-    wallet.last_transaction_at = new Date();
+    const finalBalance = balanceBefore - betAmount;
 
     const transaction = new GamingTransaction({
       user_id: profile._id,
       type: 'game_loss',
       amount_cents: betAmount,
       balance_before_cents: balanceBefore,
-      balance_after_cents: wallet.balance_cents,
+      balance_after_cents: finalBalance,
       game_result_id: gameResult._id,
       description: `Hi-Lo game - Loss (${correctPredictions}/${predictions.length} correct)`,
     });
 
-    await gameResult.save();
-    await transaction.save();
-    await wallet.save();
+    await Promise.all([
+      gameResult.save(),
+      transaction.save(),
+      GamingWallet.findByIdAndUpdate(wallet._id, {
+        balance_cents: finalBalance,
+        total_wagered_cents: (wallet.total_wagered_cents || 0) + betAmount,
+        total_lost_cents: (wallet.total_lost_cents || 0) + betAmount,
+        last_transaction_at: new Date(),
+      }, { new: true })
+    ]);
+    
+    invalidateCache('wallet');
 
     return {
       success: true,
-      wallet: { balance_cents: wallet.balance_cents },
+      wallet: { balance_cents: finalBalance },
       game: {
         gameType: 'hi-lo',
         betAmount,
         result: 'loss',
         balanceBefore,
-        balanceAfter: wallet.balance_cents,
+        balanceAfter: finalBalance,
         gameData,
       },
     };
@@ -579,35 +600,40 @@ export async function playDice(betAmount: number, choice: 'over' | 'under', targ
       balance_after_cents: balanceBefore - betAmount,
     });
 
-    // Deduct bet
-    wallet.balance_cents -= betAmount;
-    wallet.total_wagered_cents += betAmount;
-    wallet.total_lost_cents += betAmount;
-    wallet.last_transaction_at = new Date();
+    const finalBalance = balanceBefore - betAmount;
 
     const transaction = new GamingTransaction({
       user_id: profile._id,
       type: 'game_loss',
       amount_cents: betAmount,
       balance_before_cents: balanceBefore,
-      balance_after_cents: wallet.balance_cents,
+      balance_after_cents: finalBalance,
       game_result_id: gameResult._id,
       description: `Dice game - Rolled ${roll}, lost`,
     });
 
-    await gameResult.save();
-    await transaction.save();
-    await wallet.save();
+    await Promise.all([
+      gameResult.save(),
+      transaction.save(),
+      GamingWallet.findByIdAndUpdate(wallet._id, {
+        balance_cents: finalBalance,
+        total_wagered_cents: (wallet.total_wagered_cents || 0) + betAmount,
+        total_lost_cents: (wallet.total_lost_cents || 0) + betAmount,
+        last_transaction_at: new Date(),
+      }, { new: true })
+    ]);
+    
+    invalidateCache('wallet');
 
     return {
       success: true,
-      wallet: { balance_cents: wallet.balance_cents },
+      wallet: { balance_cents: finalBalance },
       game: {
         gameType: 'dice',
         betAmount,
         result: 'loss',
         balanceBefore,
-        balanceAfter: wallet.balance_cents,
+        balanceAfter: finalBalance,
         gameData,
       },
     };
