@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
-import { X, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, Loader2, AlertCircle, CheckCircle, Phone } from 'lucide-react';
 import { depositToGamingWallet } from '@/app/actions/gaming-games';
 
 interface GamingDepositModalProps {
@@ -13,10 +13,32 @@ interface GamingDepositModalProps {
 export default function GamingDepositModal({ onClose, onSuccess }: GamingDepositModalProps) {
   const { data: session } = useSession();
   const [amount, setAmount] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [messageRef, setMessageRef] = useState<string | null>(null);
+
+  // Format and validate phone number
+  const formatPhoneNumber = (value: string) => {
+    let cleaned = value.replace(/\D/g, '');
+    
+    // If starts with 254, keep it; if starts with 7, prepend 254; otherwise reject or prepend 254
+    if (cleaned.startsWith('254')) {
+      return cleaned;
+    } else if (cleaned.startsWith('7')) {
+      return '254' + cleaned;
+    } else {
+      return '254' + cleaned;
+    }
+  };
+
+  const isPhoneValid = useMemo(() => {
+    if (!phoneNumber) return false;
+    const formatted = formatPhoneNumber(phoneNumber);
+    // Must be 254 followed by 9 digits (Kenyan format)
+    return /^254\d{9}$/.test(formatted);
+  }, [phoneNumber]);
 
   const presetAmounts = [100, 500, 1000, 2000, 5000, 10000];
 
@@ -49,9 +71,28 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
       return;
     }
 
+    if (!isPhoneValid) {
+      setError('Please enter a valid Kenyan phone number');
+      return;
+    }
+
     try {
       setLoading(true);
-      const result = await depositToGamingWallet(numAmount * 100, 'coop_bank'); // Convert to cents
+      const formattedPhone = formatPhoneNumber(phoneNumber);
+      
+      // Call the STK push API directly for gaming wallet
+      const response = await fetch('/api/payments/coop-bank/stk-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: numAmount,
+          phoneNumber: formattedPhone,
+          narration: 'Deposit to Gaming Wallet',
+          depositType: 'gaming', // Gaming-specific deposit type
+        }),
+      });
+
+      const result = await response.json();
 
       if (result.success && result.data?.messageReference) {
         setMessageRef(result.data.messageReference);
@@ -62,7 +103,7 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
           onClose();
         }, 2000);
       } else {
-        setError(result.message || 'Failed to initiate deposit');
+        setError(result.error || 'Failed to initiate deposit');
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
@@ -115,6 +156,35 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
               <p className="text-red-300 text-sm">{error}</p>
             </div>
           )}
+
+          {/* Phone Number Input */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-300 mb-3">
+              Phone Number (STK Push)
+            </label>
+            <div className="relative">
+              <Phone size={18} className="absolute left-4 top-3.5 text-gray-500" />
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="07XXXXXXXX or 2547XXXXXXXX"
+                className={`w-full pl-12 pr-4 py-3 bg-slate-800 border rounded-lg text-white placeholder-gray-500 focus:outline-none font-semibold transition-colors ${
+                  phoneNumber && !isPhoneValid
+                    ? 'border-red-500/50 focus:border-red-500'
+                    : 'border-purple-500/30 focus:border-purple-500'
+                }`}
+                disabled={loading}
+              />
+            </div>
+            <p className={`text-xs mt-2 ${
+              phoneNumber && !isPhoneValid ? 'text-red-400' : 'text-gray-400'
+            }`}>
+              {phoneNumber && !isPhoneValid
+                ? 'Invalid phone number. Use Kenyan format.'
+                : 'Enter your Kenyan phone number'}
+            </p>
+          </div>
 
           {/* Amount Input */}
           <div>
@@ -171,9 +241,9 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
           {/* Deposit Button */}
           <button
             onClick={handleDeposit}
-            disabled={loading || !amount}
+            disabled={loading || !amount || !isPhoneValid}
             className={`w-full py-3 px-4 rounded-lg font-bold flex items-center justify-center gap-2 transition-all ${
-              loading || !amount
+              loading || !amount || !isPhoneValid
                 ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white hover:shadow-lg hover:shadow-purple-500/50'
             }`}

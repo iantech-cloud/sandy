@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Wallet, Play, RotateCcw, Volume2, VolumeX, Loader } from 'lucide-react';
+import { ArrowLeft, Wallet, Play, RotateCcw, Volume2, VolumeX, Loader, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { playCrash, getGamingWallet } from '@/app/actions/gaming-games';
 
@@ -30,7 +30,11 @@ export default function CrashGame() {
   const [gameHistory, setGameHistory] = useState<{ multiplier: number; result: 'loss'; amount: number; timestamp: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const gameLoopRef = useRef<any>(null);
+
+  const MIN_BET = 3000; // 30 KES in cents
+  const MAX_BET = 500000000; // 5,000,000 KES in cents
 
   // Load wallet on mount
   useEffect(() => {
@@ -132,12 +136,20 @@ export default function CrashGame() {
   };
 
   const startGame = async () => {
-    if (bet > balance) {
-      alert('Insufficient balance');
+    setError(null);
+
+    if (bet < MIN_BET) {
+      setError(`Minimum bet is KES ${MIN_BET / 100}`);
       return;
     }
-    if (bet < 3000) {
-      alert('Minimum bet is KES 30');
+
+    if (bet > MAX_BET) {
+      setError(`Maximum bet is KES ${MAX_BET / 100}`);
+      return;
+    }
+
+    if (bet > balance) {
+      setError(`Insufficient balance. You need KES ${(bet - balance) / 100} more`);
       return;
     }
 
@@ -170,7 +182,7 @@ export default function CrashGame() {
         ]);
         playSound('loss');
       } else {
-        alert(result.error);
+        setError(result.error || 'Game failed');
       }
     } finally {
       setLoading(false);
@@ -208,6 +220,16 @@ export default function CrashGame() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Game Area */}
           <div className="lg:col-span-2">
+            {/* Error Alert */}
+            {error && (
+              <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="text-red-400 flex-shrink-0 mt-0.5" size={20} />
+                <div>
+                  <p className="text-red-400 font-semibold text-sm">{error}</p>
+                </div>
+              </div>
+            )}
+
             <div className="bg-slate-800/50 border border-purple-500/30 rounded-xl p-6 mb-6">
               <h2 className="text-2xl font-bold text-white mb-4">Crash Game</h2>
 
