@@ -8,6 +8,7 @@ import { ThemeProvider } from './providers/ThemeProvider';
 import Script from 'next/script';
 import { auth } from '@/auth';
 import { Analytics } from "@vercel/analytics/next"
+import { warmupDatabaseConnection } from './lib/db-warmup';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://hustlehubafrica.com'),
@@ -123,6 +124,11 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Warm up database connection in background (no await to avoid blocking)
+  warmupDatabaseConnection().catch(err => 
+    console.error('[v0] Failed to warm up database:', err instanceof Error ? err.message : 'Unknown')
+  );
+
   const session = await auth();
 
   const contextValue = {

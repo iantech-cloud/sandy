@@ -76,16 +76,18 @@ export async function connectToDatabase(): Promise<Connection> {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 15000, // Faster timeout (15s)
-      socketTimeoutMS: 20000, // Socket timeout (20s)
-      maxPoolSize: 5, // Reduced pool size to reduce connections
+      serverSelectionTimeoutMS: 5000, // Fast selection (5s)
+      socketTimeoutMS: 10000, // Quick socket timeout (10s)
+      maxPoolSize: 3, // Minimal pool to reduce overhead
       minPoolSize: 1,
-      maxIdleTimeMS: 10000, // Close idle connections faster
-      connectTimeoutMS: 15000,
+      maxIdleTimeMS: 5000, // Close idle connections immediately
+      connectTimeoutMS: 5000, // Fast connect timeout (5s)
       family: 4, // Use IPv4 only
       retryWrites: true,
       retryReads: true,
-      waitQueueTimeoutMS: 10000, // Fail fast if queue is full
+      waitQueueTimeoutMS: 5000, // Fail fast if queue is full
+      authSource: 'admin',
+      appName: 'sandy-app',
     };
 
     console.log('🔗 Attempting to connect to MongoDB...');
