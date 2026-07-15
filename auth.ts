@@ -208,24 +208,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Determine userId for database lookup
         let userId = user?.id || token.userId || token.sub || token.id;
         
-        // CRITICAL FIX: Always fetch fresh user data from database to catch activation changes
-        // This ensures JWT stays in sync with database after payment updates
+        // Fetch fresh user data from database with timeout
         if (userId) {
           try {
-            await connectToDatabase();
-            
-            const profile = await Profile.findOne({ _id: userId });
+            // Use Promise.race to enforce a timeout on database operations
+            const dbPromise = (async () => {
+              await connectToDatabase();
+              return await Profile.findOne({ _id: userId }).lean();
+            })();
+
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Database query timeout')), 8000)
+            );
+
+            const profile = await Promise.race([dbPromise, timeoutPromise]);
             
             if (profile) {
               const dashboardRoute = getDashboardRoute(profile.role);
-              
-              console.log('[v0] JWT callback refreshing user data:', {
-                userId: profile._id.toString(),
-                is_active: profile.is_active,
-                approval_status: profile.approval_status,
-                rank: profile.rank,
-                activation_paid_at: profile.activation_paid_at ? 'yes' : 'no'
-              });
 
               return {
                 ...token,
@@ -251,7 +250,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               };
             }
           } catch (dbError) {
-            console.error('[v0] JWT callback database error:', dbError);
+            console.error('[v0] JWT callback database error:', dbError instanceof Error ? dbError.message : 'Unknown');
             // Fall back to existing token if database fails
             return token;
           }
