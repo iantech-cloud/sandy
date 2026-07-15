@@ -4,8 +4,7 @@ A comprehensive platform connecting users with various earning opportunities inc
 
 ## Quick Links
 
-- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Complete deployment and operations guide
-- **[TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md)** - Technical architecture and implementation details
+- **[GAMING_BACKEND_COMPLETE.md](./GAMING_BACKEND_COMPLETE.md)** - Gaming system architecture and API reference
 
 ## Features
 
@@ -113,7 +112,7 @@ AI_GATEWAY_API_KEY=your-key-if-using-ai
 BLOB_READ_WRITE_TOKEN=your-blob-token
 ```
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete configuration guide.
+See [GAMING_BACKEND_COMPLETE.md](./GAMING_BACKEND_COMPLETE.md) for gaming system details.
 
 ## PM2 Management
 
@@ -152,7 +151,7 @@ The application uses Co-op Bank's M-Pesa API for deposits and withdrawals.
 3. Co-op Bank confirms → Dashboard updated
 4. Status tracked in real-time
 
-See [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md#payment-system-architecture) for detailed architecture.
+See [GAMING_BACKEND_COMPLETE.md](./GAMING_BACKEND_COMPLETE.md) for detailed architecture.
 
 ## Monitoring
 
@@ -197,7 +196,7 @@ pm2 monit
 2. Check for memory leaks in logs
 3. Monitor with: `pm2 monit`
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md#troubleshooting) for detailed troubleshooting.
+Check application logs with `pm2 logs sandy-app` for more details.
 
 ## Project Structure
 
@@ -213,9 +212,8 @@ sandy/
 │   └── deploy.sh        # Main deployment script (pulls from GitHub + builds)
 ├── public/              # Static assets
 ├── ecosystem.config.js  # PM2 configuration
-├── DEPLOYMENT.md        # Deployment & operations guide
-├── TECHNICAL_REFERENCE.md # Technical architecture guide
-└── README.md            # This file
+├── GAMING_BACKEND_COMPLETE.md # Gaming system reference
+└── README.md                   # This file
 ```
 
 ## Development Workflow
@@ -249,7 +247,7 @@ sandy/
 
 For issues or questions:
 1. Check logs: `pm2 logs sandy-app --err`
-2. Review [DEPLOYMENT.md](./DEPLOYMENT.md) and [TECHNICAL_REFERENCE.md](./TECHNICAL_REFERENCE.md)
+2. Review [GAMING_BACKEND_COMPLETE.md](./GAMING_BACKEND_COMPLETE.md) for gaming details
 3. Contact DevOps team
 
 ## License
