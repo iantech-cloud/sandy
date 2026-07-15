@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { X, Loader2, AlertCircle, CheckCircle, Phone } from 'lucide-react';
 import { depositToGamingWallet } from '@/app/actions/gaming-games';
@@ -12,6 +13,7 @@ interface GamingDepositModalProps {
 
 export default function GamingDepositModal({ onClose, onSuccess }: GamingDepositModalProps) {
   const { data: session } = useSession();
+  const router = useRouter();
   const [amount, setAmount] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
@@ -102,11 +104,16 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
       if (result.success && result.data?.messageReference) {
         setMessageRef(result.data.messageReference);
         setSuccess(true);
-        // Auto-close after 2 seconds
+        // Redirect to waiting page after 1.5 seconds
         setTimeout(() => {
-          onSuccess();
+          const params = new URLSearchParams({
+            messageReference: result.data.messageReference,
+            amount: numAmount.toString(),
+            phoneNumber: formattedPhone,
+          });
+          router.push(`/dashboard/gaming/mpesa-waiting?${params.toString()}`);
           onClose();
-        }, 2000);
+        }, 1500);
       } else {
         setError(result.error || 'Failed to initiate deposit');
       }
