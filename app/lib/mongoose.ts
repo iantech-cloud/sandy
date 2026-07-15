@@ -76,18 +76,19 @@ export async function connectToDatabase(): Promise<Connection> {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 5000, // Fast selection (5s)
-      socketTimeoutMS: 10000, // Quick socket timeout (10s)
-      maxPoolSize: 3, // Minimal pool to reduce overhead
-      minPoolSize: 1,
-      maxIdleTimeMS: 5000, // Close idle connections immediately
-      connectTimeoutMS: 5000, // Fast connect timeout (5s)
+      serverSelectionTimeoutMS: 10000, // Server selection (10s)
+      socketTimeoutMS: 45000, // Socket timeout (45s)
+      maxPoolSize: 10, // Increased pool size for better concurrency
+      minPoolSize: 2, // Keep minimum connections alive
+      maxIdleTimeMS: 30000, // Keep idle connections for 30s
+      connectTimeoutMS: 10000, // Connect timeout (10s)
       family: 4, // Use IPv4 only
       retryWrites: true,
       retryReads: true,
-      waitQueueTimeoutMS: 5000, // Fail fast if queue is full
+      waitQueueTimeoutMS: 15000, // Wait up to 15s for connection from pool
       authSource: 'admin',
       appName: 'sandy-app',
+      heartbeatFrequencyMS: 10000, // Check connection health every 10s
     };
 
     console.log('🔗 Attempting to connect to MongoDB...');
@@ -131,7 +132,14 @@ export async function connectToDatabase(): Promise<Connection> {
     if (cached.conn.readyState !== 1) {
       console.warn('⚠️ MongoDB connection state:', cached.conn.readyState);
       // Wait a bit for the connection to stabilize
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // If still not ready after waiting, reset and retry once
+      if (cached.conn.readyState !== 1) {
+        console.warn('⚠️ Connection still not ready after wait, clearing cache for retry');
+        cached.conn = null;
+        cached.promise = null;
+      }
     }
   } catch (e) {
     cached.promise = null;
@@ -140,6 +148,11 @@ export async function connectToDatabase(): Promise<Connection> {
     throw new Error(
       `Failed to connect to MongoDB: ${e instanceof Error ? e.message : "Unknown error"}`,
     );
+  }
+
+  if (!cached.conn) {
+    console.error('❌ Connection is null after all retries');
+    throw new Error('MongoDB connection failed: Connection pool exhausted. Please try again.');
   }
 
   return cached.conn as Connection;
