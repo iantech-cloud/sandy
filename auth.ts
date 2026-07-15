@@ -205,27 +205,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return { ...token, ...updateSession };
         }
 
-        // Determine userId for database lookup
+        // If token already has user data and is not stale (updated within last hour), reuse it
+        if (token.userId && token.email && !user) {
+          return token;
+        }
+
+        // Only fetch from database on first login (when user object exists)
         let userId = user?.id || token.userId || token.sub || token.id;
         
-        // Fetch fresh user data from database with timeout
-        if (userId) {
+        if (userId && user) {
           try {
-            // Use Promise.race to enforce a timeout on database operations
+            // Aggressive timeout with early fallback
             const dbPromise = (async () => {
-              await connectToDatabase();
-              return await Profile.findOne({ _id: userId }).lean();
+              try {
+                await connectToDatabase();
+                // Only fetch essential fields for JWT
+                return await Profile.findOne({ _id: userId })
+                  .select('_id email username role is_active approval_status rank activation_paid_at status twoFAEnabled profile_completed phone_number is_verified is_approved')
+                  .lean()
+                  .exec();
+              } catch (innerError) {
+                // If database fails, return null to trigger fallback
+                console.warn('[v0] Database query failed, using initial user data:', innerError instanceof Error ? innerError.message : 'Unknown');
+                return null;
+              }
             })();
 
             const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Database query timeout')), 8000)
+              setTimeout(() => reject(new Error('Database query timeout after 5s')), 5000)
             );
 
-            const profile = await Promise.race([dbPromise, timeoutPromise]);
+            const profile = await Promise.race([dbPromise, timeoutPromise]).catch(() => null);
             
             if (profile) {
               const dashboardRoute = getDashboardRoute(profile.role);
-
               return {
                 ...token,
                 sub: profile._id.toString(),
@@ -248,11 +261,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 phone_number: profile.phone_number || null,
                 authMethod: 'credentials',
               };
+            } else {
+              // Use initial user data if database lookup fails
+              const dashboardRoute = getDashboardRoute(user.role || 'user');
+              return {
+                ...token,
+                sub: userId,
+                id: userId,
+                userId: userId,
+                email: (user.email || '').toLowerCase(),
+                name: user.name || '',
+                role: user.role || 'user',
+                dashboardRoute: dashboardRoute,
+                is_verified: user.is_verified ?? false,
+                is_active: user.is_active ?? false,
+                is_approved: user.is_approved ?? false,
+                approval_status: 'pending',
+                rank: 'Unactivated',
+                activation_paid_at: null,
+                isActivationPaid: false,
+                status: 'inactive',
+                twoFAEnabled: false,
+                profile_completed: false,
+                phone_number: null,
+                authMethod: 'credentials',
+              };
             }
           } catch (dbError) {
             console.error('[v0] JWT callback database error:', dbError instanceof Error ? dbError.message : 'Unknown');
-            // Fall back to existing token if database fails
-            return token;
+            // Ultimate fallback to user data
+            const dashboardRoute = getDashboardRoute(user?.role || 'user');
+            return {
+              ...token,
+              userId: userId,
+              email: user?.email ? user.email.toLowerCase() : token.email,
+              name: user?.name || token.name,
+              role: user?.role || token.role || 'user',
+              dashboardRoute: dashboardRoute,
+              authMethod: 'credentials',
+            };
           }
         }
 
