@@ -89,7 +89,7 @@ export default function ChatWalletMpesaWaitingPage() {
         }
       }
     } catch (error) {
-      console.error('Error polling payment status:', error);
+      // Silently handle poll errors to reduce console noise
     }
   }, [messageReference, amount, isPolling]);
 
@@ -111,12 +111,12 @@ export default function ChatWalletMpesaWaitingPage() {
     return () => clearTimeout(timer);
   }, [timeLeft, paymentStatus.status, isPolling]);
 
-  // Polling interval
-  useEffect(() => {
-    if (!isPolling || paymentStatus.status !== 'processing') return;
-    const interval = setInterval(pollPaymentStatus, 4000);
-    return () => clearInterval(interval);
-  }, [isPolling, paymentStatus.status, pollPaymentStatus]);
+    // Polling interval - optimized to 2s for faster response
+    useEffect(() => {
+      if (!isPolling || paymentStatus.status !== 'processing') return;
+      const interval = setInterval(pollPaymentStatus, 2000);
+      return () => clearInterval(interval);
+    }, [isPolling, paymentStatus.status, pollPaymentStatus]);
 
   // Initial poll
   useEffect(() => {

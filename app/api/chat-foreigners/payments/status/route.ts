@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
           { checkout_request_id: messageReference },
           { account_reference: messageReference }
         ]
-      });
+      }).lean();
 
       if (!mpesaTxn) {
         return NextResponse.json({ success: false, error: 'Transaction not found' }, { status: 404 });
@@ -63,18 +63,32 @@ export async function GET(request: NextRequest) {
       }
 
       // Query Co-op Bank Enquiry API — same as activation status route
+      // Optimization: Skip API calls if checked recently to reduce load
+      const lastCheck = mpesaTxn.metadata?.last_api_check ? new Date(mpesaTxn.metadata.last_api_check) : null;
+      const timeSinceLastCheck = lastCheck ? (Date.now() - lastCheck.getTime()) / 1000 : Infinity;
+      const shouldSkipApiCall = timeSinceLastCheck < 10; // Skip if checked in last 10 seconds
+
       try {
+        let statusResponse;
+        
+        if (shouldSkipApiCall && mpesaTxn.status === 'pending') {
+          // Return cached pending status to reduce API load
+          return NextResponse.json({
+            success: true,
+            data: {
+              messageReference,
+              status: 'pending',
+              amount: mpesaTxn.amount_cents / 100,
+              source: 'database_cached',
+            },
+          });
+        }
+
         const coopBank = createCoopBankService();
-        const statusResponse = await coopBank.getTransactionStatus(messageReference);
+        statusResponse = await coopBank.getTransactionStatus(messageReference);
         const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
 
-        console.log('[CF Status] API response:', {
-          messageReference,
-          responseCode: statusResponse.ResponseCode,
-          mappedStatus,
-        });
-
-        // Persist terminal status
+        // Persist terminal status and record API check timestamp
         if (terminalStatuses.includes(mappedStatus)) {
           const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
           await ChatForeignersMpesaTransaction.findByIdAndUpdate(mpesaTxn._id, {
@@ -82,6 +96,7 @@ export async function GET(request: NextRequest) {
             result_code: isNaN(resultCode) ? 1 : resultCode,
             result_desc: statusResponse.ResponseDescription || '',
             ...(mappedStatus === 'completed' ? { completed_at: new Date() } : { failed_at: new Date() }),
+            'metadata.last_api_check': new Date(),
           });
 
           // If completed and unlock not yet recorded, complete it now (callback-miss recovery)

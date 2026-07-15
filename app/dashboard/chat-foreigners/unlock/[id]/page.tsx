@@ -35,9 +35,9 @@ interface Person {
 
 type UnlockStatus = 'idle' | 'pending' | 'polling' | 'success' | 'failed' | 'cancelled' | 'timeout';
 
-// Polling constants — identical to the activation waiting page
-const POLLING_INTERVAL = 4000;   // 4 s
-const MAX_POLLING_ATTEMPTS = 60; // 60 × 4 s = 240 s (~4 min)
+// Polling constants — optimized for performance
+const POLLING_INTERVAL = 2000;   // 2 s - quick initial checks
+const MAX_POLLING_ATTEMPTS = 120; // 120 × 2 s = 240 s (~4 min)
 
 const CATEGORY_LABELS: Record<string, string> = {
   relationship_coach: 'Relationships',
@@ -209,7 +209,7 @@ export default function UnlockPage() {
         }
       }
     } catch (err) {
-      console.error('[v0] Poll error:', err);
+      // Silently handle poll errors to reduce console noise
     }
   }, [messageReference, personId, router, pollCount]);
 
