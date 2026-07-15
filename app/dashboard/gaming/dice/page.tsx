@@ -402,7 +402,8 @@ export default function DiceGame() {
                   {gameState === 'setup' && (
                     <button
                       onClick={rollDice}
-                      disabled={loading}
+                      disabled={loading || balance < MIN_BET}
+                      title={balance < MIN_BET ? `Minimum KES ${MIN_BET / 100} required to play` : ''}
                       className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 rounded-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                     >
                       <Zap size={20} />
