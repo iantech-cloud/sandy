@@ -3,6 +3,8 @@
 import { connectToDatabase } from '@/app/lib/mongoose';
 import { GamingWallet, GameResult, GamingTransaction, Profile } from '@/app/lib/models';
 import { auth } from '@/auth';
+import { findGamingWalletOptimized, findGameHistoryOptimized, getGamingStatsOptimized } from '@/app/lib/db-queries';
+import { invalidateCache } from '@/app/lib/db-cache';
 
 interface GamePlayResult {
   success: boolean;
@@ -44,26 +46,27 @@ export async function getGamingWallet() {
       return { success: false, error: 'Unauthorized' };
     }
 
-    // Find profile by email
-    const profile = await Profile.findOne({ email: session.user.email });
+    // Find profile by email (lean for speed)
+    const profile = await Profile.findOne({ email: session.user.email }).lean();
     if (!profile) {
       return { success: false, error: 'User profile not found' };
     }
 
-    // Get or create wallet
-    let wallet = await GamingWallet.findOne({ user_id: profile._id });
+    // Get or create wallet using optimized query
+    let wallet = await findGamingWalletOptimized(profile._id.toString());
     if (!wallet) {
-      wallet = new GamingWallet({ user_id: profile._id, balance_cents: 0 });
+      wallet = new GamingWallet({ user_id: profile._id.toString(), balance_cents: 0 });
       await wallet.save();
+      invalidateCache('wallet'); // Clear wallet cache
     }
 
     return {
       success: true,
       wallet: {
-        balance_cents: wallet.balance_cents,
-        total_deposited_cents: wallet.total_deposited_cents,
-        total_wagered_cents: wallet.total_wagered_cents,
-        total_lost_cents: wallet.total_lost_cents,
+        balance_cents: wallet.balance_cents || 0,
+        total_deposited_cents: wallet.total_deposited_cents || 0,
+        total_wagered_cents: wallet.total_wagered_cents || 0,
+        total_lost_cents: wallet.total_lost_cents || 0,
       },
     };
   } catch (error) {
@@ -119,6 +122,9 @@ export async function depositToGamingWallet(amount_cents: number, method: string
 
     await transaction.save();
     await wallet.save();
+    
+    // Invalidate wallet cache
+    invalidateCache('wallet');
 
     return {
       success: true,
@@ -154,12 +160,12 @@ export async function playCrash(betAmount: number, cashOutMultiplier?: number): 
       return { success: false, error: 'Unauthorized' };
     }
 
-    const profile = await Profile.findOne({ email: session.user.email });
+    const profile = await Profile.findOne({ email: session.user.email }).lean();
     if (!profile) {
       return { success: false, error: 'User profile not found' };
     }
 
-    let wallet = await GamingWallet.findOne({ user_id: profile._id });
+    let wallet = await findGamingWalletOptimized(profile._id.toString());
     if (!wallet || wallet.balance_cents < betAmount) {
       return { success: false, error: 'Insufficient balance' };
     }
@@ -167,8 +173,8 @@ export async function playCrash(betAmount: number, cashOutMultiplier?: number): 
     const balanceBefore = wallet.balance_cents;
 
     // Simulate crash - ALWAYS crashes (loss)
-    const crashMultiplier = (Math.random() * 2 + 1).toFixed(2); // 1.0x - 3.0x
-    const actualCrashPoint = Math.random() * 2 + 1; // Where it actually crashes
+    const crashMultiplier = (Math.random() * 2 + 1).toFixed(2);
+    const actualCrashPoint = Math.random() * 2 + 1;
     const playerCashedOut = cashOutMultiplier && cashOutMultiplier < actualCrashPoint;
 
     const gameData = {
@@ -181,7 +187,7 @@ export async function playCrash(betAmount: number, cashOutMultiplier?: number): 
 
     // Record result - ALWAYS LOSS
     const gameResult = new GameResult({
-      user_id: profile._id,
+      user_id: profile._id.toString(),
       game_type: 'crash',
       bet_amount_cents: betAmount,
       outcome: 'loss',
@@ -199,7 +205,7 @@ export async function playCrash(betAmount: number, cashOutMultiplier?: number): 
 
     // Create transaction
     const transaction = new GamingTransaction({
-      user_id: profile._id,
+      user_id: profile._id.toString(),
       type: 'game_loss',
       amount_cents: betAmount,
       balance_before_cents: balanceBefore,
@@ -208,9 +214,15 @@ export async function playCrash(betAmount: number, cashOutMultiplier?: number): 
       description: 'Crash game - Loss',
     });
 
-    await gameResult.save();
-    await transaction.save();
-    await wallet.save();
+    // Batch save all operations
+    await Promise.all([
+      gameResult.save(),
+      transaction.save(),
+      wallet.save()
+    ]);
+    
+    // Clear cache after wallet update
+    invalidateCache('wallet');
 
     return {
       success: true,
