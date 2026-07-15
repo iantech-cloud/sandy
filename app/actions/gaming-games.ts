@@ -725,3 +725,64 @@ export async function getGamingStats() {
     return { success: false, error: 'Failed to get stats' };
   }
 }
+
+// ==================== DEPOSIT VALIDATION ====================
+
+/**
+ * Check game deposit payment status by messageReference
+ * Polls the database for transaction status updates from callback
+ */
+export async function checkGameDepositStatus(messageReference: string) {
+  try {
+    await connectToDatabase();
+    const session = await auth();
+
+    if (!session?.user?.email) {
+      return { success: false, message: 'User not authenticated' };
+    }
+
+    // Import MpesaTransaction - gaming deposits are tracked in main mpesatransactions collection
+    const { MpesaTransaction } = await import('@/app/lib/models');
+
+    const mpesaTransaction = await (MpesaTransaction as any).findOne({
+      checkout_request_id: messageReference,
+    }).lean();
+
+    if (!mpesaTransaction) {
+      return { success: false, message: 'Transaction not found' };
+    }
+
+    // Terminal state — return immediately
+    const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
+    if (terminalStatuses.includes(mpesaTransaction.status)) {
+      return {
+        success: true,
+        data: {
+          status: mpesaTransaction.status,
+          resultCode: mpesaTransaction.result_code,
+          resultDesc: mpesaTransaction.result_desc,
+          mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+          amount: mpesaTransaction.amount_cents,
+          completedAt: mpesaTransaction.completed_at,
+          failedAt: mpesaTransaction.failed_at,
+          source: 'database',
+        },
+        message: `Payment status: ${mpesaTransaction.status}`,
+      };
+    }
+
+    // For pending/initiated, return current status to continue polling
+    return {
+      success: true,
+      data: {
+        status: mpesaTransaction.status,
+        amount: mpesaTransaction.amount_cents,
+        source: 'pending',
+      },
+      message: `Payment ${mpesaTransaction.status}`,
+    };
+  } catch (error) {
+    console.error('[Gaming] checkGameDepositStatus error:', error);
+    return { success: false, message: 'Failed to check payment status. Please try again.' };
+  }
+}
