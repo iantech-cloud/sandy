@@ -89,8 +89,6 @@ export async function connectToDatabase(): Promise<Connection> {
       authSource: 'admin',
       appName: 'sandy-app',
       heartbeatFrequencyMS: 10000, // Check connection health every 10s
-      monitorCommands: true, // Enable command monitoring for debugging
-      loggerLevel: 'warn', // Log warnings and errors
     };
 
     console.log('🔗 Attempting to connect to MongoDB...');
