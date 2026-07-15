@@ -6,6 +6,7 @@ import {
   Profile,
   ActivationPayment,
   SpinWallet,
+  GamingWallet,
   Transaction,
   ChatForeignersMpesaTransaction,
   ChatForeignersBotAccess,
@@ -289,6 +290,57 @@ export async function POST(request: NextRequest) {
 
         console.log(
           `[CoopCallback] Wallet deposit failed: ${paymentStatus} for user ${mpesaTransaction.user_id}`
+        );
+      }
+    }
+
+    // ========================================================================
+    // GAMING WALLET DEPOSIT
+    // ========================================================================
+    if (depositType === 'gaming') {
+      if (paymentStatus === 'completed') {
+        // Update gaming wallet balance
+        await (GamingWallet as any).findOneAndUpdate(
+          { user_id: mpesaTransaction.user_id },
+          {
+            $inc: { balance_cents: mpesaTransaction.amount_cents },
+            $set: {
+              last_transaction_at: new Date(),
+            },
+            $setOnInsert: {
+              user_id: mpesaTransaction.user_id,
+              created_at: new Date(),
+            }
+          },
+          { session, upsert: true, new: false }
+        );
+
+        // Update gaming transaction record
+        await (Transaction as any).findOneAndUpdate(
+          {
+            mpesa_transaction_id: mpesaTransaction._id,
+            type: 'GAMING_DEPOSIT',
+          },
+          { status: 'completed' },
+          { session }
+        );
+
+        console.log(
+          `[CoopCallback] Gaming wallet credited: +KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`
+        );
+      } else if (['failed', 'cancelled', 'timeout'].includes(paymentStatus)) {
+        // Mark transaction as failed
+        await (Transaction as any).findOneAndUpdate(
+          {
+            mpesa_transaction_id: mpesaTransaction._id,
+            type: 'GAMING_DEPOSIT',
+          },
+          { status: paymentStatus },
+          { session }
+        );
+
+        console.log(
+          `[CoopCallback] Gaming deposit failed: ${paymentStatus} for user ${mpesaTransaction.user_id}`
         );
       }
     }

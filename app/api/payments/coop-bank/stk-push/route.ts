@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate prefix based on deposit type
-    // ✅ ACT for activation, CHAT for chat foreigners, SPINDY for spin wallet
+    // ✅ ACT for activation, CHAT for chat foreigners, SPINDY for spin wallet, CAS for gaming
     let prefix: string;
     if (depositType === 'activation') {
       prefix = 'ACT';
@@ -62,6 +62,8 @@ export async function POST(request: NextRequest) {
       prefix = 'CHAT';
     } else if (depositType === 'spin_wallet') {
       prefix = 'SPINDY';
+    } else if (depositType === 'gaming') {
+      prefix = 'CAS'; // Gaming wallet deposits use CAS_ prefix
     } else {
       prefix = 'CHAT'; // Default to CHAT for 'deposit' and other wallet types
     }
@@ -80,6 +82,7 @@ export async function POST(request: NextRequest) {
       'activation': 'activation',
       'wallet': 'wallet',
       'spin_wallet': 'spin_wallet',
+      'gaming': 'gaming',
       'deposit': 'wallet',
     };
     const source = sourceMap[depositType] || 'wallet';

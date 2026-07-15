@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Wallet, Play, RotateCcw, Loader } from 'lucide-react';
+import { ArrowLeft, Wallet, Play, RotateCcw, Loader, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { playDice, getGamingWallet } from '@/app/actions/gaming-games';
 
@@ -20,6 +20,10 @@ export default function DiceGame() {
   const [gameHistory, setGameHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [rollingAnimation, setRollingAnimation] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const MIN_BET = 3000; // 30 KES in cents
+  const MAX_BET = 500000000; // 5,000,000 KES in cents
 
   useEffect(() => {
     loadWallet();
@@ -33,8 +37,26 @@ export default function DiceGame() {
   };
 
   const rollDice = async () => {
-    if (!prediction || bet > balance || bet < 3000) {
-      alert('Invalid bet or prediction');
+    setError(null);
+
+    // Validation checks
+    if (!prediction) {
+      setError('Please select a prediction (Under or Over)');
+      return;
+    }
+
+    if (bet < MIN_BET) {
+      setError(`Minimum bet is KES ${MIN_BET / 100}`);
+      return;
+    }
+
+    if (bet > MAX_BET) {
+      setError(`Maximum bet is KES ${MAX_BET / 100}`);
+      return;
+    }
+
+    if (bet > balance) {
+      setError(`Insufficient balance. You need KES ${(bet - balance) / 100} more`);
       return;
     }
 
@@ -122,8 +144,18 @@ export default function DiceGame() {
             <div className="bg-slate-800/50 border border-purple-500/30 rounded-xl p-6">
               <h2 className="text-2xl font-bold text-white mb-4">Dice</h2>
 
-              {/* Dice Display */}
-              <div className="bg-slate-900 rounded-lg p-12 text-center mb-6">
+          {/* Error Alert */}
+          {error && (
+            <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="text-red-400 flex-shrink-0 mt-0.5" size={20} />
+              <div>
+                <p className="text-red-400 font-semibold text-sm">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Dice Display */}
+          <div className="bg-slate-900 rounded-lg p-12 text-center mb-6">
                 <p className="text-slate-400 text-sm mb-4">Roll Result</p>
                 <div
                   className={`w-32 h-32 mx-auto bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg flex items-center justify-center border-4 border-purple-400 transition-all ${
@@ -182,16 +214,34 @@ export default function DiceGame() {
 
                 {/* Quick Bet Buttons */}
                 <div className="flex gap-2 flex-wrap">
-                  {[30, 60, 90, 120, 500, 1000].map(amount => (
-                    <button
-                      key={amount}
-                      onClick={() => setBet(amount * 100)}
-                      disabled={loading || amount * 100 > balance}
-                      className="px-3 py-1 bg-slate-700 hover:bg-slate-600 border border-purple-500/30 rounded-lg text-white text-sm disabled:opacity-50 transition-colors"
-                    >
-                      KES {amount}
-                    </button>
-                  ))}
+                  {[30, 60, 90, 120, 500, 1000].map(amount => {
+                    const amountCents = amount * 100;
+                    const canBet = amountCents <= balance && amountCents >= MIN_BET && amountCents <= MAX_BET;
+                    return (
+                      <button
+                        key={amount}
+                        onClick={() => {
+                          setBet(amountCents);
+                          if (!canBet) {
+                            if (amountCents > balance) {
+                              setError(`Insufficient balance. You need KES ${(amountCents - balance) / 100} more`);
+                            }
+                          } else {
+                            setError(null);
+                          }
+                        }}
+                        disabled={loading || !canBet}
+                        title={!canBet && amountCents > balance ? `Insufficient balance (need KES ${(amountCents - balance) / 100})` : ''}
+                        className={`px-3 py-1 border rounded-lg text-white text-sm transition-colors ${
+                          canBet
+                            ? 'bg-slate-700 hover:bg-slate-600 border-purple-500/30'
+                            : 'bg-slate-800 border-red-500/30 opacity-50 cursor-not-allowed'
+                        }`}
+                      >
+                        KES {amount}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Prediction Buttons */}
@@ -220,11 +270,26 @@ export default function DiceGame() {
                   </div>
                 )}
 
+                {/* Balance Warning */}
+                {balance === 0 && (
+                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3 flex items-start gap-2">
+                    <AlertCircle className="text-orange-400 flex-shrink-0 mt-0.5" size={16} />
+                    <p className="text-orange-300 text-xs">Your gaming wallet is empty. Deposit funds to play.</p>
+                  </div>
+                )}
+
                 {/* Roll Button */}
                 {gameState === 'idle' && (
                   <button
                     onClick={rollDice}
-                    disabled={!prediction || loading || balance < bet}
+                    disabled={!prediction || loading || balance < MIN_BET}
+                    title={
+                      balance < MIN_BET
+                        ? `Insufficient balance. Minimum bet is KES ${MIN_BET / 100}`
+                        : !prediction
+                        ? 'Select a prediction to play'
+                        : ''
+                    }
                     className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white font-bold py-3 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
                   >
                     {loading ? <Loader size={20} className="animate-spin" /> : <Play size={20} />}
