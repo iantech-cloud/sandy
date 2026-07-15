@@ -5,7 +5,7 @@ import { ArrowLeft, Wallet, Play, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DiceGame() {
-  const [bet, setBet] = useState(100);
+  const [bet, setBet] = useState(30);
   const [balance, setBalance] = useState(10000);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'won' | 'lost'>('idle');
   const [prediction, setPrediction] = useState<'under' | 'over' | null>(null);

@@ -18,7 +18,7 @@ export default function CrashGame() {
   const { data: session } = useSession();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  const [bet, setBet] = useState(100);
+  const [bet, setBet] = useState(30);
   const [gameState, setGameState] = useState<GameState>({
     status: 'idle',
     multiplier: 1.0,
@@ -29,6 +29,7 @@ export default function CrashGame() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [balance, setBalance] = useState(10000);
   const [gameHistory, setGameHistory] = useState<{ multiplier: number; won: boolean; amount: number }[]>([]);
+  const [winnings, setWinnings] = useState(0);
 
   // Draw animated plane on canvas
   useEffect(() => {
@@ -128,7 +129,7 @@ export default function CrashGame() {
   const cashOut = () => {
     if (gameState.status !== 'playing') return;
 
-    const winnings = Math.floor(bet * gameState.multiplier);
+    const gameWinnings = Math.floor(bet * gameState.multiplier);
     setGameState({
       status: 'won',
       multiplier: gameState.multiplier,
@@ -136,9 +137,10 @@ export default function CrashGame() {
       betPlaced: false,
     });
 
-    setBalance((prev) => prev + winnings);
+    setBalance((prev) => prev - bet + gameWinnings);
+    setWinnings(gameWinnings);
     setGameHistory((prev) => [
-      { multiplier: gameState.multiplier, won: true, amount: winnings },
+      { multiplier: gameState.multiplier, won: true, amount: gameWinnings },
       ...prev.slice(0, 9),
     ]);
   };
@@ -150,6 +152,7 @@ export default function CrashGame() {
       crashed: false,
       betPlaced: false,
     });
+    setWinnings(0);
   };
 
   return (
@@ -190,11 +193,27 @@ export default function CrashGame() {
                   <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur">
                     <div className="text-center">
                       <p className="text-4xl font-bold text-red-400 mb-2">CRASHED!</p>
-                      <p className="text-xl text-gray-300">Game Over</p>
+                      <p className="text-xl text-gray-300">You lost KES {bet.toLocaleString()}</p>
                     </div>
                   </div>
                 )}
               </div>
+
+              {/* Result Display */}
+              {gameState.status === 'won' && (
+                <div className="bg-green-500/20 border border-green-500 rounded-lg p-4 text-center mb-4">
+                  <p className="text-green-400 text-lg font-bold mb-1">You Won!</p>
+                  <p className="text-2xl font-bold text-green-300">+ KES {winnings.toLocaleString()}</p>
+                  <p className="text-green-200 text-sm mt-1">Cashed out at {gameState.multiplier.toFixed(2)}x</p>
+                </div>
+              )}
+
+              {gameState.status === 'crashed' && (
+                <div className="bg-red-500/20 border border-red-500 rounded-lg p-4 text-center mb-4">
+                  <p className="text-red-400 text-lg font-bold mb-1">Game Crashed!</p>
+                  <p className="text-red-300 font-bold">You lost KES {bet.toLocaleString()}</p>
+                </div>
+              )}
 
               {/* Game Controls */}
               <div className="space-y-4">
@@ -217,7 +236,7 @@ export default function CrashGame() {
                     <button
                       key={amount}
                       onClick={() => setBet(amount)}
-                      disabled={gameState.status === 'playing'}
+                      disabled={gameState.status === 'playing' || amount > balance}
                       className="px-3 py-1 bg-slate-700 hover:bg-slate-600 border border-purple-500/30 rounded-lg text-white text-sm disabled:opacity-50 transition-colors"
                     >
                       KES {amount}

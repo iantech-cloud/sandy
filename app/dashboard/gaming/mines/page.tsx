@@ -15,7 +15,7 @@ interface GameState {
 
 export default function MinesGame() {
   const router = useRouter();
-  const [bet, setBet] = useState(100);
+  const [bet, setBet] = useState(30);
   const [mineCount, setMineCount] = useState(3);
   const [balance, setBalance] = useState(10000);
   const [gameState, setGameState] = useState<GameState>({
@@ -61,6 +61,10 @@ export default function MinesGame() {
         revealed: newRevealed,
       }));
       setBalance((prev) => prev - bet);
+      setGameHistory((prev) => [
+        { mines: mineCount, won: false, amount: -bet, tilesRevealed: gameState.safeClicks },
+        ...prev.slice(0, 9),
+      ]);
     } else {
       // Safe tile
       const safeClicks = gameState.safeClicks + 1;
@@ -77,7 +81,11 @@ export default function MinesGame() {
           safeClicks,
           multiplier,
         }));
-        setBalance((prev) => prev + winnings);
+        setBalance((prev) => prev - bet + winnings);
+        setGameHistory((prev) => [
+          { mines: mineCount, won: true, amount: winnings, tilesRevealed: safeClicks },
+          ...prev.slice(0, 9),
+        ]);
       } else {
         setGameState((prev) => ({
           ...prev,
@@ -91,9 +99,13 @@ export default function MinesGame() {
 
   const cashOut = () => {
     if (gameState.status !== 'playing') return;
-    const winnings = Math.floor(bet * gameState.multiplier);
-    setGameState((prev) => ({ ...prev, status: 'won' }));
-    setBalance((prev) => prev + winnings);
+
+    setGameState({ ...gameState, status: 'won' });
+    setBalance((prev) => prev - bet + winnings);
+    setGameHistory((prev) => [
+      { mines: mineCount, won: true, amount: winnings, tilesRevealed: revealedCount },
+      ...prev.slice(0, 9),
+    ]);
   };
 
   const resetGame = () => {

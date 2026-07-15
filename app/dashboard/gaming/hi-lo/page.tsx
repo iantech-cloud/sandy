@@ -7,7 +7,7 @@ import Link from 'next/link';
 const CARDS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
 export default function HiLoGame() {
-  const [bet, setBet] = useState(100);
+  const [bet, setBet] = useState(30);
   const [balance, setBalance] = useState(10000);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'won' | 'lost'>('idle');
   const [currentCard, setCurrentCard] = useState<string | null>(null);
@@ -55,7 +55,7 @@ export default function HiLoGame() {
     if (gameState !== 'playing') return;
     const winnings = Math.floor(bet * multiplier);
     setGameState('won');
-    setBalance((prev) => prev + winnings);
+    setBalance((prev) => prev - bet + winnings);
   };
 
   const resetGame = () => {

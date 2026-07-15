@@ -8,7 +8,7 @@ import Link from 'next/link';
 export default function PlinkoGame() {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [bet, setBet] = useState(100);
+  const [bet, setBet] = useState(30);
   const [balance, setBalance] = useState(10000);
   const [isPlaying, setIsPlaying] = useState(false);
   const [result, setResult] = useState<{ multiplier: number; won: boolean } | null>(null);
@@ -64,7 +64,7 @@ export default function PlinkoGame() {
         setResult({ multiplier, won });
         
         if (won) {
-          setBalance((prev) => prev + Math.floor(bet * multiplier));
+        setBalance((prev) => prev - bet + Math.floor(bet * multiplier));
         } else {
           setBalance((prev) => prev - bet);
         }
