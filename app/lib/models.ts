@@ -31,7 +31,10 @@ const TransactionTypes = [
   'SPIN_WALLET_DEPOSIT',
   'ADMIN_CREDIT',
   'ADMIN_DEBIT',
-  'UNCLAIMED_REFERRAL'
+  'UNCLAIMED_REFERRAL',
+  'GAMING_DEPOSIT',
+  'GAMING_LOSS',
+  'GAMING_REFUND'
 ] as const;
 const BlogPostStatuses = ['draft', 'published', 'archived'];
 const UserContentTypes = ['blog_post', 'social_media', 'product_review', 'video', 'other'];
@@ -2442,6 +2445,101 @@ const NotificationSchema = new Schema({
 });
 
 export const Notification = getModel('Notification', NotificationSchema);
+
+/**
+ * Gaming Models - Crash, Mines, Plinko, Hi-Lo, Dice
+ */
+
+// Gaming Wallet - Universal wallet for all games
+const GamingWalletSchema = new Schema({
+  user_id: { type: String, ref: 'Profile', required: true, unique: true, index: true },
+  balance_cents: { type: Number, default: 0, required: true },
+  total_deposited_cents: { type: Number, default: 0 },
+  total_withdrawn_cents: { type: Number, default: 0 },
+  total_wagered_cents: { type: Number, default: 0 },
+  total_lost_cents: { type: Number, default: 0 },
+  last_transaction_at: { type: Date },
+  is_locked: { type: Boolean, default: false },
+  lock_reason: { type: String },
+}, {
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+  indexes: [
+    { fields: { user_id: 1 } },
+    { fields: { balance_cents: -1 } },
+    { fields: { created_at: -1 } },
+  ]
+});
+
+export const GamingWallet = getModel('GamingWallet', GamingWalletSchema);
+
+// Game Result - Records every game outcome (ALWAYS LOSS)
+const GameResultSchema = new Schema({
+  user_id: { type: String, ref: 'Profile', required: true, index: true },
+  game_type: { 
+    type: String, 
+    enum: ['crash', 'mines', 'plinko', 'hi-lo', 'dice'],
+    required: true,
+    index: true
+  },
+  bet_amount_cents: { type: Number, required: true },
+  outcome: { 
+    type: String,
+    enum: ['loss'], // ALWAYS LOSS
+    default: 'loss',
+    required: true
+  },
+  game_data: { type: Schema.Types.Mixed }, // Game-specific data (crash multiplier, mines revealed, etc.)
+  player_won_cents: { type: Number, default: 0 }, // Always 0
+  balance_before_cents: { type: Number, required: true },
+  balance_after_cents: { type: Number, required: true },
+  duration_seconds: { type: Number }, // How long game lasted
+  ip_address: { type: String },
+}, {
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+  indexes: [
+    { fields: { user_id: 1, game_type: 1, created_at: -1 } },
+    { fields: { user_id: 1, created_at: -1 } },
+    { fields: { game_type: 1, created_at: -1 } },
+    { fields: { outcome: 1 } },
+  ]
+});
+
+export const GameResult = getModel('GameResult', GameResultSchema);
+
+// Gaming Transaction - Tracks all wallet movements
+const GamingTransactionSchema = new Schema({
+  user_id: { type: String, ref: 'Profile', required: true, index: true },
+  type: {
+    type: String,
+    enum: ['deposit', 'withdrawal', 'game_loss', 'game_win', 'refund', 'bonus'],
+    required: true,
+    index: true
+  },
+  amount_cents: { type: Number, required: true },
+  balance_before_cents: { type: Number, required: true },
+  balance_after_cents: { type: Number, required: true },
+  game_result_id: { type: Schema.Types.ObjectId, ref: 'GameResult' },
+  payment_method: { type: String, enum: ['mpesa', 'card', 'bank', 'coop_bank'] },
+  payment_reference: { type: String },
+  status: { 
+    type: String, 
+    enum: ['pending', 'completed', 'failed', 'cancelled'],
+    default: 'pending',
+    index: true
+  },
+  description: { type: String },
+  metadata: { type: Schema.Types.Mixed },
+}, {
+  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+  indexes: [
+    { fields: { user_id: 1, type: 1, created_at: -1 } },
+    { fields: { user_id: 1, created_at: -1 } },
+    { fields: { type: 1, status: 1 } },
+    { fields: { payment_reference: 1 } },
+  ]
+});
+
+export const GamingTransaction = getModel('GamingTransaction', GamingTransactionSchema);
 
 export { mongoose, connectToDatabase };
 
