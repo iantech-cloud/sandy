@@ -3,54 +3,64 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { Gamepad2, Wallet, Plus, Plane, Zap, Award, Lock, Play, ArrowRight, TrendingUp, Target } from 'lucide-react';
+import { Gamepad2, Wallet, Plus, Plane, Zap, Award, Lock, Play, ArrowRight, TrendingUp, Target, Layers, Dice5, TrendingDown } from 'lucide-react';
 import Link from 'next/link';
 import GamingWallet from './components/GamingWallet';
-import AviatorGame from './components/AviatorGame';
 
 const GAMES = [
   {
-    id: 'aviator',
-    name: 'Aviator',
-    description: 'Watch the plane fly higher and higher. Cash out before it crashes!',
-    icon: Plane,
-    minBet: 10,
+    id: 'crash',
+    name: 'Crash',
+    description: 'Watch the multiplier climb. Cash out before it crashes!',
+    icon: TrendingUp,
+    minBet: 30,
     maxBet: 500000,
     color: 'from-blue-600 to-cyan-500',
     isActive: true,
-    route: '/dashboard/gaming/aviator',
+    route: '/dashboard/gaming/crash',
   },
   {
     id: 'mines',
     name: 'Mines',
     description: 'Find the safe tiles and win big. Avoid the mines!',
     icon: Target,
-    minBet: 10,
+    minBet: 30,
     maxBet: 500000,
     color: 'from-purple-600 to-pink-500',
-    isActive: false,
+    isActive: true,
     route: '/dashboard/gaming/mines',
   },
   {
     id: 'plinko',
     name: 'Plinko',
-    description: 'Drop the ball and watch it bounce to winning multipliers.',
-    icon: Zap,
-    minBet: 10,
+    description: 'Drop the ball and watch it bounce to multipliers.',
+    icon: Layers,
+    minBet: 30,
     maxBet: 500000,
     color: 'from-orange-600 to-red-500',
-    isActive: false,
+    isActive: true,
     route: '/dashboard/gaming/plinko',
+  },
+  {
+    id: 'hi-lo',
+    name: 'Hi-Lo',
+    description: 'Predict higher or lower and multiply your winnings.',
+    icon: TrendingDown,
+    minBet: 30,
+    maxBet: 500000,
+    color: 'from-pink-600 to-rose-500',
+    isActive: true,
+    route: '/dashboard/gaming/hi-lo',
   },
   {
     id: 'dice',
     name: 'Dice',
-    description: 'Predict the outcome and multiply your bet.',
-    icon: Award,
-    minBet: 10,
+    description: 'Predict the dice outcome and double your bet.',
+    icon: Dice5,
+    minBet: 30,
     maxBet: 500000,
     color: 'from-green-600 to-emerald-500',
-    isActive: false,
+    isActive: true,
     route: '/dashboard/gaming/dice',
   },
 ];
@@ -122,7 +132,7 @@ export default function GamingPage() {
 
       {/* Games Grid */}
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           {GAMES.map((game) => {
             const GameIcon = game.icon;
             return (
@@ -135,12 +145,6 @@ export default function GamingPage() {
 
                 {/* Card Content */}
                 <div className="relative bg-slate-800/80 backdrop-blur border border-purple-500/30 rounded-2xl p-6 h-full flex flex-col justify-between hover:border-purple-500/60 transition-colors duration-300">
-                  {/* Lock Badge for Inactive Games */}
-                  {!game.isActive && (
-                    <div className="absolute top-3 right-3 bg-red-500/20 border border-red-500/50 rounded-full p-2">
-                      <Lock size={16} className="text-red-400" />
-                    </div>
-                  )}
 
                   {/* Game Icon */}
                   <div className="mb-4">
@@ -170,23 +174,13 @@ export default function GamingPage() {
                   </div>
 
                   {/* Play Button */}
-                  {game.isActive ? (
-                    <Link
-                      href={game.route}
-                      className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-lg hover:shadow-purple-500/50"
-                    >
-                      <Play size={16} />
-                      Play Now
-                    </Link>
-                  ) : (
-                    <button
-                      disabled
-                      className="w-full bg-gray-600/30 text-gray-400 font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 cursor-not-allowed"
-                    >
-                      <Lock size={16} />
-                      Coming Soon
-                    </button>
-                  )}
+                  <Link
+                    href={game.route}
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-lg hover:shadow-purple-500/50"
+                  >
+                    <Play size={16} />
+                    Play Now
+                  </Link>
                 </div>
               </div>
             );
