@@ -12,6 +12,7 @@ import {
   ChatForeignersBotAccess,
 } from '@/app/lib/models';
 import { CoopBankService } from '@/app/lib/services/coop-bank';
+import { invalidateCache } from '@/app/lib/db-cache';
 import mongoose from 'mongoose';
 import { completeActivationAfterPayment } from '@/app/actions/activation';
 import { completeBotUnlockPayment, completeWalletDeposit } from '@/app/actions/chat-foreigners/payments';
@@ -432,6 +433,9 @@ export async function POST(request: NextRequest) {
         console.log(
           `[CoopCallback] Gaming wallet credited: +KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`
         );
+
+        // FIXED: Invalidate wallet cache so fresh reads don't show stale balance
+        invalidateCache('wallet');
       } else if (['failed', 'cancelled', 'timeout'].includes(paymentStatus)) {
         // Mark transaction as failed
         await (Transaction as any).findOneAndUpdate(
