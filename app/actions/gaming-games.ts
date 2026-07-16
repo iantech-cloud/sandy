@@ -734,55 +734,178 @@ export async function getGamingStats() {
  */
 export async function checkGameDepositStatus(messageReference: string) {
   try {
-    await connectToDatabase();
-    const session = await auth();
-
-    if (!session?.user?.email) {
-      return { success: false, message: 'User not authenticated' };
-    }
-
-    // Import MpesaTransaction - gaming deposits are tracked in main mpesatransactions collection
-    const { MpesaTransaction } = await import('@/app/lib/models');
-
-    const mpesaTransaction = await (MpesaTransaction as any).findOne({
-      checkout_request_id: messageReference,
-    }).lean();
-
-    if (!mpesaTransaction) {
-      return { success: false, message: 'Transaction not found' };
-    }
-
-    // Terminal state — return immediately
-    const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
-    if (terminalStatuses.includes(mpesaTransaction.status)) {
-      return {
-        success: true,
-        data: {
-          status: mpesaTransaction.status,
-          resultCode: mpesaTransaction.result_code,
-          resultDesc: mpesaTransaction.result_desc,
-          mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
-          amount: mpesaTransaction.amount_cents,
-          completedAt: mpesaTransaction.completed_at,
-          failedAt: mpesaTransaction.failed_at,
-          source: 'database',
-        },
-        message: `Payment status: ${mpesaTransaction.status}`,
-      };
-    }
-
-    // For pending/initiated, return current status to continue polling
-    return {
-      success: true,
-      data: {
-        status: mpesaTransaction.status,
-        amount: mpesaTransaction.amount_cents,
-        source: 'pending',
-      },
-      message: `Payment ${mpesaTransaction.status}`,
-    };
-  } catch (error) {
-    console.error('[Gaming] checkGameDepositStatus error:', error);
-    return { success: false, message: 'Failed to check payment status. Please try again.' };
+  await connectToDatabase();
+  const session = await auth();
+  
+  if (!session?.user?.email) {
+  return { success: false, message: 'User not authenticated' };
   }
-}
+  
+  // Import MpesaTransaction and other models - gaming deposits are tracked in main mpesatransactions collection
+  const { MpesaTransaction, Profile } = await import('@/app/lib/models');
+  
+  const mpesaTransaction = await (MpesaTransaction as any).findOne({
+  checkout_request_id: messageReference,
+  }).lean();
+  
+  if (!mpesaTransaction) {
+  return { success: false, message: 'Transaction not found' };
+  }
+  
+  // Terminal state — return immediately
+  const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
+  if (terminalStatuses.includes(mpesaTransaction.status)) {
+  return {
+  success: true,
+  data: {
+  status: mpesaTransaction.status,
+  resultCode: mpesaTransaction.result_code,
+  resultDesc: mpesaTransaction.result_desc,
+  mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+  amount: mpesaTransaction.amount_cents,
+  completedAt: mpesaTransaction.completed_at,
+  failedAt: mpesaTransaction.failed_at,
+  source: 'database',
+  },
+  message: `Payment status: ${mpesaTransaction.status}`,
+  };
+  }
+  
+  // Callback already flagged it — return
+  if (mpesaTransaction.metadata?.wallet_credited === true) {
+  return {
+  success: true,
+  data: {
+  status: mpesaTransaction.status,
+  source: 'callback_processed',
+  },
+  message: `Payment ${mpesaTransaction.status}`,
+  };
+  }
+  
+  // Optimization: Skip Co-op Bank API calls if checked recently
+  const lastCheck = mpesaTransaction.metadata?.last_api_check ? new Date(mpesaTransaction.metadata.last_api_check) : null;
+  const timeSinceLastCheck = lastCheck ? (Date.now() - lastCheck.getTime()) / 1000 : Infinity;
+  const shouldSkipApiCall = timeSinceLastCheck < 10; // Skip if checked in last 10 seconds
+  
+  // Query Co-op Bank Enquiry API (with optimization to reduce calls)
+  try {
+  let statusResponse;
+  
+  if (shouldSkipApiCall && mpesaTransaction.status === 'pending') {
+    // Return cached pending status to reduce API load
+    return {
+    success: true,
+    data: {
+      status: 'pending',
+      source: 'database_cached',
+    },
+    message: 'Payment is still being processed. Please wait...',
+    };
+  }
+  
+  const { createCoopBankService, CoopBankService } = await import('@/app/lib/services/coop-bank');
+  const coopBank = createCoopBankService();
+  statusResponse = await coopBank.getTransactionStatus(messageReference);
+  
+  // Use centralized mapping from CoopBankService (single source of truth)
+  const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+  
+  console.log('[Gaming] Status check:', {
+    messageReference,
+    responseCode: statusResponse.ResponseCode,
+    mappedStatus,
+    description: statusResponse.ResponseDescription,
+  });
+  
+  // Persist status update - ensure result_code is valid number
+  const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
+  const safeResultCode = isNaN(resultCode) ? 1 : resultCode;
+  
+  await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+    status: mappedStatus,
+    result_code: safeResultCode,
+    result_desc: statusResponse.ResponseDescription || '',
+    ...(mappedStatus === 'completed' ? { completed_at: new Date() } : {}),
+    ...((['failed', 'cancelled', 'timeout'].includes(mappedStatus)) ? { failed_at: new Date() } : {}),
+    'metadata.last_api_check': new Date(),
+  });
+  
+  // If completed via poll (callback missed), credit gaming wallet directly
+  if (mappedStatus === 'completed') {
+    console.log('[Gaming] Deposit completed from status poll — crediting wallet');
+    
+    // Use atomic findOneAndUpdate to prevent race condition with callback
+    // Only credit if metadata.wallet_credited is not already true
+    const updated = await (MpesaTransaction as any).findOneAndUpdate(
+      { _id: mpesaTransaction._id, 'metadata.wallet_credited': { $ne: true } },
+      { $set: { 'metadata.wallet_credited': true } },
+      { new: false }
+    );
+    
+    if (updated) {
+      // Only the instance that actually set the flag credits the wallet
+      const { GamingWallet } = await import('@/app/lib/models');
+      
+      await (GamingWallet as any).findOneAndUpdate(
+        { user_id: mpesaTransaction.user_id },
+        {
+          $inc: { balance_cents: mpesaTransaction.amount_cents },
+          $set: { last_transaction_at: new Date() },
+          $setOnInsert: {
+            user_id: mpesaTransaction.user_id,
+            created_at: new Date(),
+          }
+        },
+        { upsert: true, new: false }
+      );
+      
+      invalidateCache('wallet');
+      
+      console.log(
+        `[Gaming] Wallet credited from poll: +KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`
+      );
+    }
+  }
+  
+  // Build user-friendly error message
+  let userMessage = `Payment status: ${mappedStatus}`;
+  if (mappedStatus === 'completed') {
+    userMessage = 'Payment successful! Your balance has been updated.';
+  } else if (mappedStatus === 'failed') {
+    userMessage = `Payment failed: ${statusResponse.ResponseDescription || 'Transaction could not be processed'}`;
+  } else if (mappedStatus === 'timeout') {
+    userMessage = 'Payment timeout: No response from M-Pesa. Please check your M-Pesa history and try again.';
+  } else if (mappedStatus === 'cancelled') {
+    userMessage = 'Payment cancelled: You cancelled the M-Pesa prompt.';
+  } else if (mappedStatus === 'pending') {
+    userMessage = 'Payment is still being processed. Please wait...';
+  }
+  
+  return {
+    success: true,
+    data: {
+    status: mappedStatus,
+    resultCode: statusResponse.ResponseCode,
+    resultDesc: statusResponse.ResponseDescription || '',
+    source: 'coop_api',
+    },
+    message: userMessage,
+  };
+  } catch (apiError) {
+  console.error('[Gaming] Co-op Bank API error, returning DB status:', apiError);
+  return {
+    success: true,
+    data: {
+    status: mpesaTransaction.status,
+    resultDesc: 'Checking payment status...',
+    source: 'database_fallback',
+    },
+    message: 'Payment is still being processed. Please wait...',
+  };
+  }
+  } catch (error) {
+  console.error('[Gaming] checkGameDepositStatus error:', error);
+  return { success: false, message: 'Failed to check payment status. Please try again.' };
+  }
+  }
