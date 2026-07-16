@@ -22,14 +22,23 @@ export default function GamingWallet({ onClose }: GamingWalletProps) {
     const fetchGamingWallet = async () => {
       try {
         setLoading(true);
-        // This will be connected to the actual gaming wallet API later
-        // For now, we'll show placeholder data
-        setBalance(0);
-        setTransactions([]);
+        
+        // Fetch actual gaming wallet balance from API
+        const response = await fetch('/api/gaming/wallet');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch wallet: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        setBalance(data.balance_cents || 0);
         setError(null);
+        
+        // TODO: Fetch transactions from gaming transactions API if available
+        setTransactions([]);
       } catch (err) {
-        console.error('Error fetching gaming wallet:', err);
+        console.error('[v0] Error fetching gaming wallet:', err);
         setError('Failed to load gaming wallet');
+        setBalance(0);
       } finally {
         setLoading(false);
       }
@@ -147,7 +156,19 @@ export default function GamingWallet({ onClose }: GamingWalletProps) {
           onClose={() => setShowDepositModal(false)}
           onSuccess={() => {
             setShowDepositModal(false);
-            // Refresh wallet balance
+            // Refresh wallet balance after successful deposit
+            const refreshWallet = async () => {
+              try {
+                const response = await fetch('/api/gaming/wallet');
+                if (response.ok) {
+                  const data = await response.json();
+                  setBalance(data.balance_cents || 0);
+                }
+              } catch (err) {
+                console.error('[v0] Error refreshing wallet after deposit:', err);
+              }
+            };
+            refreshWallet();
           }}
         />
       )}
