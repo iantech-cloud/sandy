@@ -404,23 +404,45 @@ export async function POST(request: NextRequest) {
     // ========================================================================
     if (depositType === 'gaming') {
       if (paymentStatus === 'completed') {
-        // Update gaming wallet balance
-        await (GamingWallet as any).findOneAndUpdate(
-          { user_id: mpesaTransaction.user_id },
-          {
-            $inc: { balance_cents: mpesaTransaction.amount_cents },
-            $set: {
-              last_transaction_at: new Date(),
-            },
-            $setOnInsert: {
-              user_id: mpesaTransaction.user_id,
-              created_at: new Date(),
-            }
-          },
-          { session, upsert: true, new: false }
+        // Use atomic findOneAndUpdate to prevent double-crediting if poll completes simultaneously
+        // Only credit if metadata.wallet_credited is not already true
+        const updated = await (MpesaTransaction as any).findOneAndUpdate(
+          { _id: mpesaTransaction._id, 'metadata.wallet_credited': { $ne: true } },
+          { $set: { 'metadata.wallet_credited': true, 'metadata.callback_processed': true } },
+          { new: false }
         );
-
-        // Update gaming transaction record
+        
+        if (updated) {
+          // Only the instance that actually set the flag credits the wallet
+          // Update gaming wallet balance
+          await (GamingWallet as any).findOneAndUpdate(
+            { user_id: mpesaTransaction.user_id },
+            {
+              $inc: { balance_cents: mpesaTransaction.amount_cents },
+              $set: {
+                last_transaction_at: new Date(),
+              },
+              $setOnInsert: {
+                user_id: mpesaTransaction.user_id,
+                created_at: new Date(),
+              }
+            },
+            { session, upsert: true, new: false }
+          );
+          
+          // Invalidate wallet cache so fresh reads don't show stale balance
+          invalidateCache('wallet');
+          
+          console.log(
+            `[CoopCallback] Gaming wallet credited: +KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`
+          );
+        } else {
+          console.log(
+            `[CoopCallback] Gaming wallet already credited (double-credit prevented): ${mpesaTransaction.user_id}`
+          );
+        }
+        
+        // Update gaming transaction record (always update for audit trail)
         await (Transaction as any).findOneAndUpdate(
           {
             mpesa_transaction_id: mpesaTransaction._id,
@@ -429,13 +451,6 @@ export async function POST(request: NextRequest) {
           { status: 'completed' },
           { session }
         );
-
-        console.log(
-          `[CoopCallback] Gaming wallet credited: +KES ${mpesaTransaction.amount_cents / 100} (user: ${mpesaTransaction.user_id})`
-        );
-
-        // FIXED: Invalidate wallet cache so fresh reads don't show stale balance
-        invalidateCache('wallet');
       } else if (['failed', 'cancelled', 'timeout'].includes(paymentStatus)) {
         // Mark transaction as failed
         await (Transaction as any).findOneAndUpdate(
