@@ -594,13 +594,13 @@ async function initiateActivationPaymentImpl(phoneNumber: string, customAmountCe
     let stkResponse;
     try {
       console.log('[Activation] Calling M-Pesa STK push...');
-      stkResponse = await mpesaDaraja.initiateSTKPush({
-        phoneNumber: mpesaPhone,
-        amount: Math.round(activationAmount / 100), // KES
-        description: `Activation fee - ${userProfile.username}`,
-        accountReference,
+      stkResponse = await mpesaDaraja.initiateSTKPush(
+        mpesaPhone,
+        Math.round(activationAmount / 100), // KES
+        `Activation fee - ${userProfile.username}`,
         callbackUrl,
-      });
+        accountReference
+      );
       console.log('[Activation] M-Pesa STK Push response received:', stkResponse);
     } catch (stkError) {
       console.error('[Activation] M-Pesa STK Push initiation failed:', stkError);
