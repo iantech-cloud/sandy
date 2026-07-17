@@ -9,6 +9,7 @@ import Script from 'next/script';
 import { auth } from '@/auth';
 import { Analytics } from "@vercel/analytics/next"
 import { warmupDatabaseConnection } from './lib/db-warmup';
+import { MpesaCallbackInitializer } from './components/MpesaCallbackInitializer';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://hustlehubafrica.com'),
@@ -230,6 +231,7 @@ export default async function RootLayout({
         <ThemeProvider>
           <SessionProvider session={session}>
             <DashboardProvider value={contextValue}>
+              <MpesaCallbackInitializer />
               {children}
               <Analytics />
             </DashboardProvider>
