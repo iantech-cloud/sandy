@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { connectToDatabase, ChatForeignersMpesaTransaction, ChatForeignersPayment } from '@/app/lib/models';
-import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank';
+import { createMpesaDarajaService } from '@/app/lib/services/mpesa-daraja';
 import { completeBotUnlockPayment } from '@/app/actions/chat-foreigners/payments';
 
 /**

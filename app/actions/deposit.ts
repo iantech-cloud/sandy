@@ -5,7 +5,7 @@ import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
 import { connectToDatabase, Profile, MpesaTransaction, Transaction } from '../lib/models';
 import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '../lib/utils/phoneFormatter';
-import { createCoopBankService, CoopBankService } from '../lib/services/coop-bank';
+import { createMpesaDarajaService } from '../lib/services/mpesa-daraja';
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -313,29 +313,29 @@ export async function processMpesaDeposit(depositData: {
             user_id: currentUser._id,
             amount_cents: amountCents,
             type: 'DEPOSIT',
-            description: `Co-op Bank deposit from ${formattedPhone}`,
+            description: `M-Pesa deposit from ${formattedPhone}`,
             status: 'pending',
             mpesa_transaction_id: mpesaTransaction._id,
             target_type: 'user',
             target_id: currentUser._id.toString(),
             metadata: {
                 phoneNumber: formattedPhone,
-                provider: 'coop_bank',
-                messageReference,
+                provider: 'mpesa',
+                accountReference: messageReference,
                 initiated_at: new Date().toISOString(),
             },
         });
 
-        // Now call the Co-op Bank STK Push API
-        const coopBank = createCoopBankService();
+        // Now call the M-Pesa Daraja STK Push API
+        const mpesaDaraja = createMpesaDarajaService();
 
-        const stkResponse = await coopBank.initiateSTKPush(
-            formattedPhone,
-            depositData.amount,
-            `Wallet deposit - ${currentUser.username}`,
+        const stkResponse = await mpesaDaraja.initiateSTKPush({
+            phoneNumber: formattedPhone,
+            amount: Math.round(depositData.amount),
+            description: `Wallet deposit - ${currentUser.username}`,
+            accountReference: messageReference,
             callbackUrl,
-            messageReference
-        );
+        });
 
         // Non-'0' ResponseCode means the bank rejected the initiation
         if (stkResponse.ResponseCode !== '0') {
@@ -435,11 +435,16 @@ export async function checkMpesaPaymentStatus(messageReference: string): Promise
             };
         }
 
-        // Query Co-op Bank Enquiry API
-        const coopBank = createCoopBankService();
-        const statusResponse = await coopBank.getTransactionStatus(messageReference);
+        // Query M-Pesa Daraja Query API
+        const mpesaDaraja = createMpesaDarajaService();
+        const statusResponse = await mpesaDaraja.querySTKPushStatus(messageReference);
 
-        const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+        // Map M-Pesa response to our status
+        const isSuccess = statusResponse.ResponseCode === '0' && 
+                         statusResponse.Body?.stkPopupResponse?.ResultCode === '0';
+        const mappedStatus = isSuccess ? 'completed' : 
+                             statusResponse.ResponseCode === '1032' ? 'cancelled' :
+                             statusResponse.ResponseCode === '1001' ? 'timeout' : 'pending';
 
         console.log('[Deposit] Payment status check:', {
           messageReference,

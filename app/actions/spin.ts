@@ -17,7 +17,7 @@ import {
   UserContent,
   SpinWallet,
 } from "../lib/models"
-import { createCoopBankService, CoopBankService } from "@/app/lib/services/coop-bank"
+import { createMpesaDarajaService } from "@/app/lib/services/mpesa-daraja"
 import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from "@/app/lib/utils/phoneFormatter"
 
 // --- TYPE DEFINITIONS ---
