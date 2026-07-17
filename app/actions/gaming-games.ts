@@ -744,22 +744,36 @@ export async function checkGameDepositStatus(messageReference: string) {
   // Import MpesaTransaction and other models - gaming deposits are tracked in main mpesatransactions collection
   const { MpesaTransaction, Profile } = await import('@/app/lib/models');
   
+  console.log('[v0] Gaming: Checking deposit status for messageReference:', messageReference);
+  
   const mpesaTransaction = await (MpesaTransaction as any).findOne({
-  checkout_request_id: messageReference,
+  $or: [
+    { checkout_request_id: messageReference },
+    { account_reference: messageReference },
+    { merchant_request_id: messageReference }
+  ]
   }).lean();
   
   if (!mpesaTransaction) {
+  console.log('[v0] Gaming: Transaction not found for:', messageReference);
   return { success: false, message: 'Transaction not found' };
   }
+  
+  console.log('[v0] Gaming: Found transaction:', {
+    id: mpesaTransaction._id,
+    status: mpesaTransaction.status,
+    result_code: mpesaTransaction.result_code,
+  });
   
   // Terminal state — return immediately
   const terminalStatuses = ['completed', 'failed', 'cancelled', 'timeout'];
   if (terminalStatuses.includes(mpesaTransaction.status)) {
+  console.log('[v0] Gaming: Transaction in terminal state:', mpesaTransaction.status);
   return {
   success: true,
   data: {
   status: mpesaTransaction.status,
-  resultCode: mpesaTransaction.result_code,
+  resultCode: mpesaTransaction.result_code?.toString(),
   resultDesc: mpesaTransaction.result_desc,
   mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
   amount: mpesaTransaction.amount_cents,
@@ -772,11 +786,16 @@ export async function checkGameDepositStatus(messageReference: string) {
   }
   
   // Callback already flagged it — return
-  if (mpesaTransaction.metadata?.wallet_credited === true) {
+  if (mpesaTransaction.metadata?.wallet_credited === true || mpesaTransaction.metadata?.callback_processed === true) {
+  console.log('[v0] Gaming: Callback already processed');
   return {
   success: true,
   data: {
   status: mpesaTransaction.status,
+  resultCode: mpesaTransaction.result_code?.toString(),
+  resultDesc: mpesaTransaction.result_desc,
+  mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+  amount: mpesaTransaction.amount_cents,
   source: 'callback_processed',
   },
   message: `Payment ${mpesaTransaction.status}`,
@@ -888,16 +907,22 @@ export async function checkGameDepositStatus(messageReference: string) {
     status: mappedStatus,
     resultCode: statusResponse.ResponseCode,
     resultDesc: statusResponse.ResponseDescription || '',
+    mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+    amount: mpesaTransaction.amount_cents,
     source: 'coop_api',
     },
     message: userMessage,
   };
   } catch (apiError) {
-  console.error('[Gaming] Co-op Bank API error, returning DB status:', apiError);
+  console.error('[v0] Gaming Co-op Bank API error, returning DB status:', apiError);
   return {
     success: true,
     data: {
     status: mpesaTransaction.status,
+    resultCode: mpesaTransaction.result_code?.toString(),
+    resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
+    mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+    amount: mpesaTransaction.amount_cents,
     resultDesc: 'Checking payment status...',
     source: 'database_fallback',
     },
