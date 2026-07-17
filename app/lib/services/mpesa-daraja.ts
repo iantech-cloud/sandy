@@ -145,6 +145,21 @@ export class MpesaDarajaService {
         const errorText = await response.text();
         console.error(`[v0] M-Pesa token request failed (${response.status}):`, errorText);
 
+        // 400 = Bad Request (invalid credentials)
+        // 401 = Unauthorized (invalid credentials)
+        // 403 = Forbidden (credentials not activated)
+        // 5xx = Server error (retryable)
+        if (response.status === 400 || response.status === 401 || response.status === 403) {
+          const credHint = response.status === 400 
+            ? 'Invalid credentials. Ensure MPESA_CONSUMER_KEY and MPESA_CONSUMER_SECRET are correct and properly set in environment variables.'
+            : response.status === 401
+            ? 'Unauthorized. Check if your M-Pesa consumer credentials are activated in Daraja portal.'
+            : 'Forbidden. Your M-Pesa application may not have permission to use this endpoint.';
+          
+          console.error(`[v0] M-Pesa authentication error: ${credHint}`);
+          throw new Error(`M-Pesa token request failed (${response.status}): ${credHint}`);
+        }
+
         if (attempt < maxAttempts && response.status >= 500) {
           const backoffMs = attempt * 1000;
           console.log(`[v0] Retrying M-Pesa token in ${backoffMs}ms...`);
@@ -152,7 +167,7 @@ export class MpesaDarajaService {
           return this.getAccessToken(attempt + 1, forceRefresh);
         }
 
-        throw new Error(`M-Pesa token request failed (${response.status})`);
+        throw new Error(`M-Pesa token request failed (${response.status}): ${errorText.substring(0, 200)}`);
       }
 
       const data = (await response.json()) as TokenResponse;
@@ -482,16 +497,38 @@ export class MpesaDarajaService {
 // ---------------------------------------------------------------------------
 
 export function createMpesaDarajaService(): MpesaDarajaService {
-  const consumerKey = process.env.MPESA_CONSUMER_KEY;
+  // Try both naming conventions for backwards compatibility
+  const consumerKey = process.env.MPESA_CONSUMER_KEY || process.env.NEXT_PUBLIC_MPESA_CONSUMER_KEY;
   const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
-  const shortCode = process.env.MPESA_SHORT_CODE;
-  const passkey = process.env.MPESA_PASSKEY;
+  const shortCode = process.env.MPESA_SHORT_CODE || process.env.NEXT_PUBLIC_MPESA_SHORT_CODE;
+  const passkey = process.env.MPESA_PASS_KEY || process.env.MPESA_PASSKEY;
+
+  // Log which credentials are missing for debugging
+  if (!consumerKey) {
+    console.error('[v0] Missing M-Pesa Consumer Key: MPESA_CONSUMER_KEY or NEXT_PUBLIC_MPESA_CONSUMER_KEY');
+  }
+  if (!consumerSecret) {
+    console.error('[v0] Missing M-Pesa Consumer Secret: MPESA_CONSUMER_SECRET');
+  }
+  if (!shortCode) {
+    console.error('[v0] Missing M-Pesa Short Code: MPESA_SHORT_CODE or NEXT_PUBLIC_MPESA_SHORT_CODE');
+  }
+  if (!passkey) {
+    console.error('[v0] Missing M-Pesa Passkey: MPESA_PASS_KEY or MPESA_PASSKEY');
+  }
 
   if (!consumerKey || !consumerSecret || !shortCode || !passkey) {
     throw new Error(
-      'Missing M-Pesa credentials: MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORT_CODE, MPESA_PASSKEY'
+      'Missing M-Pesa Daraja credentials. Required env vars: ' +
+      'MPESA_CONSUMER_KEY (or NEXT_PUBLIC_MPESA_CONSUMER_KEY), ' +
+      'MPESA_CONSUMER_SECRET, ' +
+      'MPESA_SHORT_CODE (or NEXT_PUBLIC_MPESA_SHORT_CODE), ' +
+      'MPESA_PASS_KEY (or MPESA_PASSKEY). ' +
+      'Configure these in your environment or Vercel project settings.'
     );
   }
+
+  console.log('[v0] M-Pesa Daraja service initialized with ShortCode:', shortCode);
 
   return new MpesaDarajaService({
     consumerKey,
