@@ -504,17 +504,33 @@ export function createMpesaDarajaService(): MpesaDarajaService {
   const passkey = process.env.MPESA_PASS_KEY || process.env.MPESA_PASSKEY;
 
   // Log which credentials are missing for debugging
+  const missingCreds = [];
   if (!consumerKey) {
-    console.error('[v0] Missing M-Pesa Consumer Key: MPESA_CONSUMER_KEY or NEXT_PUBLIC_MPESA_CONSUMER_KEY');
+    missingCreds.push('MPESA_CONSUMER_KEY');
+    console.error('[v0] Missing M-Pesa Consumer Key: Set MPESA_CONSUMER_KEY in your environment');
   }
   if (!consumerSecret) {
-    console.error('[v0] Missing M-Pesa Consumer Secret: MPESA_CONSUMER_SECRET');
+    missingCreds.push('MPESA_CONSUMER_SECRET');
+    console.error('[v0] Missing M-Pesa Consumer Secret: Set MPESA_CONSUMER_SECRET in your environment');
   }
   if (!shortCode) {
-    console.error('[v0] Missing M-Pesa Short Code: MPESA_SHORT_CODE or NEXT_PUBLIC_MPESA_SHORT_CODE');
+    missingCreds.push('MPESA_SHORT_CODE');
+    console.error('[v0] Missing M-Pesa Short Code: Set MPESA_SHORT_CODE in your environment');
   }
   if (!passkey) {
-    console.error('[v0] Missing M-Pesa Passkey: MPESA_PASS_KEY or MPESA_PASSKEY');
+    missingCreds.push('MPESA_PASS_KEY or MPESA_PASSKEY');
+    console.error('[v0] Missing M-Pesa Passkey: Set MPESA_PASS_KEY in your environment');
+  }
+
+  if (missingCreds.length > 0) {
+    console.error('[v0] M-Pesa Configuration:', {
+      hasConsumerKey: !!consumerKey,
+      hasConsumerSecret: !!consumerSecret,
+      hasShortCode: !!shortCode,
+      hasPasskey: !!passkey,
+      missingCredentials: missingCreds,
+      hint: 'Ensure credentials in .env.local are actual values, not "process.env.VAR_NAME" strings',
+    });
   }
 
   if (!consumerKey || !consumerSecret || !shortCode || !passkey) {
