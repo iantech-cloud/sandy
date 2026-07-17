@@ -87,8 +87,8 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
       setLoading(true);
       const formattedPhone = formatPhoneNumber(phoneNumber);
       
-      // Call the STK push API directly for gaming wallet
-      const response = await fetch('/api/payments/coop-bank/stk-push', {
+      // Call the M-Pesa STK push API for gaming wallet
+      const response = await fetch('/api/payments/mpesa/stk-push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,13 +101,14 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
 
       const result = await response.json();
 
-      if (result.success && result.data?.messageReference) {
-        setMessageRef(result.data.messageReference);
+      if (result.success && result.data?.accountReference) {
+        setMessageRef(result.data.accountReference);
         setSuccess(true);
         // Redirect to waiting page after 1.5 seconds
         setTimeout(() => {
           const params = new URLSearchParams({
-            messageReference: result.data.messageReference,
+            messageReference: result.data.accountReference,
+            checkoutRequestID: result.data.checkoutRequestID,
             amount: numAmount.toString(),
             phoneNumber: formattedPhone,
           });
