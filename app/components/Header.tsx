@@ -58,6 +58,7 @@ const Header: React.FC = () => {
         <Link href="/about" className="text-text-muted hover:text-indigo-600 transition-colors">About</Link>
         <Link href="/blog" className="text-text-muted hover:text-indigo-600 transition-colors">Blog</Link>
         <Link href="/contact" className="text-text-muted hover:text-indigo-600 transition-colors">Contact</Link>
+        <Link href="/auth/login" className="text-text-muted hover:text-indigo-600 transition-colors">Login</Link>
         <ThemeToggle />
       </nav>
 
@@ -70,6 +71,7 @@ const Header: React.FC = () => {
         <Link href="/about" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>About</Link>
         <Link href="/blog" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>Blog</Link>
         <Link href="/contact" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>Contact</Link>
+        <Link href="/auth/login" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>Login</Link>
       </nav>
     </header>
   );
