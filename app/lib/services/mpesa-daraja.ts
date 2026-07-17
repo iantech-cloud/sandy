@@ -383,6 +383,10 @@ export class MpesaDarajaService {
    * Normalize Kenyan phone number to 254XXXXXXXXX format.
    */
   static normalisePhone(phone: string): string {
+    if (!phone || typeof phone !== 'string') {
+      throw new Error(`Invalid phone number: expected string, got ${typeof phone}`);
+    }
+
     const digits = phone.replace(/\D/g, '');
 
     if (digits.startsWith('254') && digits.length === 12) return digits;
