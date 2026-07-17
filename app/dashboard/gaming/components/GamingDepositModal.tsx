@@ -244,7 +244,7 @@ export default function GamingDepositModal({ onClose, onSuccess }: GamingDeposit
           {/* Payment Method Info */}
           <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
             <p className="text-sm text-purple-300">
-              <span className="font-semibold">Payment Method:</span> Co-op Bank STK Push
+              <span className="font-semibold">Payment Method:</span> M-Pesa STK Push
             </p>
             <p className="text-xs text-gray-400 mt-2">
               You will receive an STK prompt on your phone. Enter your M-Pesa PIN to complete the deposit.

@@ -125,6 +125,7 @@ export default function DepositModal({ isOpen, onClose }: DepositModalProps) {
                     reference={`CHAT_DEPOSIT_${Date.now()}`}
                     phoneNumber={getMpesaPhoneFormat(formatPhoneNumber(phoneNumber))}
                     narration="Chat Wallet Deposit"
+                    depositType="wallet"
                     onSuccess={() => {
                       setError('');
                       handleDepositSuccess();

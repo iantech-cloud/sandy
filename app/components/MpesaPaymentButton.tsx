@@ -1,28 +1,30 @@
 'use client';
 
 import { useState } from 'react';
-import { useCoopBankPayment } from '@/app/hooks/useCoopBankPayment';
+import { useMpesaPayment } from '@/app/hooks/useMpesaPayment';
 import { Button } from '@/app/ui/button';
 import { Loader2 } from 'lucide-react';
 
-interface CoopBankPaymentButtonProps {
+interface MpesaPaymentButtonProps {
   amount: number;
   phoneNumber: string;
   narration?: string;
-  onSuccess?: (messageReference: string) => void;
+  depositType?: 'wallet' | 'activation' | 'gaming' | 'spin_wallet';
+  onSuccess?: (txn: any) => void;
   onError?: (error: string) => void;
   className?: string;
 }
 
-export function CoopBankPaymentButton({
+export function MpesaPaymentButton({
   amount,
   phoneNumber,
-  narration = 'Payment for services',
+  narration = 'Payment to HustleHub Africa',
+  depositType = 'wallet',
   onSuccess,
   onError,
   className = '',
-}: CoopBankPaymentButtonProps) {
-  const { initiatePayment, loading, error } = useCoopBankPayment();
+}: MpesaPaymentButtonProps) {
+  const { initiatePayment, loading, error } = useMpesaPayment();
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handlePayment = async () => {
@@ -48,10 +50,11 @@ export function CoopBankPaymentButton({
         amount: Math.round(amount),
         phoneNumber,
         narration,
+        depositType,
       });
 
-      if (result.success && result.messageReference) {
-        onSuccess?.(result.messageReference);
+      if (result.success) {
+        onSuccess?.(result);
       } else {
         const errMsg = result.error || 'Payment initiation failed';
         setLocalError(errMsg);
