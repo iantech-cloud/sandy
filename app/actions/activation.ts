@@ -1,11 +1,11 @@
-// app/actions/activation.ts - CO-OP BANK STK PUSH (no Daraja/M-Pesa)
+// app/actions/activation.ts - M-PESA DARAJA STK PUSH
 'use server';
 
 import { auth } from '@/auth'; // NextAuth v5 auth import
 import { revalidatePath } from 'next/cache';
 import { connectToDatabase } from '@/app/lib/mongoose';
 import { formatPhoneNumber, isValidPhoneNumber, phoneNumbersMatch, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter';
-import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank';
+import { createMpesaDarajaService } from '@/app/lib/services/mpesa-daraja';
 import { 
   Profile, 
   MpesaTransaction, 
@@ -260,7 +260,7 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
           isActivationPayment: true,
           completedAt: mpesaTransaction.completed_at,
           failedAt: mpesaTransaction.failed_at,
-          source: mpesaTransaction.metadata?.callback_processed ? 'coop_callback' : 'database',
+          source: mpesaTransaction.metadata?.callback_processed ? 'mpesa_callback' : 'database',
         },
         message: `Payment status: ${mpesaTransaction.status}`,
       };
@@ -279,13 +279,13 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
       };
     }
 
-    // Optimization: Skip Co-op Bank API calls after a certain time to reduce load
+    // Optimization: Skip M-Pesa API calls after a certain time to reduce load
     // If still pending after 60 seconds and last_api_check is recent, use local DB status
     const lastCheck = mpesaTransaction.metadata?.last_api_check ? new Date(mpesaTransaction.metadata.last_api_check) : null;
     const timeSinceLastCheck = lastCheck ? (Date.now() - lastCheck.getTime()) / 1000 : Infinity;
     const shouldSkipApiCall = timeSinceLastCheck < 10; // Skip if checked in last 10 seconds
 
-    // Query Co-op Bank Enquiry API (with optimization to reduce calls)
+    // Query M-Pesa Daraja Query API (with optimization to reduce calls)
     try {
       let statusResponse;
       
@@ -302,11 +302,15 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
         };
       }
 
-      const coopBank = createCoopBankService();
-      statusResponse = await coopBank.getTransactionStatus(messageReference);
+      const mpesaDaraja = createMpesaDarajaService();
+      statusResponse = await mpesaDaraja.querySTKPushStatus(messageReference);
       
-      // Use centralized mapping from CoopBankService (single source of truth)
-      const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+      // Map M-Pesa response to our status
+      const isSuccess = statusResponse.ResponseCode === '0' && 
+                       statusResponse.Body?.stkPopupResponse?.ResultCode === '0';
+      const mappedStatus = isSuccess ? 'completed' : 
+                           statusResponse.ResponseCode === '1032' ? 'cancelled' :
+                           statusResponse.ResponseCode === '1001' ? 'timeout' : 'pending';
 
       console.log('[Activation] Status check:', {
         messageReference,
@@ -349,7 +353,7 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
       if (mappedStatus === 'completed') {
         userMessage = 'Payment successful! Your account has been activated.';
       } else if (mappedStatus === 'failed') {
-        userMessage = `Payment failed: ${statusResponse.ResponseDescription || 'Transaction could not be processed'}`;
+        userMessage = 'Payment failed. Transaction could not be processed.';
       } else if (mappedStatus === 'timeout') {
         userMessage = 'Payment timeout: No response from M-Pesa. Please check your M-Pesa history and try again.';
       } else if (mappedStatus === 'cancelled') {
@@ -365,12 +369,12 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
           resultCode: statusResponse.ResponseCode,
           resultDesc: statusResponse.ResponseDescription || '',
           isActivationPayment: true,
-          source: 'coop_api',
+          source: 'mpesa_api',
         },
         message: userMessage,
       };
     } catch (apiError) {
-      console.error('[Activation] Co-op Bank API error, returning DB status:', apiError);
+      console.error('[Activation] M-Pesa API error, returning DB status:', apiError);
       return {
         success: true,
         data: {
@@ -516,7 +520,7 @@ async function initiateActivationPaymentImpl(phoneNumber: string, customAmountCe
     const activationPayment = new (ActivationPayment as any)({
       user_id: userProfile._id,
       amount_cents: activationAmount,
-      provider: 'coop_bank',
+      provider: 'mpesa',
       phone_number: mpesaPhone,
       status: 'pending',
       metadata: {
@@ -536,19 +540,18 @@ async function initiateActivationPaymentImpl(phoneNumber: string, customAmountCe
     });
     await activationLog.save();
 
-    // Unique message reference (idempotency key)
+    // Unique account reference (idempotency key)
     // ✅ Use ACT_ prefix for activation payments
-    const messageReference = `ACT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
+    const accountReference = `ACT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/mpesa/callback`;
 
     // Create MpesaTransaction BEFORE calling the API so the callback always finds it
     const mpesaTransaction = new (MpesaTransaction as any)({
       user_id: userProfile._id,
       amount_cents: activationAmount,
       phone_number: mpesaPhone,
-      account_reference: messageReference,
+      account_reference: accountReference,
       transaction_desc: `Account activation fee for ${userProfile.username}`,
-      checkout_request_id: messageReference,
       status: 'initiated',
       is_activation_payment: true,
       source: 'activation',
@@ -557,14 +560,14 @@ async function initiateActivationPaymentImpl(phoneNumber: string, customAmountCe
         callback_url: callbackUrl,
         user_username: userProfile.username,
         deposit_type: 'activation',
-        payment_method: 'coop_bank_stk_push',
+        payment_method: 'mpesa_stk_push',
         initiated_at: new Date().toISOString(),
       },
     });
     await mpesaTransaction.save();
 
     // Link the payment record to the transaction
-    activationPayment.checkout_request_id = messageReference;
+    activationPayment.checkout_request_id = accountReference;
     activationPayment.mpesa_transaction_id = mpesaTransaction._id;
     await activationPayment.save();
 
@@ -573,34 +576,34 @@ async function initiateActivationPaymentImpl(phoneNumber: string, customAmountCe
       user_id: userProfile._id,
       amount_cents: activationAmount,
       type: 'ACCOUNT_ACTIVATION',
-      description: `Account activation fee via Co-op Bank from ${mpesaPhone}`,
+      description: `Account activation fee via M-Pesa from ${mpesaPhone}`,
       status: 'pending',
       mpesa_transaction_id: mpesaTransaction._id,
       target_type: 'user',
       target_id: userProfile._id.toString(),
       metadata: {
         phoneNumber: mpesaPhone,
-        provider: 'coop_bank',
-        messageReference,
+        provider: 'mpesa',
+        accountReference,
         initiated_at: new Date().toISOString(),
       },
     });
 
-    // Initiate Co-op Bank STK Push
-    const coopBank = createCoopBankService();
+    // Initiate M-Pesa Daraja STK Push
+    const mpesaDaraja = createMpesaDarajaService();
     let stkResponse;
     try {
-      console.log('[Activation] Calling initiateSTKPush...');
-      stkResponse = await coopBank.initiateSTKPush(
-        mpesaPhone,
-        activationAmount / 100, // KES
-        `Activation fee - ${userProfile.username}`,
+      console.log('[Activation] Calling M-Pesa STK push...');
+      stkResponse = await mpesaDaraja.initiateSTKPush({
+        phoneNumber: mpesaPhone,
+        amount: Math.round(activationAmount / 100), // KES
+        description: `Activation fee - ${userProfile.username}`,
+        accountReference,
         callbackUrl,
-        messageReference
-      );
-      console.log('[Activation] STK Push response received:', stkResponse);
+      });
+      console.log('[Activation] M-Pesa STK Push response received:', stkResponse);
     } catch (stkError) {
-      console.error('[Activation] STK Push initiation failed:', stkError);
+      console.error('[Activation] M-Pesa STK Push initiation failed:', stkError);
       // Mark records as failed
       await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: 'failed',
@@ -621,11 +624,11 @@ async function initiateActivationPaymentImpl(phoneNumber: string, customAmountCe
     }
 
     if (!stkResponse || stkResponse.ResponseCode !== '0') {
-      console.error('[Activation] STK Push rejected:', stkResponse?.ResponseDescription);
+      console.error('[Activation] M-Pesa STK Push rejected:', stkResponse?.ResponseDescription);
       // Mark records as failed
       await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: 'failed',
-        result_desc: stkResponse?.ResponseDescription || 'STK Push rejected by bank',
+        result_desc: stkResponse?.ResponseDescription || 'STK Push rejected',
         failed_at: new Date(),
       });
       activationPayment.status = 'failed';
@@ -641,9 +644,17 @@ async function initiateActivationPaymentImpl(phoneNumber: string, customAmountCe
       };
     }
 
+    // Update transaction with checkout request ID from response
+    const checkoutRequestId = stkResponse.CheckoutRequestID || accountReference;
+    await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+      checkout_request_id: checkoutRequestId,
+      merchant_request_id: stkResponse.MerchantRequestID || accountReference,
+    });
+
     activationLog.metadata = {
       ...activationLog.metadata,
-      message_reference: messageReference,
+      account_reference: accountReference,
+      checkout_request_id: checkoutRequestId,
       mpesa_transaction_id: mpesaTransaction._id,
     };
     await activationLog.save();
@@ -651,7 +662,7 @@ async function initiateActivationPaymentImpl(phoneNumber: string, customAmountCe
     return {
       success: true,
       data: {
-        messageReference,
+        messageReference: checkoutRequestId,
         amount: activationAmount,
         phoneNumber: mpesaPhone,
         activationPaymentId: activationPayment._id.toString(),

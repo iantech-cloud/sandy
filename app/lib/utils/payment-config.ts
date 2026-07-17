@@ -1,6 +1,6 @@
 /**
  * Payment Configuration Utility
- * Manages environment-based payment method availability
+ * M-Pesa Daraja only payments system
  */
 
 /**
@@ -23,54 +23,25 @@ export function isLocalhostDevelopment(): boolean {
 }
 
 /**
- * Check if HashBack payment is enabled
- * - Localhost: Fully enabled (true)
- * - Production: Disabled but show as "coming soon" ("coming_soon")
+ * Get M-Pesa Daraja configuration
+ * All payments now use M-Pesa STK Push via Safaricom Daraja API
  */
-export function getHashBackStatus(): 'enabled' | 'coming_soon' {
-  return isLocalhostDevelopment() ? 'enabled' : 'coming_soon';
-}
-
-/**
- * Check if HashBack button should be functional
- */
-export function isHashBackFunctional(): boolean {
-  return getHashBackStatus() === 'enabled';
-}
-
-/**
- * Get HashBack environment configuration
- */
-export function getHashBackConfig() {
-  const accountId = process.env.NEXT_PUBLIC_HASHBACK_ACCOUNT_ID;
-  const webhookSecret = process.env.HASHBACK_WEBHOOK_SECRET;
+export function getMpesaDarajaConfig() {
+  const consumerKey = process.env.NEXT_PUBLIC_MPESA_CONSUMER_KEY;
+  const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
+  const shortCode = process.env.NEXT_PUBLIC_MPESA_SHORT_CODE;
+  const passkey = process.env.MPESA_PASS_KEY;
   
-  if (!accountId) {
-    console.warn('[v0] NEXT_PUBLIC_HASHBACK_ACCOUNT_ID not configured');
+  if (!consumerKey || !consumerSecret || !shortCode || !passkey) {
+    console.warn('[v0] M-Pesa configuration incomplete');
   }
   
   return {
-    accountId,
-    webhookSecret,
-    isEnabled: isHashBackFunctional(),
-    status: getHashBackStatus(),
-    scriptUrl: 'https://pay.hashback.co.ke/hashpay.js',
-  };
-}
-
-/**
- * Get Co-op Bank configuration
- */
-export function getCoopBankConfig() {
-  const basicAuth = process.env.COOP_BANK_BASIC_AUTH;
-  const operatorCode = process.env.COOP_BANK_OPERATOR_CODE;
-  const baseUrl = process.env.COOP_BANK_BASE_URL || 'https://openapi.co-opbank.co.ke';
-  
-  return {
-    basicAuth,
-    operatorCode,
-    baseUrl,
-    isEnabled: true, // Always enabled
+    consumerKey,
+    consumerSecret,
+    shortCode,
+    passkey,
+    isConfigured: !!(consumerKey && consumerSecret && shortCode && passkey),
   };
 }
 

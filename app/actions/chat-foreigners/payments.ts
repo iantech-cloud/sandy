@@ -1,7 +1,7 @@
 'use server';
 
-import { connectToDatabase, ChatForeignersPayment, ChatForeignersMpesaTransaction, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersReferralEarning, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, Profile, Referral, Transaction } from '@/app/lib/models';
-import { createCoopBankService } from '@/app/lib/services/coop-bank';
+import { connectToDatabase, ChatForeignersPayment, ChatForeignersMpesaTransaction, ChatForeignersWallet, ChatForeignersTransaction, ChatForeignersReferralEarning, ChatForeignersBot, ChatForeignersBotAccess, ChatForeignersProfile, Profile, Referral, Transaction, MpesaTransaction } from '@/app/lib/models';
+import { createMpesaDarajaService } from '@/app/lib/services/mpesa-daraja';
 import mongoose from 'mongoose';
 import { auth } from '@/auth';
 
@@ -32,7 +32,7 @@ async function getCurrentUserFromSession() {
 }
 
 // ========================================================================
-// Initiate Bot Unlock Payment via M-Pesa (Co-op Bank STK Push)
+// Initiate Bot Unlock Payment via M-Pesa (Daraja STK Push)
 // ========================================================================
 export async function initiateBotUnlockViaMpesa(
   botId: string,
@@ -91,31 +91,31 @@ export async function initiateBotUnlockViaMpesa(
       status: 'pending',
     });
 
-    // Call Co-op Bank STK Push — same pattern as main site activation
+    // Call M-Pesa Daraja STK Push
     // ✅ Use CHAT_ prefix for chat foreigners payments
-    const messageRef = `CHAT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const accountReference = `CHAT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const narration = 'Chat Foreigners - Personality Unlock';
-    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
+    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/mpesa/callback`;
 
-    console.log('[ChatForeigners] Initiating STK push:', {
-      messageRef,
+    console.log('[ChatForeigners] Initiating M-Pesa STK push:', {
+      accountReference,
       amount: UNLOCK_COST_CENTS / 100,
       phone: phoneNumber,
       botId,
     });
 
-    const coopBank = createCoopBankService();
+    const mpesaDaraja = createMpesaDarajaService();
     let stkResponse;
     try {
-      stkResponse = await coopBank.initiateSTKPush(
+      stkResponse = await mpesaDaraja.initiateSTKPush({
         phoneNumber,
-        UNLOCK_COST_CENTS / 100, // Always KSH 100 — never read from bot record
-        narration,
+        amount: UNLOCK_COST_CENTS / 100, // Always KSH 100 — never read from bot record
+        description: narration,
+        accountReference,
         callbackUrl,
-        messageRef
-      );
+      });
     } catch (stkError) {
-      console.error('[ChatForeigners] STK push exception:', stkError);
+      console.error('[ChatForeigners] M-Pesa STK push exception:', stkError);
       await ChatForeignersPayment.updateOne({ _id: payment._id }, { status: 'failed' });
       return {
         success: false,
@@ -124,7 +124,7 @@ export async function initiateBotUnlockViaMpesa(
     }
 
     if (stkResponse.ResponseCode !== '0') {
-      console.warn('[ChatForeigners] STK push rejected:', stkResponse);
+      console.warn('[ChatForeigners] M-Pesa STK push rejected:', stkResponse);
       await ChatForeignersPayment.updateOne({ _id: payment._id }, { status: 'failed' });
       return {
         success: false,
@@ -133,17 +133,17 @@ export async function initiateBotUnlockViaMpesa(
       };
     }
 
-    // Store checkout_request_id = messageRef so callback can find this transaction
-    const checkoutRequestId = messageRef;
+    // Store checkout_request_id for callback lookup
+    const checkoutRequestId = stkResponse.CheckoutRequestID || accountReference;
 
     // Update M-Pesa transaction with STK response
     mpesaTransaction.checkout_request_id = checkoutRequestId;
-    mpesaTransaction.account_reference = messageRef;
-    mpesaTransaction.merchant_request_id = stkResponse.MessageReference || messageRef;
+    mpesaTransaction.account_reference = accountReference;
+    mpesaTransaction.merchant_request_id = stkResponse.MerchantRequestID || accountReference;
     mpesaTransaction.stk_push_response = stkResponse;
     await mpesaTransaction.save();
 
-    console.log('[ChatForeigners] STK push initiated:', {
+    console.log('[ChatForeigners] M-Pesa STK push initiated:', {
       checkoutRequestId,
       paymentId: payment._id,
     });
@@ -153,7 +153,7 @@ export async function initiateBotUnlockViaMpesa(
       data: {
         paymentId: payment._id.toString(),
         checkoutRequestId,
-        merchantRequestId: stkResponse.MessageReference || messageRef,
+        merchantRequestId: stkResponse.MerchantRequestID || accountReference,
       },
     };
   } catch (error) {
@@ -167,11 +167,10 @@ export async function initiateBotUnlockViaMpesa(
 
 // ========================================================================
 // Check Bot Unlock Payment Status — mirrors checkActivationPaymentStatus
-// Accepts the messageReference (checkout_request_id) used at STK push time,
-// queries the Co-op Bank Enquiry API (same as activation), persists the
-// result, and auto-triggers completeBotUnlockPayment when confirmed.
+// Accepts the checkoutRequestId, queries the M-Pesa Daraja API,
+// persists the result, and auto-triggers completeBotUnlockPayment when confirmed.
 // ========================================================================
-export async function checkBotUnlockPaymentStatus(messageReference: string) {
+export async function checkBotUnlockPaymentStatus(checkoutRequestId: string) {
   try {
     await connectToDatabase();
     const currentUser = await getCurrentUserFromSession();
@@ -180,11 +179,11 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
       return { success: false, message: 'User not authenticated' };
     }
 
-    // Look up by checkout_request_id (= messageRef set at STK push time)
+    // Look up by checkout_request_id
     const mpesaTransaction = await ChatForeignersMpesaTransaction.findOne({
       $or: [
-        { checkout_request_id: messageReference },
-        { account_reference: messageReference }
+        { checkout_request_id: checkoutRequestId },
+        { account_reference: checkoutRequestId }
       ]
     }).lean();
 
@@ -203,7 +202,7 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
           resultDesc: mpesaTransaction.result_desc,
           mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
           amount: mpesaTransaction.amount_cents / 100,
-          source: mpesaTransaction.metadata?.callback_processed ? 'coop_callback' : 'database',
+          source: mpesaTransaction.metadata?.callback_processed ? 'mpesa_callback' : 'database',
         },
       };
     }
@@ -219,7 +218,7 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
       };
     }
 
-    // Query Co-op Bank Enquiry API — same as activation flow
+    // Query M-Pesa Daraja Query API
     // Optimization: Skip API calls if checked recently to reduce load
     const lastCheck = mpesaTransaction.metadata?.last_api_check ? new Date(mpesaTransaction.metadata.last_api_check) : null;
     const timeSinceLastCheck = lastCheck ? (Date.now() - lastCheck.getTime()) / 1000 : Infinity;
@@ -240,10 +239,15 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
         };
       }
 
-      const coopBank = createCoopBankService();
-      statusResponse = await coopBank.getTransactionStatus(messageReference);
-      const { CoopBankService } = await import('@/app/lib/services/coop-bank');
-      mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+      const mpesaDaraja = createMpesaDarajaService();
+      statusResponse = await mpesaDaraja.querySTKPushStatus(checkoutRequestId);
+
+      // Map M-Pesa response to our status
+      const isSuccess = statusResponse.ResponseCode === '0' && 
+                       statusResponse.Body?.stkPopupResponse?.ResultCode === '0';
+      mappedStatus = isSuccess ? 'completed' : 
+                     statusResponse.ResponseCode === '1032' ? 'cancelled' :
+                     statusResponse.ResponseCode === '1001' ? 'timeout' : 'pending';
 
       // Persist the updated status
       const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
@@ -270,7 +274,7 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
 
       let userMessage = `Payment status: ${mappedStatus}`;
       if (mappedStatus === 'completed') userMessage = 'Payment confirmed! Unlocking chat...';
-      else if (mappedStatus === 'failed') userMessage = `Payment failed: ${statusResponse.ResponseDescription || 'Transaction could not be processed'}`;
+      else if (mappedStatus === 'failed') userMessage = 'Payment failed. Transaction could not be processed.';
       else if (mappedStatus === 'timeout') userMessage = 'Payment timed out. Please check your M-Pesa history and try again.';
       else if (mappedStatus === 'cancelled') userMessage = 'Payment cancelled. You can try again.';
       else if (mappedStatus === 'pending') userMessage = 'Payment still processing. Please wait...';
@@ -282,12 +286,12 @@ export async function checkBotUnlockPaymentStatus(messageReference: string) {
           resultCode: statusResponse.ResponseCode,
           resultDesc: statusResponse.ResponseDescription || '',
           amount: mpesaTransaction.amount_cents / 100,
-          source: 'coop_api',
+          source: 'mpesa_api',
         },
         message: userMessage,
       };
     } catch (apiError) {
-      console.error('[ChatForeigners] Co-op Bank API error, returning DB status:', apiError);
+      console.error('[ChatForeigners] M-Pesa API error, returning DB status:', apiError);
       return {
         success: true,
         data: {
@@ -536,7 +540,7 @@ export async function completeBotUnlockPayment(
 }
 
 // ========================================================================
-// Initiate Wallet Deposit via M-Pesa (Co-op Bank STK Push)
+// Initiate Wallet Deposit via M-Pesa (Daraja STK Push)
 // ========================================================================
 export async function initiateWalletDepositViaMpesa(
   amountCents: number,
@@ -575,30 +579,30 @@ export async function initiateWalletDepositViaMpesa(
       target_id: currentUser._id,
     });
 
-    // Call Co-op Bank STK Push — same pattern as main site
+    // Call M-Pesa Daraja STK Push
     // ✅ Use CHAT_ prefix for chat foreigners wallet deposits
-    const messageRef = `CHAT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const accountReference = `CHAT_${Date.now()}${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
     const narration = 'Chat Foreigners Wallet Deposit';
-    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`;
+    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/mpesa/callback`;
 
-    console.log('[ChatForeigners] Initiating deposit STK push:', {
-      messageRef,
+    console.log('[ChatForeigners] Initiating M-Pesa deposit STK push:', {
+      accountReference,
       amount: amountCents / 100,
       phone: phoneNumber,
     });
 
-    const coopBank = createCoopBankService();
+    const mpesaDaraja = createMpesaDarajaService();
     let stkResponse;
     try {
-      stkResponse = await coopBank.initiateSTKPush(
+      stkResponse = await mpesaDaraja.initiateSTKPush({
         phoneNumber,
-        Math.round(amountCents / 100),
-        narration,
+        amount: Math.round(amountCents / 100),
+        description: narration,
+        accountReference,
         callbackUrl,
-        messageRef
-      );
+      });
     } catch (stkError) {
-      console.error('[ChatForeigners] Deposit STK push exception:', stkError);
+      console.error('[ChatForeigners] M-Pesa deposit STK push exception:', stkError);
       await ChatForeignersTransaction.updateOne({ _id: transaction._id }, { status: 'failed' });
       return {
         success: false,
@@ -607,7 +611,7 @@ export async function initiateWalletDepositViaMpesa(
     }
 
     if (stkResponse.ResponseCode !== '0') {
-      console.warn('[ChatForeigners] Deposit STK push rejected:', stkResponse);
+      console.warn('[ChatForeigners] M-Pesa deposit STK push rejected:', stkResponse);
       await ChatForeignersTransaction.updateOne({ _id: transaction._id }, { status: 'failed' });
       return {
         success: false,
@@ -616,9 +620,10 @@ export async function initiateWalletDepositViaMpesa(
     }
 
     // Update M-Pesa transaction with STK response
-    mpesaTransaction.checkout_request_id = messageRef;
-    mpesaTransaction.account_reference = messageRef;
-    mpesaTransaction.merchant_request_id = stkResponse.MessageReference || messageRef;
+    const checkoutRequestId = stkResponse.CheckoutRequestID || accountReference;
+    mpesaTransaction.checkout_request_id = checkoutRequestId;
+    mpesaTransaction.account_reference = accountReference;
+    mpesaTransaction.merchant_request_id = stkResponse.MerchantRequestID || accountReference;
     mpesaTransaction.stk_push_response = stkResponse;
     await mpesaTransaction.save();
 
@@ -626,8 +631,8 @@ export async function initiateWalletDepositViaMpesa(
       success: true,
       data: {
         transactionId: transaction._id.toString(),
-        checkoutRequestId: messageRef,
-        merchantRequestId: stkResponse.MessageReference || messageRef,
+        checkoutRequestId,
+        merchantRequestId: stkResponse.MerchantRequestID || accountReference,
       },
     };
   } catch (error) {
@@ -645,10 +650,10 @@ export async function initiateWalletDepositViaMpesa(
 // main MpesaTransaction collection), so the deposit waiting page MUST poll
 // through this action — querying the main deposit checker would always return
 // "Transaction not found" and leave the UI stuck on "processing" forever.
-// Queries the Co-op Bank Enquiry API (same as activation), persists the result,
+// Queries the M-Pesa Daraja Query API, persists the result,
 // and auto-completes the deposit via completeWalletDeposit when confirmed.
 // ========================================================================
-export async function checkWalletDepositPaymentStatus(messageReference: string) {
+export async function checkWalletDepositPaymentStatus(checkoutRequestId: string) {
   try {
     await connectToDatabase();
     const currentUser = await getCurrentUserFromSession();
@@ -657,11 +662,11 @@ export async function checkWalletDepositPaymentStatus(messageReference: string) 
       return { success: false, message: 'User not authenticated' };
     }
 
-    // Look up by checkout_request_id (= messageRef set at STK push time)
+    // Look up by checkout_request_id
     const mpesaTransaction = await ChatForeignersMpesaTransaction.findOne({
       $or: [
-        { checkout_request_id: messageReference },
-        { account_reference: messageReference }
+        { checkout_request_id: checkoutRequestId },
+        { account_reference: checkoutRequestId }
       ],
       transaction_type: 'chat_foreigners_deposit',
     }).lean();
@@ -681,12 +686,12 @@ export async function checkWalletDepositPaymentStatus(messageReference: string) 
           resultDesc: mpesaTransaction.result_desc,
           mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
           amount: mpesaTransaction.amount_cents / 100,
-          source: mpesaTransaction.metadata?.callback_processed ? 'coop_callback' : 'database',
+          source: mpesaTransaction.metadata?.callback_processed ? 'mpesa_callback' : 'database',
         },
       };
     }
 
-    // Query Co-op Bank Enquiry API — same as activation/unlock flow
+    // Query M-Pesa Daraja Query API
     // Optimization: Skip API calls if checked recently to reduce load
     const lastCheck = mpesaTransaction.metadata?.last_api_check ? new Date(mpesaTransaction.metadata.last_api_check) : null;
     const timeSinceLastCheck = lastCheck ? (Date.now() - lastCheck.getTime()) / 1000 : Infinity;
@@ -707,10 +712,15 @@ export async function checkWalletDepositPaymentStatus(messageReference: string) 
         };
       }
 
-      const coopBank = createCoopBankService();
-      statusResponse = await coopBank.getTransactionStatus(messageReference);
-      const { CoopBankService } = await import('@/app/lib/services/coop-bank');
-      mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+      const mpesaDaraja = createMpesaDarajaService();
+      statusResponse = await mpesaDaraja.querySTKPushStatus(checkoutRequestId);
+
+      // Map M-Pesa response to our status
+      const isSuccess = statusResponse.ResponseCode === '0' && 
+                       statusResponse.Body?.stkPopupResponse?.ResultCode === '0';
+      mappedStatus = isSuccess ? 'completed' : 
+                     statusResponse.ResponseCode === '1032' ? 'cancelled' :
+                     statusResponse.ResponseCode === '1001' ? 'timeout' : 'pending';
 
       // Persist the updated status
       const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
@@ -744,7 +754,7 @@ export async function checkWalletDepositPaymentStatus(messageReference: string) 
           resultCode: statusResponse.ResponseCode,
           resultDesc: statusResponse.ResponseDescription || '',
           amount: mpesaTransaction.amount_cents / 100,
-          source: 'coop_api',
+          source: 'mpesa_api',
         },
       };
     } catch (apiError) {
