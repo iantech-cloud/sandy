@@ -8,7 +8,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase, MpesaTransaction, Transaction, Profile } from '@/app/lib/models';
-import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank';
+import { createMpesaDarajaService } from '@/app/lib/services/mpesa-daraja';
 import { rateLimit, API_RATE_LIMITS } from '@/app/lib/rate-limit';
 import { auth } from '@/auth';
 

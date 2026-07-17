@@ -9,7 +9,8 @@ import {
   AdminAuditLog,
   MpesaTransaction,
 } from '@/app/lib/models'
-import { createCoopBankService, CoopBankService } from '@/app/lib/services/coop-bank'
+import { createMpesaDarajaService } from '@/app/lib/services/mpesa-daraja'
+import { formatPhoneNumber, getMpesaPhoneFormat } from '@/app/lib/utils/phoneFormatter'
 
 // ---------------------------------------------------------------------------
 // initiatSpinDeposit
@@ -55,20 +56,20 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
       })
     }
 
-    // Normalise phone → 254XXXXXXXXX
-    const formattedPhone = CoopBankService.normalisePhone(phoneNumber)
+    // Format phone for M-Pesa → 254XXXXXXXXX
+    const formattedPhone = getMpesaPhoneFormat(formatPhoneNumber(phoneNumber))
     if (!formattedPhone || formattedPhone.length < 12) {
       return { success: false, message: 'Invalid phone number format' }
     }
 
-    // Unique message reference used as the idempotency key in the callback
+    // Unique account reference used as the idempotency key in the callback
     // ✅ Use SPINDY_ prefix for spin wallet deposits
-    const messageReference = `SPINDY_${Date.now()}${Math.random()
+    const accountReference = `SPINDY_${Date.now()}${Math.random()
       .toString(36)
       .substring(2, 8)
       .toUpperCase()}`
 
-    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/coop-bank/callback`
+    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/mpesa/callback`
 
     // ======================================================================
     // Create MpesaTransaction FIRST so the callback can always find it.
@@ -80,13 +81,14 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
       user_id: session.user.id,
       amount_cents: amount * 100,
       phone_number: formattedPhone,
+      account_reference: accountReference,
       source: 'spin_wallet',
       is_activation_payment: false,
       status: 'initiated',
-      checkout_request_id: messageReference,
+      checkout_request_id: accountReference,
       metadata: {
         deposit_type: 'spin_wallet',
-        payment_method: 'coop_bank_stk_push',
+        payment_method: 'mpesa_stk_push',
         initiated_at: new Date().toISOString(),
         callback_url: callbackUrl,
         // Money credits user's spin wallet; company revenue recorded on spin
@@ -97,7 +99,7 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
     // Record the pending deposit in the SpinWallet history (for transparency)
     spinWallet.deposits.push({
       amount_cents: amount * 100,
-      mpesa_checkout_request_id: messageReference,
+      mpesa_checkout_request_id: accountReference,
       mpesa_transaction_id: mpesaTransaction._id,
       mpesa_status: 'initiated',
       overall_status: 'pending',
@@ -107,15 +109,15 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
     })
     await spinWallet.save()
 
-    // Initiate Co-op Bank STK Push
-    const coopBank = createCoopBankService()
-    const stkResponse = await coopBank.initiateSTKPush(
-      formattedPhone,
+    // Initiate M-Pesa Daraja STK Push
+    const mpesaDaraja = createMpesaDarajaService()
+    const stkResponse = await mpesaDaraja.initiateSTKPush({
+      phoneNumber: formattedPhone,
       amount,
-      `Spin - KES ${amount}`,
+      description: `Spin - KES ${amount}`,
+      accountReference,
       callbackUrl,
-      messageReference
-    )
+    })
 
     if (stkResponse.ResponseCode !== '0') {
       // Mark as failed
@@ -128,7 +130,7 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
       const wallet = await (SpinWallet as any).findOne({ user_id: session.user.id })
       if (wallet) {
         const dep = wallet.deposits.find(
-          (d: any) => d.mpesa_checkout_request_id === messageReference
+          (d: any) => d.mpesa_checkout_request_id === accountReference
         )
         if (dep) {
           dep.status = 'failed'
@@ -144,10 +146,11 @@ export async function initiatSpinDeposit(phoneNumber: string, amount: number = 3
       }
     }
 
+    const checkoutRequestId = stkResponse.CheckoutRequestID || accountReference
     return {
       success: true,
-      messageReference,
-      message: 'Co-op Bank payment prompt sent. Please complete the payment on your phone.',
+      messageReference: checkoutRequestId,
+      message: 'M-Pesa payment prompt sent. Please complete the payment on your phone.',
     }
   } catch (error) {
     console.error('[SpinWallet] Error initiating spin deposit:', error)
@@ -225,10 +228,16 @@ export async function checkSpinDepositStatus(messageReference: string) {
       }
     }
 
-    // Callback not received yet — query Co-op Bank API
-    const coopBank = createCoopBankService()
-    const statusResponse = await coopBank.getTransactionStatus(messageReference)
-    const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode)
+    // Callback not received yet — query M-Pesa Daraja API
+    const mpesaDaraja = createMpesaDarajaService()
+    const statusResponse = await mpesaDaraja.querySTKPushStatus(messageReference)
+    
+    // Map M-Pesa response to our status
+    const isSuccess = statusResponse.ResponseCode === '0' && 
+                     statusResponse.Body?.stkPopupResponse?.ResultCode === '0';
+    const mappedStatus = isSuccess ? 'completed' : 
+                         statusResponse.ResponseCode === '1032' ? 'cancelled' :
+                         statusResponse.ResponseCode === '1001' ? 'timeout' : 'pending';
 
     console.log('[SpinWallet] Payment status check:', {
       messageReference,
