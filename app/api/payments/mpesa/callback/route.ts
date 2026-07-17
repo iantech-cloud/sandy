@@ -118,18 +118,26 @@ export async function POST(request: NextRequest) {
       callbackData.ResponseCode
     );
 
+    // Get human-readable error message
+    const userMessage = MpesaDarajaService.getErrorMessage(
+      callbackData.ResponseCode,
+      callbackData.ResultCode,
+      callbackData.ResponseDescription || callbackData.ResultDesc
+    );
+
     console.log('[MpesaCallback] Status mapped:', {
       responseCode: callbackData.ResponseCode,
       resultCode: callbackData.ResultCode,
       mappedStatus: paymentStatus,
+      userMessage,
     });
 
     const receiptNumber = callbackData.MpesaReceiptNumber || null;
 
     // Update MpesaTransaction
     mpesaTransaction.status = paymentStatus;
-    mpesaTransaction.result_code = parseInt(callbackData.ResponseCode || '1', 10);
-    mpesaTransaction.result_desc = callbackData.ResponseDescription || callbackData.ResultDesc || '';
+    mpesaTransaction.result_code = parseInt(callbackData.ResultCode || callbackData.ResponseCode || '1', 10);
+    mpesaTransaction.result_desc = userMessage;
     mpesaTransaction.callback_payload = body;
     mpesaTransaction.callback_received_at = callbackReceivedAt;
     mpesaTransaction.metadata = {
@@ -137,15 +145,19 @@ export async function POST(request: NextRequest) {
       callback_processed: true,
       callback_processed_at: callbackReceivedAt.toISOString(),
       callback_received_from_mpesa: true,
+      response_code: callbackData.ResponseCode,
+      result_code: callbackData.ResultCode,
+      user_message: userMessage,
     };
 
     if (paymentStatus === 'completed') {
       mpesaTransaction.completed_at = new Date();
       mpesaTransaction.mpesa_receipt_number = receiptNumber;
       mpesaTransaction.transaction_date = callbackData.TransactionDate;
+      mpesaTransaction.metadata.transaction_completed_at = callbackData.TransactionDate;
     } else {
       mpesaTransaction.failed_at = new Date();
-      mpesaTransaction.failure_reason = callbackData.ResponseDescription || callbackData.ResultDesc || '';
+      mpesaTransaction.failure_reason = userMessage;
     }
 
     await mpesaTransaction.save({ session });

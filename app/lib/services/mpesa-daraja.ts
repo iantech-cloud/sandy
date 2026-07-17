@@ -402,40 +402,78 @@ export class MpesaDarajaService {
   }
 
   /**
-   * Map M-Pesa result code to local payment status.
+   * Map M-Pesa result/response code to local payment status.
    * 
-   * 0 = Success (completed transaction)
-   * 1 = Insufficient funds
-   * Other = Various errors → Failed
+   * Reference: Safaricom M-Pesa Daraja API documentation
    * 
-   * No explicit "pending" code from M-Pesa; if query returns ResponseCode 0 but
-   * no ResultCode, transaction is likely still processing.
+   * ResponseCode: Status of STK Push submission
+   *   0 = Successfully submitted
+   *   1 = Failed/Error
+   * 
+   * ResultCode: Transaction result status (in callback)
+   *   0 = Transaction approved
+   *   1 = Insufficient funds
+   *   1001 = Request timeout
+   *   1032 = User cancelled transaction
+   *   2001 = Invalid initiator information
+   *   Other = Various API/validation errors
    */
   static mapResultCode(
     resultCode: string | undefined,
     responseCode: string
   ): 'completed' | 'pending' | 'failed' | 'cancelled' | 'timeout' {
-    // If ResponseCode is 0, transaction succeeded
+    // Success cases
     if (responseCode === '0' && (resultCode === '0' || resultCode === undefined)) {
       return 'completed';
     }
 
-    // User-initiated cancellations or timeouts
-    if (responseCode === '1032' || resultCode === '1032') {
-      return 'cancelled'; // User cancelled
+    // User explicitly cancelled
+    if (resultCode === '1032' || responseCode === '1032') {
+      return 'cancelled';
     }
 
-    if (responseCode === '1001' || resultCode === '1001') {
-      return 'timeout'; // Request timeout
+    // Timeout scenarios
+    if (resultCode === '1001' || responseCode === '1001') {
+      return 'timeout';
     }
 
-    // No ResultCode yet means still pending
-    if (!resultCode && responseCode === '0') {
+    // Pending: ResponseCode success but no ResultCode yet
+    if (responseCode === '0' && !resultCode) {
       return 'pending';
     }
 
-    // Any other code is a failure
+    // ResponseCode 0 means submitted successfully but needs result check
+    if (responseCode === '0') {
+      return 'pending';
+    }
+
+    // All other cases are failures (1, 2001, invalid credentials, etc.)
     return 'failed';
+  }
+
+  /**
+   * Get human-readable error message from M-Pesa response codes.
+   */
+  static getErrorMessage(responseCode?: string, resultCode?: string, description?: string): string {
+    if (description) return description;
+
+    const codeMap: { [key: string]: string } = {
+      '0': 'Transaction successful',
+      '1': 'Transaction failed',
+      '1001': 'Transaction request timeout - please check M-Pesa history',
+      '1032': 'Transaction cancelled by user',
+      '2001': 'Invalid initiator information',
+      '2002': 'Invalid credentials',
+      '2003': 'Invalid phone number',
+      '2004': 'Invalid amount',
+      '2005': 'Invalid shortcode',
+      '2006': 'Invalid account reference',
+      '402': 'Invalid initiator',
+      '401': 'Authentication failure',
+      '500': 'Internal server error - please retry',
+    };
+
+    return codeMap[resultCode || responseCode] || 'Transaction processing error';
   }
 }
 
