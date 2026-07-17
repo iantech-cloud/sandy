@@ -121,8 +121,6 @@ const Header: React.FC = () => {
         <Link href="/about" className="text-text-muted hover:text-indigo-600 transition-colors">About</Link>
         <Link href="/blog" className="text-text-muted hover:text-indigo-600 transition-colors">Blog</Link>
         <Link href="/contact" className="text-text-muted hover:text-indigo-600 transition-colors">Contact</Link>
-        <Link href="/auth/login" className="text-text-muted hover:text-indigo-600 transition-colors font-medium">Login</Link>
-        <Link href="/auth/sign-up?ref=SANDY001" className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold">Sign Up</Link>
         <ThemeToggle />
       </nav>
 
@@ -135,8 +133,6 @@ const Header: React.FC = () => {
         <Link href="/about" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>About</Link>
         <Link href="/blog" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>Blog</Link>
         <Link href="/contact" className="block py-2 px-3 text-text hover:bg-bg-subtle rounded-lg transition-colors" onClick={toggleMenu}>Contact</Link>
-        <Link href="/auth/login" className="block py-2 px-3 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 rounded-lg font-medium transition-colors" onClick={toggleMenu}>Login</Link>
-        <Link href="/auth/sign-up?ref=SANDY001" className="block py-2 px-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold transition-colors" onClick={toggleMenu}>Sign Up</Link>
       </nav>
     </header>
   );
@@ -218,18 +214,7 @@ const HeroSection: React.FC = () => (
       </p>
       
       <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-        <Link 
-          href="/auth/sign-up?ref=SANDY001"
-          className="px-8 py-3 text-lg font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          Sign Up
-        </Link>
-        <Link 
-          href="/auth/login"
-          className="px-8 py-3 text-lg font-semibold border-2 border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-        >
-          Sign In
-        </Link>
+        {/* Auth buttons temporarily disabled */}
       </div>
 
       <div className="flex justify-center">
@@ -368,18 +353,7 @@ const CTASection: React.FC = () => (
       </p>
       
       <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-        <Link 
-          href="/auth/sign-up?ref=SANDY001"
-          className="px-8 py-3 text-lg font-semibold bg-white text-indigo-600 rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          Create Account
-        </Link>
-        <Link 
-          href="/auth/login"
-          className="px-8 py-3 text-lg font-semibold border-2 border-white text-white rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          Sign In
-        </Link>
+        {/* Auth buttons temporarily disabled */}
       </div>
     </div>
   </section>
