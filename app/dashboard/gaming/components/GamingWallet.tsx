@@ -22,14 +22,24 @@ export default function GamingWallet({ onClose }: GamingWalletProps) {
     const fetchGamingWallet = async () => {
       try {
         setLoading(true);
+        console.log('[v0] Fetching gaming wallet...');
         
         // Fetch actual gaming wallet balance from API
         const response = await fetch('/api/gaming/wallet');
+        const data = await response.json();
+        
         if (!response.ok) {
-          throw new Error(`Failed to fetch wallet: ${response.statusText}`);
+          console.error('[v0] Gaming wallet API error:', response.status, data);
+          if (response.status === 404) {
+            setError('User profile not initialized. Please refresh the page.');
+          } else {
+            setError(data.error || 'Failed to load gaming wallet');
+          }
+          setBalance(0);
+          return;
         }
         
-        const data = await response.json();
+        console.log('[v0] Gaming wallet loaded:', data.balance_cents);
         setBalance(data.balance_cents || 0);
         setError(null);
         
@@ -37,7 +47,7 @@ export default function GamingWallet({ onClose }: GamingWalletProps) {
         setTransactions([]);
       } catch (err) {
         console.error('[v0] Error fetching gaming wallet:', err);
-        setError('Failed to load gaming wallet');
+        setError('Failed to load gaming wallet. Please try again.');
         setBalance(0);
       } finally {
         setLoading(false);

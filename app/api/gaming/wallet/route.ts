@@ -15,22 +15,29 @@ export async function GET(request: NextRequest) {
     
     const session = await auth();
     if (!session?.user?.email) {
+      console.log('[v0] Gaming Wallet: No session/email');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Find user by email
     const profile = await Profile.findOne({ email: session.user.email }).lean();
     if (!profile) {
-      return NextResponse.json({ error: 'User profile not found' }, { status: 404 });
+      console.log('[v0] Gaming Wallet: Profile not found for email:', session.user.email);
+      return NextResponse.json(
+        { error: 'User profile not found', success: false },
+        { status: 404 }
+      );
     }
 
     const userId = profile._id.toString();
+    console.log('[v0] Gaming Wallet: Fetching wallet for userId:', userId);
 
     // Get gaming wallet using optimized query (with cache)
     let wallet = await findGamingWalletOptimized(userId);
 
     // If no wallet exists yet, create one with zero balance
     if (!wallet) {
+      console.log('[v0] Gaming Wallet: Creating new wallet for user:', userId);
       const newWallet = new GamingWallet({
         user_id: userId,
         balance_cents: 0,
@@ -51,9 +58,9 @@ export async function GET(request: NextRequest) {
       updated_at: wallet.updated_at,
     });
   } catch (error) {
-    console.error('[GamingWallet API] Error fetching wallet:', error);
+    console.error('[v0] Gaming Wallet API Error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch gaming wallet' },
+      { error: 'Failed to fetch gaming wallet', success: false },
       { status: 500 }
     );
   }
