@@ -236,27 +236,40 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
 
     await connectToDatabase();
 
+    console.log('[v0] Checking payment status for messageReference:', messageReference);
+
     // Query with index hint to ensure fast lookup
     const mpesaTransaction = await (MpesaTransaction as any).findOne({
       $or: [
         { checkout_request_id: messageReference },
-        { account_reference: messageReference }
+        { account_reference: messageReference },
+        { merchant_request_id: messageReference }
       ]
     }).lean();
 
     if (!mpesaTransaction) {
+      console.log('[v0] Transaction not found for messageReference:', messageReference);
       return { success: false, message: 'Transaction not found' };
     }
 
+    console.log('[v0] Found transaction:', {
+      id: mpesaTransaction._id,
+      status: mpesaTransaction.status,
+      callback_processed: mpesaTransaction.metadata?.callback_processed,
+      result_code: mpesaTransaction.result_code,
+      result_desc: mpesaTransaction.result_desc,
+    });
+
     // Already in a terminal state — return DB result immediately
     if (['completed', 'failed', 'cancelled', 'timeout'].includes(mpesaTransaction.status)) {
+      console.log('[v0] Transaction in terminal state:', mpesaTransaction.status);
       return {
         success: true,
         data: {
           status: mpesaTransaction.status,
           resultCode: mpesaTransaction.result_code?.toString(),
           resultDesc: mpesaTransaction.result_desc,
-          receiptNumber: mpesaTransaction.mpesa_receipt_number,
+          mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
           isActivationPayment: true,
           completedAt: mpesaTransaction.completed_at,
           failedAt: mpesaTransaction.failed_at,
@@ -268,10 +281,14 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
 
     // Callback already flagged it — return
     if (mpesaTransaction.metadata?.callback_processed) {
+      console.log('[v0] Callback processed, returning status:', mpesaTransaction.status);
       return {
         success: true,
         data: {
           status: mpesaTransaction.status,
+          resultCode: mpesaTransaction.result_code?.toString(),
+          resultDesc: mpesaTransaction.result_desc,
+          mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
           source: 'callback_processed',
           isActivationPayment: true,
         },
@@ -305,6 +322,8 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
       const mpesaDaraja = createMpesaDarajaService();
       statusResponse = await mpesaDaraja.querySTKPushStatus(messageReference);
       
+      console.log('[v0] M-Pesa API Status Response:', JSON.stringify(statusResponse, null, 2));
+
       // Map M-Pesa response to our status
       const isSuccess = statusResponse.ResponseCode === '0' && 
                        statusResponse.Body?.stkPopupResponse?.ResultCode === '0';
@@ -312,9 +331,10 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
                            statusResponse.ResponseCode === '1032' ? 'cancelled' :
                            statusResponse.ResponseCode === '1001' ? 'timeout' : 'pending';
 
-      console.log('[Activation] Status check:', {
+      console.log('[v0] Status check:', {
         messageReference,
         responseCode: statusResponse.ResponseCode,
+        resultCode: statusResponse.Body?.stkPopupResponse?.ResultCode,
         mappedStatus,
         description: statusResponse.ResponseDescription,
       });
@@ -323,18 +343,24 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
       const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
       const safeResultCode = isNaN(resultCode) ? 1 : resultCode;
       
-      await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
+      const updatedTransaction = await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
         status: mappedStatus,
         result_code: safeResultCode,
         result_desc: statusResponse.ResponseDescription || '',
         ...(mappedStatus === 'completed' ? { completed_at: new Date() } : {}),
         ...((['failed', 'cancelled', 'timeout'].includes(mappedStatus)) ? { failed_at: new Date() } : {}),
         'metadata.last_api_check': new Date(),
+      }, { new: true }).lean();
+
+      console.log('[v0] Transaction updated:', {
+        id: updatedTransaction._id,
+        status: updatedTransaction.status,
+        result_code: updatedTransaction.result_code,
       });
 
       // If completed via poll (callback missed), run activation logic
       if (mappedStatus === 'completed') {
-        console.log('[Activation] Activation triggered from status poll');
+        console.log('[v0] Activation triggered from status poll');
         // Use atomic findOneAndUpdate to prevent race condition
         // Only one instance can transition from pending to completed
         const updated = await (ActivationPayment as any).findOneAndUpdate(
@@ -344,6 +370,7 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
         );
         if (updated) {
           // Only the instance that actually changed the status calls completeActivation
+          console.log('[v0] Calling completeActivationAfterPayment:', updated._id);
           await completeActivationAfterPayment(updated._id.toString());
         }
       }
@@ -368,18 +395,23 @@ export async function checkActivationPaymentStatus(messageReference: string): Pr
           status: mappedStatus,
           resultCode: statusResponse.ResponseCode,
           resultDesc: statusResponse.ResponseDescription || '',
+          mpesaReceiptNumber: updatedTransaction.mpesa_receipt_number,
+          amount: updatedTransaction.amount_cents,
           isActivationPayment: true,
           source: 'mpesa_api',
         },
         message: userMessage,
       };
     } catch (apiError) {
-      console.error('[Activation] M-Pesa API error, returning DB status:', apiError);
+      console.error('[v0] M-Pesa API error, returning DB status:', apiError);
       return {
         success: true,
         data: {
           status: mpesaTransaction.status,
-          resultDesc: 'Checking payment status...',
+          resultCode: mpesaTransaction.result_code?.toString(),
+          resultDesc: mpesaTransaction.result_desc || 'Checking payment status...',
+          mpesaReceiptNumber: mpesaTransaction.mpesa_receipt_number,
+          amount: mpesaTransaction.amount_cents,
           source: 'database_fallback',
           isActivationPayment: true,
         },
