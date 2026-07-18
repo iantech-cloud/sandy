@@ -13,6 +13,7 @@
     "seed:chat-bots": "node scripts/seed-chat-foreigners-bots.js",
     "clean": "rm -rf .next node_modules out dist build && pnpm store prune && pnpm install",
     "migrate:transactions": "node scripts/migrate-transactions.js",
+    "migrate:admin-email": "tsx scripts/migrate-admin-email.ts",
     "update:company": "node scripts/update-company-id.js"
   },
   "dependencies": {
