@@ -19,8 +19,8 @@ dotenv.config({ path: '.env' });
 
 // Admin configuration - CHANGE THESE VALUES BEFORE RUNNING
 const ADMIN_CONFIG = {
-  username: 'Scholine',
-  email: 'scholinesandra1@gmail.com',
+  username: 'HustleAdmin',
+  email: 'hustleadmin001@gmail.com',
   phone_number: '254707871154',
   password: 'Admin@123456',
   referral_id: 'SANDY001', // The referral code others will use to join
