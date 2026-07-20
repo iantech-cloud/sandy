@@ -23,6 +23,7 @@ import {
 
 import SpinWheel from '@/app/ui/dashboard/spin-wheel';
 import SurveyWalletCard from '@/app/ui/dashboard/SurveyWalletCard';
+import ReferralBonusModal from '@/app/components/ReferralBonusModal';
 import { fetchDashboardData } from '@/app/lib/data';
 import { useDashboard } from './DashboardContext';
 
@@ -114,6 +115,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   
   const [showSpinWheel, setShowSpinWheel] = useState(false);
+  const [showBonusModal, setShowBonusModal] = useState(true);
   const [refreshingStats, setRefreshingStats] = useState(false);
 
   useEffect(() => {
@@ -517,6 +519,18 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Referral Bonus Progress Modal - Shows referral progress for logged-in users */}
+      <ReferralBonusModal
+        isOpen={showBonusModal}
+        isLoggedIn={true}
+        onClose={() => setShowBonusModal(false)}
+        onBonusApplied={() => {
+          if (user) {
+            fetchDashboardData(user.id).then(setDashboardData);
+          }
+        }}
+      />
 
     </div>
   );
