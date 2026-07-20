@@ -23,6 +23,7 @@ import {
 
 import SpinWheel from '@/app/ui/dashboard/spin-wheel';
 import SurveyWalletCard from '@/app/ui/dashboard/SurveyWalletCard';
+import ReferralBonusModal from '@/app/components/ReferralBonusModal';
 import { fetchDashboardData } from '@/app/lib/data';
 import { useDashboard } from './DashboardContext';
 
@@ -114,6 +115,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   
   const [showSpinWheel, setShowSpinWheel] = useState(false);
+  const [showBonusModal, setShowBonusModal] = useState(false);
   const [refreshingStats, setRefreshingStats] = useState(false);
 
   useEffect(() => {
@@ -125,6 +127,8 @@ export default function DashboardPage() {
         setError(null);
         const data = await fetchDashboardData(user.id);
         setDashboardData(data);
+        // Show bonus modal on first dashboard load
+        setShowBonusModal(true);
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
         setError('Failed to load dashboard data. Please try again.');
@@ -518,6 +522,16 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Referral Bonus Modal */}
+      <ReferralBonusModal
+        isOpen={showBonusModal}
+        onClose={() => setShowBonusModal(false)}
+        onBonusApplied={() => {
+          if (user) {
+            fetchDashboardData(user.id).then(setDashboardData);
+          }
+        }}
+      />
 
     </div>
   );

@@ -1,9 +1,11 @@
 'use client'; 
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link'; 
 import Image from 'next/image';
-import { ThemeToggle } from './components/ThemeToggle'; 
+import { useSession } from 'next-auth/react';
+import { ThemeToggle } from './components/ThemeToggle';
+import ReferralBonusModal from './components/ReferralBonusModal'; 
 
 interface ServiceFeature {
   icon: React.ReactNode;
@@ -386,6 +388,16 @@ const CTASection: React.FC = () => (
 );
 
 export default function Page() {
+  const { data: session } = useSession();
+  const [showBonusModal, setShowBonusModal] = useState(false);
+
+  // Show bonus modal only to logged-in users on homepage
+  useEffect(() => {
+    if (session?.user) {
+      setShowBonusModal(true);
+    }
+  }, [session?.user]);
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <Header />
@@ -399,6 +411,15 @@ export default function Page() {
       </main>
 
       <Footer />
+
+      {/* Referral Bonus Modal */}
+      <ReferralBonusModal
+        isOpen={showBonusModal && !!session?.user}
+        onClose={() => setShowBonusModal(false)}
+        onBonusApplied={() => {
+          // Refresh or update UI as needed
+        }}
+      />
     </div>
   );
 }

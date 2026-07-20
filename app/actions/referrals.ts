@@ -442,3 +442,114 @@ export async function getReferralInfo(): Promise<{
     };
   }
 }
+
+/**
+ * Check if user qualifies for KES 500 bonus and apply it
+ * Requirements:
+ * 1. User must be activated (is_active = true)
+ * 2. User must have referred at least 5 people
+ * 3. User must not have already received the bonus
+ */
+export async function checkAndApplyReferralBonus(): Promise<{
+  success: boolean;
+  message: string;
+  referralCount?: number;
+  bonusApplied?: boolean;
+}> {
+  try {
+    const session = await auth();
+    
+    if (!isValidSession(session)) {
+      return { success: false, message: 'Unauthorized' };
+    }
+
+    await connectToDatabase();
+    
+    const currentUser = await (Profile as any).findOne({ 
+      email: session.user.email 
+    }).lean();
+
+    if (!currentUser) {
+      return { success: false, message: 'User not found' };
+    }
+
+    console.log('[v0] Checking bonus eligibility for:', currentUser.email);
+
+    // Count referrals
+    const referralCount = await (Referral as any).countDocuments({
+      referrer_id: currentUser._id,
+    });
+
+    console.log('[v0] User has', referralCount, 'referrals');
+
+    // Check eligibility criteria
+    const isActivated = currentUser.is_active === true;
+    const hasEnoughReferrals = referralCount >= 5;
+    const bonusAlreadyApplied = currentUser.metadata?.referral_bonus_applied === true;
+
+    console.log('[v0] Bonus eligibility:', {
+      isActivated,
+      hasEnoughReferrals,
+      bonusAlreadyApplied,
+    });
+
+    // If user doesn't qualify, return their progress
+    if (!isActivated || !hasEnoughReferrals || bonusAlreadyApplied) {
+      return {
+        success: false,
+        message: bonusAlreadyApplied 
+          ? 'Bonus already applied'
+          : !isActivated
+          ? 'Account not activated'
+          : 'Not enough referrals yet',
+        referralCount,
+        bonusApplied: false,
+      };
+    }
+
+    // User qualifies! Apply the bonus
+    const bonusAmount = 50000; // KES 500 in cents
+
+    console.log('[v0] Applying KES 500 bonus to user:', currentUser.email);
+
+    // Update user profile to mark bonus as applied
+    await (Profile as any).updateOne(
+      { _id: currentUser._id },
+      {
+        $set: {
+          'metadata.referral_bonus_applied': true,
+          'metadata.referral_bonus_applied_at': new Date(),
+        },
+      }
+    );
+
+    // Create transaction record for the bonus
+    await (Transaction as any).create({
+      user_id: currentUser._id,
+      type: 'BONUS',
+      amount_cents: bonusAmount,
+      description: 'Referral bonus: 5+ referrals + account activation',
+      status: 'completed',
+      metadata: {
+        bonus_type: 'referral_activation',
+        referral_count: referralCount,
+      },
+      created_at: new Date(),
+    });
+
+    console.log('[v0] Bonus applied successfully!');
+
+    return {
+      success: true,
+      message: 'KES 500 bonus applied successfully!',
+      referralCount,
+      bonusApplied: true,
+    };
+  } catch (error) {
+    console.error('[v0] Error checking/applying bonus:', error);
+    return {
+      success: false,
+      message: 'Error processing bonus',
+    };
+  }
+}
