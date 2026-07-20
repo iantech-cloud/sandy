@@ -7,12 +7,14 @@ import { checkAndApplyReferralBonus } from '@/app/actions/referrals';
 
 interface ReferralBonusModalProps {
   isOpen: boolean;
+  isLoggedIn?: boolean;
   onClose: () => void;
   onBonusApplied?: () => void;
 }
 
 export default function ReferralBonusModal({
   isOpen,
+  isLoggedIn = false,
   onClose,
   onBonusApplied,
 }: ReferralBonusModalProps) {
@@ -22,9 +24,9 @@ export default function ReferralBonusModal({
   const [referralCount, setReferralCount] = useState(0);
   const [dismissed, setDismissed] = useState(false);
 
-  // Check bonus eligibility when modal opens
+  // Check bonus eligibility when modal opens (only for logged-in users)
   useEffect(() => {
-    if (!isOpen || !session?.user) return;
+    if (!isOpen || !isLoggedIn || !session?.user) return;
 
     const checkBonus = async () => {
       setIsLoading(true);
@@ -48,7 +50,7 @@ export default function ReferralBonusModal({
     };
 
     checkBonus();
-  }, [isOpen, session?.user, onBonusApplied]);
+  }, [isOpen, isLoggedIn, session?.user, onBonusApplied]);
 
   const handleClose = () => {
     setDismissed(true);
@@ -82,11 +84,55 @@ export default function ReferralBonusModal({
             <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
               KES 500 Bonus!
             </h3>
-            <p className="text-gray-600 text-sm mt-2">Referral Achievement Reward</p>
+            <p className="text-gray-600 text-sm mt-2">
+              {isLoggedIn ? 'Referral Achievement Reward' : 'Join & Earn'}
+            </p>
           </div>
 
           {/* Status Content */}
-          {isLoading ? (
+          {!isLoggedIn ? (
+            // Non-logged-in users: promotional content
+            <div className="space-y-4">
+              <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl p-4">
+                <p className="text-sm font-semibold text-gray-800 mb-2">
+                  Earn a KES 500 bonus when you join and refer 5 people.
+                </p>
+                <p className="text-xs text-gray-700 leading-relaxed">
+                  Join HustleHub Africa, activate your account, and refer 5 friends to unlock your bonus instantly.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                  <CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                  <span>No hidden fees or conditions</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                  <CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                  <span>Automatic bonus when you qualify</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                  <CheckCircle className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                  <span>Withdraw to M-Pesa anytime</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <a
+                  href="/auth/sign-up?ref=SANDY001"
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg hover:shadow-xl text-center"
+                >
+                  Sign Up Now
+                </a>
+                <button
+                  onClick={handleClose}
+                  className="flex-1 py-3 px-4 border-2 border-purple-600 text-purple-600 font-semibold rounded-lg hover:bg-purple-50 transition-all"
+                >
+                  Later
+                </button>
+              </div>
+            </div>
+          ) : isLoading ? (
             <div className="text-center py-8">
               <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-3" />
               <p className="text-gray-600 text-sm">Checking your eligibility...</p>

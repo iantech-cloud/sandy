@@ -1,6 +1,6 @@
 'use client'; 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link'; 
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
@@ -389,14 +389,7 @@ const CTASection: React.FC = () => (
 
 export default function Page() {
   const { data: session } = useSession();
-  const [showBonusModal, setShowBonusModal] = useState(false);
-
-  // Show bonus modal only to logged-in users on homepage
-  useEffect(() => {
-    if (session?.user) {
-      setShowBonusModal(true);
-    }
-  }, [session?.user]);
+  const [showBonusModal, setShowBonusModal] = useState(true);
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -412,9 +405,10 @@ export default function Page() {
 
       <Footer />
 
-      {/* Referral Bonus Modal */}
+      {/* Referral Bonus Modal - shows promotional content to all users */}
       <ReferralBonusModal
-        isOpen={showBonusModal && !!session?.user}
+        isOpen={showBonusModal}
+        isLoggedIn={!!session?.user}
         onClose={() => setShowBonusModal(false)}
         onBonusApplied={() => {
           // Refresh or update UI as needed
