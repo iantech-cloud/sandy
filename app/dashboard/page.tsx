@@ -115,7 +115,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   
   const [showSpinWheel, setShowSpinWheel] = useState(false);
-  const [showBonusModal, setShowBonusModal] = useState(false);
+  const [showBonusModal, setShowBonusModal] = useState(true);
   const [refreshingStats, setRefreshingStats] = useState(false);
 
   useEffect(() => {
@@ -127,8 +127,6 @@ export default function DashboardPage() {
         setError(null);
         const data = await fetchDashboardData(user.id);
         setDashboardData(data);
-        // Show bonus modal on first dashboard load
-        setShowBonusModal(true);
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
         setError('Failed to load dashboard data. Please try again.');
@@ -522,9 +520,10 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Referral Bonus Modal */}
+      {/* Referral Bonus Progress Modal - Shows referral progress for logged-in users */}
       <ReferralBonusModal
         isOpen={showBonusModal}
+        isLoggedIn={true}
         onClose={() => setShowBonusModal(false)}
         onBonusApplied={() => {
           if (user) {
