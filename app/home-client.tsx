@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { ThemeToggle } from './components/ThemeToggle';
 import ReferralBonusModal from './components/ReferralBonusModal'; 
+import EarningHub from './earning-hub';
 
 interface ServiceFeature {
   icon: React.ReactNode;
@@ -398,6 +399,7 @@ export default function Page() {
       <main className="flex-grow">
         <HeroSection />
         <ServicesSection />
+        <EarningHub />
         <WhyChooseUsSection />
         <HowItWorksSection />
         <CTASection />
