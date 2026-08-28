@@ -242,7 +242,10 @@ export default function LoginContent({ hasExistingSession = false }: LoginConten
   const searchParams = useSearchParams();
   const refParam     = searchParams.get('ref');
   const isTimeout    = searchParams.get('timeout') === 'true';
-  const callbackUrl  = searchParams.get('callbackUrl') || '/dashboard';
+  const requestedCallbackUrl = searchParams.get('callbackUrl');
+  const callbackUrl = requestedCallbackUrl?.startsWith('/') && !requestedCallbackUrl.startsWith('//')
+    ? requestedCallbackUrl
+    : '/dashboard';
 
   useEffect(() => {
     if (hasExistingSession) {

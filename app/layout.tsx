@@ -68,7 +68,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_KE',
-    url: 'https://hustlehubafrica.com',
+    url: siteUrl,
     siteName: 'HustleHub Africa',
     title: 'HustleHub Africa - Freelance Work Platform',
     description: 'Connect with freelance opportunities in content writing, academic writing, surveys, and marketing. A trusted platform for African professionals.',
@@ -143,8 +143,8 @@ export default async function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: 'HustleHub Africa',
-    url: 'https://hustlehubafrica.com',
-    logo: 'https://hustlehubafrica.com/logo.png',
+    url: siteUrl,
+    logo: `${siteUrl}/logo.png`,
     description: 'A freelance work platform connecting African professionals with legitimate opportunities',
     address: {
       '@type': 'PostalAddress',
@@ -165,7 +165,7 @@ export default async function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'HustleHub Africa',
-    url: 'https://hustlehubafrica.com',
+    url: siteUrl,
     description: 'Freelance work platform for African professionals',
   };
 

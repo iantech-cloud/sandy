@@ -184,6 +184,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   
   callbacks: {
+    // Keep redirects same-origin so they work on Vercel custom domains and
+    // cannot be hijacked by an arbitrary callbackUrl query parameter.
+    async redirect({ url, baseUrl }) {
+      try {
+        const target = new URL(url, baseUrl);
+        const origin = new URL(baseUrl).origin;
+        if (target.origin === origin) return target.toString();
+        if (url.startsWith('/')) return `${origin}${url}`;
+      } catch {
+        // Fall through to the configured origin for malformed URLs.
+      }
+      return baseUrl;
+    },
+
     // ==================== SIGN IN CALLBACK ====================
     async signIn({ user, account }) {
       try {
