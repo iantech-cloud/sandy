@@ -11,8 +11,10 @@ import { Analytics } from "@vercel/analytics/next"
 import { warmupDatabaseConnection } from './lib/db-warmup';
 import { MpesaCallbackInitializer } from './components/MpesaCallbackInitializer';
 
+const siteUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://hustlehubafrica.com';
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://hustlehubafrica.com'),
+  metadataBase: new URL(siteUrl),
   title: {
     template: '%s | HustleHub Africa',
     default: 'HustleHub Africa - Freelance Work Platform',
