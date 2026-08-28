@@ -47,6 +47,7 @@ export async function connectToDatabase() {
 
 // Import and export models
 import { Profile } from './Profile';
+import { EarningWallet, EarningLedger, GigOrder, CashbackEvent, ResourcePurchase, EarningPayout, ProductAnalysis } from './EarningModels';
 import { MpesaChangeRequest } from './MpesaChangeRequest';
 import { 
   FreelanceJob,
@@ -72,7 +73,8 @@ import {
 } from './ChatForeigners';
 
 export { 
-  Profile, 
+  Profile,
+  EarningWallet, EarningLedger, GigOrder, CashbackEvent, ResourcePurchase, EarningPayout, ProductAnalysis,
   MpesaChangeRequest,
   FreelanceJob,
   PremiumSubscription,
