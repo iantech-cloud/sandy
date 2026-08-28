@@ -186,16 +186,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     // Keep redirects same-origin so they work on Vercel custom domains and
     // cannot be hijacked by an arbitrary callbackUrl query parameter.
-    async redirect({ url, baseUrl }) {
+    async redirect({ url }) {
+      const configuredOrigin = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || 'https://hustlehubafrica.com';
+      const origin = new URL(configuredOrigin).origin;
       try {
-        const target = new URL(url, baseUrl);
-        const origin = new URL(baseUrl).origin;
+        const target = new URL(url, origin);
         if (target.origin === origin) return target.toString();
-        if (url.startsWith('/')) return `${origin}${url}`;
+        if (url.startsWith('/') && !url.startsWith('//')) return `${origin}${url}`;
       } catch {
-        // Fall through to the configured origin for malformed URLs.
+        // Fall through to the canonical production origin for malformed URLs.
       }
-      return baseUrl;
+      return origin;
     },
 
     // ==================== SIGN IN CALLBACK ====================
