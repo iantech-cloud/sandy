@@ -73,8 +73,15 @@ export async function POST(request: NextRequest) {
     // Create M-Pesa Daraja service
     const mpesaDaraja = createMpesaDarajaService();
 
-    // Callback URL for payment confirmation
-    const callbackUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/payments/mpesa/callback`;
+    // Prefer the explicitly registered Daraja callback URL so custom domains do not
+    // accidentally send payment callbacks to an old preview or deployment URL.
+    const callbackBaseUrl = process.env.MPESA_CALLBACK_URL || process.env.NEXT_PUBLIC_BASE_URL;
+    if (!callbackBaseUrl) {
+      throw new Error('M-Pesa callback URL is not configured');
+    }
+    const callbackUrl = callbackBaseUrl.endsWith('/api/payments/mpesa/callback')
+      ? callbackBaseUrl
+      : `${callbackBaseUrl.replace(/\/$/, '')}/api/payments/mpesa/callback`;
 
     // Map depositType to valid source enum values
     const sourceMap: { [key: string]: string } = {

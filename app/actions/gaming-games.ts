@@ -5,6 +5,7 @@ import { GamingWallet, GameResult, GamingTransaction, Profile } from '@/app/lib/
 import { auth } from '@/auth';
 import { findGamingWalletOptimized, findGameHistoryOptimized, getGamingStatsOptimized } from '@/app/lib/db-queries';
 import { invalidateCache } from '@/app/lib/db-cache';
+import { createMpesaDarajaService } from '@/app/lib/services/mpesa-daraja';
 
 interface GamePlayResult {
   success: boolean;
@@ -807,7 +808,7 @@ export async function checkGameDepositStatus(messageReference: string) {
   const timeSinceLastCheck = lastCheck ? (Date.now() - lastCheck.getTime()) / 1000 : Infinity;
   const shouldSkipApiCall = timeSinceLastCheck < 10; // Skip if checked in last 10 seconds
   
-  // Query Co-op Bank Enquiry API (with optimization to reduce calls)
+  // Query M-Pesa Daraja status API (with optimization to reduce calls)
   try {
   let statusResponse;
   
@@ -823,23 +824,23 @@ export async function checkGameDepositStatus(messageReference: string) {
     };
   }
   
-  const { createCoopBankService, CoopBankService } = await import('@/app/lib/services/coop-bank');
-  const coopBank = createCoopBankService();
-  statusResponse = await coopBank.getTransactionStatus(messageReference);
+  const mpesaDaraja = createMpesaDarajaService();
+  statusResponse = await mpesaDaraja.queryTransactionStatus(messageReference);
   
-  // Use centralized mapping from CoopBankService (single source of truth)
-  const mappedStatus = CoopBankService.mapResponseCode(statusResponse.ResponseCode);
+  const resultCode = statusResponse.Body?.stkPopupResponse?.ResultCode ?? statusResponse.ResultCode ?? statusResponse.ResponseCode;
+  const mappedStatus = resultCode === '0' ? 'completed' : ['1032', '1'].includes(resultCode) ? 'cancelled' : 'pending';
   
   console.log('[Gaming] Status check:', {
     messageReference,
     responseCode: statusResponse.ResponseCode,
+    resultCode,
     mappedStatus,
-    description: statusResponse.ResponseDescription,
+    description: statusResponse.Body?.stkPopupResponse?.ResultDesc || statusResponse.ResultDesc || statusResponse.ResponseDescription,
   });
   
   // Persist status update - ensure result_code is valid number
-  const resultCode = parseInt(statusResponse.ResponseCode || '1', 10);
-  const safeResultCode = isNaN(resultCode) ? 1 : resultCode;
+  const parsedResultCode = parseInt(resultCode || '1', 10);
+  const safeResultCode = Number.isNaN(parsedResultCode) ? 1 : parsedResultCode;
   
   await (MpesaTransaction as any).findByIdAndUpdate(mpesaTransaction._id, {
     status: mappedStatus,

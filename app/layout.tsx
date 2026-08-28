@@ -11,8 +11,10 @@ import { Analytics } from "@vercel/analytics/next"
 import { warmupDatabaseConnection } from './lib/db-warmup';
 import { MpesaCallbackInitializer } from './components/MpesaCallbackInitializer';
 
+const siteUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://hustlehubafrica.com';
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://hustlehubafrica.com'),
+  metadataBase: new URL(siteUrl),
   title: {
     template: '%s | HustleHub Africa',
     default: 'HustleHub Africa - Freelance Work Platform',
@@ -66,7 +68,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_KE',
-    url: 'https://hustlehubafrica.com',
+    url: siteUrl,
     siteName: 'HustleHub Africa',
     title: 'HustleHub Africa - Freelance Work Platform',
     description: 'Connect with freelance opportunities in content writing, academic writing, surveys, and marketing. A trusted platform for African professionals.',
@@ -141,8 +143,8 @@ export default async function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: 'HustleHub Africa',
-    url: 'https://hustlehubafrica.com',
-    logo: 'https://hustlehubafrica.com/logo.png',
+    url: siteUrl,
+    logo: `${siteUrl}/logo.png`,
     description: 'A freelance work platform connecting African professionals with legitimate opportunities',
     address: {
       '@type': 'PostalAddress',
@@ -163,7 +165,7 @@ export default async function RootLayout({
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'HustleHub Africa',
-    url: 'https://hustlehubafrica.com',
+    url: siteUrl,
     description: 'Freelance work platform for African professionals',
   };
 

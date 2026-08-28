@@ -3,13 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 export function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
-  // Disable browser persistent caching
-  response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
-  response.headers.set('Pragma', 'no-cache');
-  response.headers.set('Expires', '0');
-  
-  // Prevent caching by proxies
-  response.headers.set('Surrogate-Control', 'no-store');
+
+  // Let Vercel cache immutable assets while keeping dynamic pages/API responses
+  // fresh. Disabling caching for every request can cause stale redirect behavior
+  // and unnecessary origin traffic after migration from the previous server.
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    response.headers.set('Cache-Control', 'no-store');
+  }
   
   // ========================================================================
   // SECURITY HEADERS - Independent middleware control (not Vercel config)
@@ -45,7 +45,7 @@ export function middleware(request: NextRequest) {
       "base-uri 'self'",
       // Form submissions only to same-origin
       "form-action 'self'",
-      // Prevent framing this site (X-Frame-Options alternative)
+      // M-Pesa callbacks are server-to-server POSTs, not browser form submits.
       "frame-ancestors 'none'",
     ].join('; ')
   );
@@ -138,6 +138,6 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // Match all paths except static assets and public files
-    '/((?!_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml|site.webmanifest).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml|site.webmanifest|.*\\.css$|.*\\.js$|.*\\.map$).*)',
   ],
 };
