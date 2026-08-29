@@ -60,8 +60,25 @@ const PayoutSchema = new Schema({
 }, { timestamps: true })
 export const EarningPayout = getModel('EarningPayout', PayoutSchema)
 
+const GigServiceSchema = new Schema({
+  seller_id: { type: String, required: true, index: true }, title: { type: String, required: true, maxlength: 120 }, description: { type: String, required: true, maxlength: 4000 }, category: { type: String, required: true, index: true }, price_cents: { type: Number, required: true, min: 100 }, delivery_days: { type: Number, required: true, min: 1, max: 90 }, status: { type: String, enum: ['draft', 'published', 'paused'], default: 'published', index: true }, rating: { type: Number, default: 0, min: 0, max: 5 }, review_count: { type: Number, default: 0, min: 0 },
+}, { timestamps: true })
+GigServiceSchema.index({ category: 1, status: 1, createdAt: -1 })
+export const GigService = getModel('GigService', GigServiceSchema)
+
+const ResourceSchema = new Schema({
+  seller_id: { type: String, required: true, index: true }, title: { type: String, required: true, maxlength: 160 }, description: { type: String, required: true, maxlength: 5000 }, category: { type: String, required: true, index: true }, price_cents: { type: Number, required: true, min: 1 }, blob_pathname: { type: String, required: true }, content_type: { type: String, required: true }, file_size: { type: Number, required: true, min: 1 }, status: { type: String, enum: ['draft', 'published', 'archived'], default: 'draft', index: true },
+}, { timestamps: true })
+ResourceSchema.index({ status: 1, category: 1, createdAt: -1 })
+export const DigitalResource = getModel('DigitalResource', ResourceSchema)
+
+const ReferralSchema = new Schema({
+  referrer_id: { type: String, required: true, index: true }, referred_id: { type: String, required: true, unique: true }, status: { type: String, enum: ['pending', 'qualified', 'paid', 'reversed'], default: 'pending', index: true }, bonus_cents: { type: Number, default: 0, min: 0 }, qualified_at: Date,
+}, { timestamps: true })
+export const Referral = getModel('Referral', ReferralSchema)
+
 const AnalyzerSchema = new Schema({
-  user_id: { type: String, required: true, index: true }, url: { type: String, required: true }, provider: String, current_price_cents: Number, fair_price_cents: Number,
+  user_id: { type: String, required: true, index: true }, url: { type: String, required: true }, normalized_url: { type: String, default: '' }, provider: String, current_price_cents: Number, fair_price_cents: Number, price_history: { type: [Schema.Types.Mixed], default: [] }, alternatives: { type: [Schema.Types.Mixed], default: [] }, model_version: String, error: String,
   score: { type: Number, min: 0, max: 100 }, result: { type: Schema.Types.Mixed }, status: { type: String, enum: ['queued', 'processing', 'completed', 'failed'], default: 'queued', index: true },
 }, { timestamps: true })
 export const ProductAnalysis = getModel('ProductAnalysis', AnalyzerSchema)

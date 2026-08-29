@@ -2561,6 +2561,7 @@ const GamingTransactionSchema = new Schema({
 export const GamingTransaction = getModel('GamingTransaction', GamingTransactionSchema);
 
 export { mongoose, connectToDatabase };
+export { EarningWallet, EarningLedger, GigOrder, GigService, DigitalResource, CashbackEvent, ResourcePurchase, EarningPayout, ProductAnalysis } from './models/EarningModels';
 
 // Import Soko and other models
 export {
