@@ -21,8 +21,10 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') || 'balance';
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const skip = parseInt(searchParams.get('skip') || '0');
+    const requestedLimit = Number(searchParams.get('limit') || 20);
+    const requestedSkip = Number(searchParams.get('skip') || 0);
+    const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 20;
+    const skip = Number.isInteger(requestedSkip) ? Math.max(requestedSkip, 0) : 0;
 
     if (type === 'transactions') {
       const result = await getChatForeignersWalletTransactions(limit, skip);
