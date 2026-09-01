@@ -554,15 +554,22 @@ export async function initiateWalletDepositViaMpesa(
       return { success: false, error: 'Not authenticated' };
     }
 
-    if (amountCents < 1000) {
-      return { success: false, error: 'Minimum deposit is KES 10' };
+    if (!Number.isInteger(amountCents) || amountCents < 1000 || amountCents > 1500000) {
+      return { success: false, error: 'Deposit must be between KES 10 and KES 15,000' };
+    }
+    const normalizedPhone = phoneNumber.replace(/[\s-]/g, '');
+    if (!/^254\d{9}$/.test(normalizedPhone)) {
+      return { success: false, error: 'Use a valid 254XXXXXXXXX phone number' };
+    }
+    if (!process.env.NEXT_PUBLIC_BASE_URL) {
+      return { success: false, error: 'Payments are temporarily unavailable' };
     }
 
     // Create M-Pesa transaction record
     const mpesaTransaction = await ChatForeignersMpesaTransaction.create({
       user_id: currentUser._id,
       amount_cents: amountCents,
-      phone_number: phoneNumber,
+      phone_number: normalizedPhone,
       transaction_type: 'chat_foreigners_deposit',
       status: 'initiated',
     });
@@ -595,7 +602,7 @@ export async function initiateWalletDepositViaMpesa(
     let stkResponse;
     try {
       stkResponse = await mpesaDaraja.initiateSTKPush({
-        phoneNumber,
+        phoneNumber: normalizedPhone,
         amount: Math.round(amountCents / 100),
         description: narration,
         accountReference,
@@ -669,6 +676,7 @@ export async function checkWalletDepositPaymentStatus(checkoutRequestId: string)
         { account_reference: checkoutRequestId }
       ],
       transaction_type: 'chat_foreigners_deposit',
+      user_id: currentUser._id,
     }).lean();
 
     if (!mpesaTransaction) {
@@ -807,6 +815,15 @@ export async function completeWalletDeposit(
       console.log('[ChatForeigners] Deposit already completed — skipping duplicate credit');
       return { success: true, alreadyCompleted: true };
     }
+
+    // Claim the pending transaction before changing the balance. This prevents
+    // callback and polling races from crediting the same deposit twice.
+    const claimedTxn = await ChatForeignersTransaction.findOneAndUpdate(
+      { mpesa_transaction_id: mpesaTransactionId, type: 'CHAT_DEPOSIT', status: { $ne: 'completed' } },
+      { $set: { status: 'completed', completed_at: new Date() } },
+      { new: true, session }
+    );
+    if (!claimedTxn) return { success: true, alreadyCompleted: true };
 
     // Update wallet balance
     let wallet = await ChatForeignersWallet.findOne({
